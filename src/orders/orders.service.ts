@@ -1,0 +1,430 @@
+// backend/src/orders/orders.service.ts
+
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
+import { PrismaService } from '../../prisma/prisma.service';
+import { PatientsService } from '../patients/patients.service';
+import { PharmaciesService } from '../pharmacies/pharmacies.service';
+import { MedicationsService } from '../medications/medications.service';
+import { NotificationsService } from '../notifications/notifications.service';
+import { CreateOrderDto, UpdateOrderStatusDto, CancelOrderDto } from './dto';
+
+@Injectable()
+export class OrdersService {
+  constructor(
+    private prisma: PrismaService,
+    private patientsService: PatientsService,
+    private pharmaciesService: PharmaciesService,
+    private medicationsService: MedicationsService,
+    private notificationsService: NotificationsService,
+  ) {}
+
+  // ========================================
+  // CREATE ORDER (Patient places order)
+  // ========================================
+
+  async create(userId: string, dto: CreateOrderDto) {
+    const patient = await this.patientsService.findByUserId(userId);
+    const pharmacy = await this.pharmaciesService.findById(dto.pharmacyId);
+
+    // Validate pharmacy is approved
+    if (pharmacy.status !== 'APPROVED') {
+      throw new BadRequestException('Pharmacy is not approved');
+    }
+
+    // Validate items and calculate subtotal
+    let subtotal = 0;
+    const orderItems: { medicationId: string; quantity: number; price: number }[] = [];
+
+
+    for (const item of dto.items) {
+      const medication = await this.medicationsService.findById(item.medicationId);
+
+      // Check stock
+      if (medication.quantity < item.quantity) {
+        throw new BadRequestException(
+          `Insufficient stock for ${medication.name}. Available: ${medication.quantity}`,
+        );
+      }
+
+      // Check pharmacy match
+      if (medication.pharmacyId !== dto.pharmacyId) {
+        throw new BadRequestException(
+          `Medication ${medication.name} does not belong to this pharmacy`,
+        );
+      }
+
+      // Check prescription requirement
+      if (medication.requiresPrescription && !dto.prescriptionId) {
+        throw new BadRequestException(
+          `Prescription required for ${medication.name}`,
+        );
+      }
+
+      subtotal += medication.price * item.quantity;
+      orderItems.push({
+        medicationId: medication.id,
+        quantity: item.quantity,
+        price: medication.price,
+      });
+    }
+
+    // Calculate delivery fee if applicable
+    let deliveryFee = 0;
+    let deliveryZone: string | null = null;
+
+    if (dto.type === 'DELIVERY') {
+      if (!dto.deliveryAddress) {
+        throw new BadRequestException('Delivery address is required for delivery orders');
+      }
+
+      // For MVP, use fixed delivery zones
+      // In production, calculate based on actual coordinates
+      deliveryFee = this.pharmaciesService.getDeliveryFee(dto.pharmacyId, 5); // Assume 5km
+      deliveryZone = 'Zone 1';
+    }
+
+    // Calculate total
+    const total = subtotal + deliveryFee;
+
+    // Handle insurance if applicable
+    let insuranceCoverage = 0;
+    let patientPayment = total;
+
+    if (dto.paymentMethod === 'INSURANCE') {
+      if (!patient.insuranceProvider || !patient.insuranceCoverage) {
+        throw new BadRequestException('Patient does not have valid insurance');
+      }
+
+      insuranceCoverage = (subtotal * patient.insuranceCoverage) / 100;
+      patientPayment = subtotal - insuranceCoverage + deliveryFee;
+    }
+
+    // Generate unique order number
+    const orderNumber = await this.generateOrderNumber();
+
+    // Create order
+    const order = await this.prisma.order.create({
+      data: {
+        patientId: patient.id,
+        pharmacyId: dto.pharmacyId,
+        orderNumber,
+        type: dto.type,
+        status: 'PENDING',
+        deliveryAddress: dto.deliveryAddress,
+        deliveryFee,
+        deliveryZone,
+        prescriptionId: dto.prescriptionId,
+        subtotal,
+        total,
+        paymentMethod: dto.paymentMethod,
+        paymentStatus: 'PENDING',
+        insuranceCoverage,
+        patientPayment,
+        orderItems: {
+          create: orderItems,
+        },
+      },
+      include: {
+        orderItems: {
+          include: {
+            medication: true,
+          },
+        },
+        pharmacy: true,
+        prescription: true,
+      },
+    });
+
+    // Reduce medication stock
+    for (const item of dto.items) {
+      await this.medicationsService.reduceStock(item.medicationId, item.quantity);
+    }
+
+    // Send notification to pharmacy
+    await this.notificationsService.create({
+      pharmacyId: pharmacy.id,
+      orderId: order.id,
+      type: 'ORDER_PLACED',
+      title: 'New Order Received',
+      message: `New order #${orderNumber} from ${patient.firstName} ${patient.lastName}`,
+    });
+
+    // Send notification to patient
+    await this.notificationsService.create({
+      patientId: patient.id,
+      orderId: order.id,
+      type: 'ORDER_PLACED',
+      title: 'Order Placed Successfully',
+      message: `Your order #${orderNumber} has been placed and is awaiting pharmacy confirmation.`,
+    });
+
+    return order;
+  }
+
+  // ========================================
+  // GET ORDER BY ID
+  // ========================================
+
+  async findById(id: string) {
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: {
+        patient: {
+          include: {
+            user: {
+              select: { email: true },
+            },
+          },
+        },
+        pharmacy: true,
+        prescription: true,
+        orderItems: {
+          include: {
+            medication: true,
+          },
+        },
+        payment: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    return order;
+  }
+
+  // ========================================
+  // GET PATIENT ORDERS
+  // ========================================
+
+  async findByPatient(userId: string, status?: string) {
+    const patient = await this.patientsService.findByUserId(userId);
+
+    const where: any = { patientId: patient.id };
+    if (status) {
+      where.status = status;
+    }
+
+    return this.prisma.order.findMany({
+      where,
+      include: {
+        pharmacy: {
+          select: { name: true, phone: true, address: true },
+        },
+        orderItems: {
+          include: {
+            medication: {
+              select: { name: true, imageUrl: true },
+            },
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ========================================
+  // GET PHARMACY ORDERS
+  // ========================================
+
+  async findByPharmacy(userId: string, status?: string) {
+    const pharmacy = await this.pharmaciesService.findByUserId(userId);
+
+    const where: any = { pharmacyId: pharmacy.id };
+    if (status) {
+      where.status = status;
+    }
+
+    return this.prisma.order.findMany({
+      where,
+      include: {
+        patient: {
+          select: { firstName: true, lastName: true, phone: true },
+        },
+        orderItems: {
+          include: {
+            medication: {
+              select: { name: true },
+            },
+          },
+        },
+        prescription: {
+          select: { id: true, fileUrl: true, status: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ========================================
+  // UPDATE ORDER STATUS (Pharmacy)
+  // ========================================
+
+  async updateStatus(id: string, userId: string, dto: UpdateOrderStatusDto) {
+    const order = await this.findById(id);
+    const pharmacy = await this.pharmaciesService.findByUserId(userId);
+
+    // Verify pharmacy owns this order
+    if (order.pharmacyId !== pharmacy.id) {
+      throw new ForbiddenException('You can only update your own orders');
+    }
+
+    // Validate status transition
+    this.validateStatusTransition(order.status as any, dto.status as any);
+
+    // Update order
+    const updated = await this.prisma.order.update({
+      where: { id },
+      data: {
+        status: dto.status as any,
+        cancellationReason: dto.cancellationReason,
+        cancelledAt: dto.status === 'CANCELLED' ? new Date() : undefined,
+      },
+      include: {
+        patient: true,
+        pharmacy: true,
+      },
+    });
+
+    // Send notifications based on status
+    await this.sendStatusNotification(updated);
+
+    return updated;
+  }
+
+  // ========================================
+  // CANCEL ORDER (Patient)
+  // ========================================
+
+  async cancel(id: string, userId: string, dto: CancelOrderDto) {
+    const order = await this.findById(id);
+    const patient = await this.patientsService.findByUserId(userId);
+
+    // Verify patient owns this order
+    if (order.patientId !== patient.id) {
+      throw new ForbiddenException('You can only cancel your own orders');
+    }
+
+    // Check if cancellation is allowed (only until PREPARING)
+    if (['PREPARING', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'DELIVERED', 'COMPLETED'].includes(order.status)) {
+      throw new BadRequestException(
+        'Cannot cancel order at this stage. Please contact the pharmacy.',
+      );
+    }
+
+    // Cancel order
+    const cancelled = await this.prisma.order.update({
+      where: { id },
+      data: {
+        status: 'CANCELLED',
+        cancellationReason: dto.cancellationReason,
+        cancelledAt: new Date(),
+      },
+    });
+
+    // Restore medication stock
+    for (const item of order.orderItems) {
+      await this.medicationsService.restoreStock(item.medicationId, item.quantity);
+    }
+
+    // Notify pharmacy
+    await this.notificationsService.create({
+      pharmacyId: order.pharmacyId,
+      orderId: order.id,
+      type: 'ORDER_CANCELLED',
+      title: 'Order Cancelled',
+      message: `Order #${order.orderNumber} has been cancelled by the patient.`,
+    });
+
+    return cancelled;
+  }
+
+  // ========================================
+  // HELPER FUNCTIONS
+  // ========================================
+
+  private async generateOrderNumber(): Promise<string> {
+    const date = new Date();
+    const year = date.getFullYear();
+    const month = String(date.getMonth() + 1).padStart(2, '0');
+    const day = String(date.getDate()).padStart(2, '0');
+
+    const count = await this.prisma.order.count({
+      where: {
+        createdAt: {
+          gte: new Date(date.setHours(0, 0, 0, 0)),
+        },
+      },
+    });
+
+    const orderNum = String(count + 1).padStart(4, '0');
+    return `ORD-${year}${month}${day}-${orderNum}`;
+  }
+
+  private validateStatusTransition(currentStatus: string, newStatus: string) {
+    const validTransitions: Record<string, string[]> = {
+      PENDING: ['ACCEPTED', 'CANCELLED'],
+      ACCEPTED: ['PREPARING', 'CANCELLED'],
+      PREPARING: ['OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'],
+      OUT_FOR_DELIVERY: ['DELIVERED'],
+      READY_FOR_PICKUP: ['COMPLETED'],
+      DELIVERED: ['COMPLETED'],
+    };
+
+    if (!validTransitions[currentStatus]?.includes(newStatus)) {
+      throw new BadRequestException(
+        `Cannot transition from ${currentStatus} to ${newStatus}`,
+      );
+    }
+  }
+
+  private async sendStatusNotification(order: any) {
+    const notificationMap: Record<string, { title: string; message: string; type: any }> = {
+      ACCEPTED: {
+        title: 'Order Accepted',
+        message: `Your order #${order.orderNumber} has been accepted by ${order.pharmacy.name}`,
+        type: 'ORDER_ACCEPTED',
+      },
+      PREPARING: {
+        title: 'Order Being Prepared',
+        message: `Your order #${order.orderNumber} is being prepared`,
+        type: 'ORDER_PREPARING',
+      },
+      OUT_FOR_DELIVERY: {
+        title: 'Order Out for Delivery',
+        message: `Your order #${order.orderNumber} is on its way!`,
+        type: 'ORDER_OUT_FOR_DELIVERY',
+      },
+      READY_FOR_PICKUP: {
+        title: 'Order Ready for Pickup',
+        message: `Your order #${order.orderNumber} is ready for pickup at ${order.pharmacy.name}`,
+        type: 'ORDER_READY_FOR_PICKUP',
+      },
+      DELIVERED: {
+        title: 'Order Delivered',
+        message: `Your order #${order.orderNumber} has been delivered`,
+        type: 'ORDER_DELIVERED',
+      },
+      CANCELLED: {
+        title: 'Order Cancelled',
+        message: `Order #${order.orderNumber} has been cancelled`,
+        type: 'ORDER_CANCELLED',
+      },
+    };
+
+    const notification = notificationMap[order.status];
+    if (notification) {
+      await this.notificationsService.create({
+        patientId: order.patientId,
+        orderId: order.id,
+        ...notification,
+      });
+    }
+  }
+}

@@ -1,0 +1,54 @@
+// backend/src/prescriptions/prescriptions.controller.ts
+
+import {
+  Controller,
+  Get,
+  Post,
+  Put,
+  Body,
+  Param,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
+import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { PrescriptionsService } from './prescriptions.service';
+import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../common/constants/role.enum';
+import { CreatePrescriptionDto, UpdatePrescriptionStatusDto } from './dto';
+
+@ApiTags('Prescriptions')
+@Controller('prescriptions')
+@UseGuards(JwtAuthGuard, RolesGuard)
+@ApiBearerAuth()
+export class PrescriptionsController {
+  constructor(private prescriptionsService: PrescriptionsService) {}
+
+  @Post()
+  @Roles(Role.PATIENT)
+  @ApiOperation({ summary: 'Upload prescription' })
+  create(@Req() req: any, @Body() dto: CreatePrescriptionDto) {
+    return this.prescriptionsService.create(req.user.sub, dto);
+  }
+
+  @Get('my-prescriptions')
+  @Roles(Role.PATIENT)
+  @ApiOperation({ summary: 'Get patient prescriptions' })
+  getMyPrescriptions(@Req() req: any) {
+    return this.prescriptionsService.findByPatient(req.user.sub);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get prescription by ID' })
+  getPrescriptionById(@Param('id') id: string) {
+    return this.prescriptionsService.findById(id);
+  }
+
+  @Put(':id/status')
+  @Roles(Role.PHARMACY)
+  @ApiOperation({ summary: 'Update prescription status (Pharmacy)' })
+  updateStatus(@Param('id') id: string, @Body() dto: UpdatePrescriptionStatusDto) {
+    return this.prescriptionsService.updateStatus(id, dto);
+  }
+}

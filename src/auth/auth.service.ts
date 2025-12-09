@@ -54,7 +54,7 @@ export class AuthService {
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     // Get user profile
-    let profile = null;
+    let profile: any = null;
     if (user.role === 'PATIENT') {
       profile = await this.patientsService.findByUserId(user.id);
     } else if (user.role === 'PHARMACY') {
@@ -159,6 +159,10 @@ export class AuthService {
     });
 
     // Notify super admins
+    if (!user.pharmacy) {
+      throw new BadRequestException('Pharmacy profile not created');
+    }
+    
     await this.notificationsService.notifySuperAdminsNewPharmacy(
       user.pharmacy.id,
       user.pharmacy.name,
