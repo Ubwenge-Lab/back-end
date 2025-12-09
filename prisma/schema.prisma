@@ -1,0 +1,334 @@
+// backend/prisma/schema.prisma
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ========================================
+// ENUMS
+// ========================================
+
+enum UserRole {
+  SUPER_ADMIN
+  PHARMACY
+  PATIENT
+}
+
+enum PharmacyStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  PREPARING
+  OUT_FOR_DELIVERY
+  READY_FOR_PICKUP
+  DELIVERED
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderType {
+  DELIVERY
+  PICKUP
+}
+
+enum PaymentMethod {
+  MTN_MOMO
+  AIRTEL_MONEY
+  CARD
+  INSURANCE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  ORDER_PLACED
+  ORDER_ACCEPTED
+  ORDER_PREPARING
+  ORDER_OUT_FOR_DELIVERY
+  ORDER_READY_FOR_PICKUP
+  ORDER_DELIVERED
+  ORDER_CANCELLED
+  PRESCRIPTION_REJECTED
+  PHARMACY_APPROVED
+  PHARMACY_REJECTED
+}
+
+enum PrescriptionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+// ========================================
+// MODELS
+// ========================================
+
+model User {
+  id            String    @id @default(uuid())
+  email         String    @unique
+  password      String
+  role          UserRole
+  isVerified    Boolean   @default(false)
+  verificationToken String?
+  refreshToken  String?   @db.Text
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  patient       Patient?
+  pharmacy      Pharmacy?
+
+  @@index([email])
+  @@map("users")
+}
+
+model Patient {
+  id            String    @id @default(uuid())
+  userId        String    @unique
+  firstName     String
+  lastName      String
+  phone         String
+  dateOfBirth   DateTime?
+  gender        String?
+  address       String?
+  
+  // Insurance Info
+  insuranceProvider String?
+  insurancePolicy   String?
+  insuranceMemberId String?
+  insuranceCoverage Int?    @default(0) // Percentage (0-100)
+
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  // Relations
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  orders        Order[]
+  prescriptions Prescription[]
+  notifications Notification[]
+
+  @@index([userId])
+  @@map("patients")
+}
+
+model Pharmacy {
+  id                String          @id @default(uuid())
+  userId            String          @unique
+  name              String
+  phone             String
+  address           String
+  latitude          Float?
+  longitude         Float?
+  licenseNumber     String          @unique
+  licenseDocument   String          // S3 URL
+  
+  // Delivery Zones (JSON: [{name: "Zone 1", maxDistance: 5, fee: 1000}])
+  deliveryZones     Json?
+  
+  // Operating Hours (JSON: {monday: "8:00-18:00", ...})
+  operatingHours    Json?
+  
+  status            PharmacyStatus  @default(PENDING)
+  rejectionReason   String?         @db.Text
+  
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+  approvedAt        DateTime?
+
+  // Relations
+  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medications       Medication[]
+  orders            Order[]
+  notifications     Notification[]
+
+  @@index([userId])
+  @@index([status])
+  @@map("pharmacies")
+}
+
+model Medication {
+  id                    String    @id @default(uuid())
+  pharmacyId            String
+  name                  String
+  description           String?   @db.Text
+  category              String
+  price                 Float
+  quantity              Int
+  lowStockThreshold     Int       @default(10)
+  requiresPrescription  Boolean   @default(false)
+  imageUrl              String?
+  
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  // Relations
+  pharmacy              Pharmacy  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  orderItems            OrderItem[]
+
+  @@index([pharmacyId])
+  @@index([name])
+  @@map("medications")
+}
+
+model Order {
+  id                String        @id @default(uuid())
+  patientId         String
+  pharmacyId        String
+  
+  // Order Details
+  orderNumber       String        @unique
+  type              OrderType
+  status            OrderStatus   @default(PENDING)
+  
+  // Delivery Info
+  deliveryAddress   String?
+  deliveryFee       Float         @default(0)
+  deliveryZone      String?
+  
+  // Prescription Info
+  prescriptionId    String?       @unique
+  
+  // Payment Info
+  subtotal          Float
+  total             Float
+  paymentMethod     PaymentMethod
+  paymentStatus     PaymentStatus @default(PENDING)
+  insuranceCoverage Float?        // Amount covered by insurance
+  patientPayment    Float         // Amount patient pays
+  
+  // Cancellation
+  cancellationReason String?      @db.Text
+  cancelledAt       DateTime?
+  
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+
+  // Relations
+  patient           Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pharmacy          Pharmacy      @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  prescription      Prescription? @relation(fields: [prescriptionId], references: [id])
+  orderItems        OrderItem[]
+  payment           Payment?
+  notifications     Notification[]
+
+  @@index([patientId])
+  @@index([pharmacyId])
+  @@index([orderNumber])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id            String      @id @default(uuid())
+  orderId       String
+  medicationId  String
+  quantity      Int
+  price         Float       // Price at time of order
+  
+  createdAt     DateTime    @default(now())
+
+  // Relations
+  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  medication    Medication  @relation(fields: [medicationId], references: [id])
+
+  @@index([orderId])
+  @@index([medicationId])
+  @@map("order_items")
+}
+
+model Prescription {
+  id                String              @id @default(uuid())
+  patientId         String
+  fileUrl           String              // S3 URL of prescription image/PDF
+  fileName          String
+  fileType          String
+  
+  status            PrescriptionStatus  @default(PENDING)
+  rejectionReason   String?             @db.Text
+  reviewedAt        DateTime?
+  
+  createdAt         DateTime            @default(now())
+  updatedAt         DateTime            @updatedAt
+
+  // Relations
+  patient           Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  order             Order?
+
+  @@index([patientId])
+  @@index([status])
+  @@map("prescriptions")
+}
+
+model Payment {
+  id                  String        @id @default(uuid())
+  orderId             String        @unique
+  
+  // Payment Details
+  amount              Float
+  paymentMethod       PaymentMethod
+  status              PaymentStatus @default(PENDING)
+  
+  // Flutterwave Transaction Details
+  transactionId       String?       @unique
+  flutterwaveRef      String?       @unique
+  
+  // Insurance Details (if applicable)
+  insuranceProvider   String?
+  insurancePolicyNumber String?
+  insuranceCoverage   Float?
+  insuranceVerified   Boolean       @default(false)
+  
+  // Payment Response (JSON)
+  paymentResponse     Json?
+  
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
+
+  // Relations
+  order               Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([transactionId])
+  @@map("payments")
+}
+
+model Notification {
+  id          String            @id @default(uuid())
+  userId      String?           // Can be patient or pharmacy
+  patientId   String?
+  pharmacyId  String?
+  orderId     String?
+  
+  type        NotificationType
+  title       String
+  message     String            @db.Text
+  isRead      Boolean           @default(false)
+  
+  createdAt   DateTime          @default(now())
+
+  // Relations
+  patient     Patient?          @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pharmacy    Pharmacy?         @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  order       Order?            @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([pharmacyId])
+  @@index([orderId])
+  @@index([isRead])
+  @@map("notifications")
+}
