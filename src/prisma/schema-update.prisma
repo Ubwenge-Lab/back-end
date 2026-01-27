@@ -1,0 +1,47 @@
+// backend/prisma/schema.prisma
+// ADD OR UPDATE THE PHARMACY MODEL WITH THESE FIELDS:
+
+model Pharmacy {
+  id                  String    @id @default(cuid())
+  userId              String    @unique
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  name                String    // Pharmacy business name
+  representativeName  String    // Representative name (must match RDB certificate)
+  phone               String
+  address             String
+  latitude            Float?
+  longitude           Float?
+  
+  dateOfIncorporation DateTime? // Date when pharmacy was incorporated
+  rdbCertificate      String    // S3 URL or base64 of RDB certificate
+  pharmacyLicense     String    // S3 URL or base64 of pharmacy license
+  
+  status              PharmacyStatus @default(PENDING) // PENDING, APPROVED, REJECTED
+  rejectionReason     String?        // Reason for rejection (if status is REJECTED)
+  
+  // Remove old licenseNumber and licenseDocument if they exist
+  // licenseNumber    String?
+  // licenseDocument  String?
+  
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+
+  // Relations
+  prescriptions       Prescription[]
+  orders              Order[]
+  medications         Medication[]
+  
+  @@index([status])
+  @@index([userId])
+}
+
+enum PharmacyStatus {
+  PENDING   // Waiting for super admin approval
+  APPROVED  // Approved by super admin - can access dashboard
+  REJECTED  // Rejected by super admin - need to update documents
+}
+
+// MIGRATION STEPS:
+// 1. Run: npx prisma migrate dev --name update_pharmacy_fields
+// 2. This will add the new fields and update existing records

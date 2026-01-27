@@ -4,17 +4,22 @@ import { IsEmail, IsNotEmpty, IsString, IsOptional, IsNumber, MinLength, Matches
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterPharmacyDto {
-  @ApiProperty()
+  @ApiProperty({ description: 'Pharmacy business name' })
   @IsString()
   @IsNotEmpty()
-  name: string;
+  pharmacyName: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Representative name (must match RDB certificate)' })
+  @IsString()
+  @IsNotEmpty()
+  representativeName: string;
+
+  @ApiProperty({ description: 'Pharmacy email address' })
   @IsEmail()
   @IsNotEmpty()
   email: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Password (min 8 characters, uppercase, lowercase, number or symbol)' })
   @IsString()
   @IsNotEmpty()
   @MinLength(8)
@@ -23,33 +28,43 @@ export class RegisterPharmacyDto {
   })
   password: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Confirm password' })
+  @IsString()
+  @IsNotEmpty()
+  confirmPassword: string;
+
+  @ApiProperty({ description: 'Contact phone number' })
   @IsString()
   @IsNotEmpty()
   phone: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Pharmacy physical address' })
   @IsString()
   @IsNotEmpty()
   address: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'Latitude coordinate' })
   @IsNumber()
   @IsOptional()
   latitude?: number;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'Longitude coordinate' })
   @IsNumber()
   @IsOptional()
   longitude?: number;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'Date of incorporation (YYYY-MM-DD)' })
   @IsString()
   @IsNotEmpty()
-  licenseNumber: string;
+  dateOfIncorporation: string;
 
-  @ApiProperty()
+  @ApiProperty({ description: 'RDB Certificate document (S3 URL or base64)' })
   @IsString()
   @IsNotEmpty()
-  licenseDocument: string; // S3 URL
+  rdbCertificate: string;
+
+  @ApiProperty({ description: 'Pharmacy License document (S3 URL or base64)' })
+  @IsString()
+  @IsNotEmpty()
+  pharmacyLicense: string;
 }

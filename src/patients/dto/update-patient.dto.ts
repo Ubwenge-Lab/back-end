@@ -1,6 +1,6 @@
 // backend/src/patients/dto/update-patient.dto.ts
 
-import { IsString, IsOptional, IsNumber } from 'class-validator';
+import { IsString, IsOptional, IsNumber, IsDateString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdatePatientDto {
@@ -18,6 +18,11 @@ export class UpdatePatientDto {
   @IsString()
   @IsOptional()
   phone?: string;
+
+  @ApiProperty({ required: false })
+  @IsDateString()
+  @IsOptional()
+  dateOfBirth?: string;
 
   @ApiProperty({ required: false })
   @IsString()

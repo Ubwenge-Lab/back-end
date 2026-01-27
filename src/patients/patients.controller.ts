@@ -10,11 +10,11 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PatientsService } from './patients.service';
+import { UpdatePatientDto } from './dto/update-patient.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
-import { UpdatePatientDto } from './dto/update-patient.dto';
 
 @ApiTags('Patients')
 @Controller('patients')
@@ -33,8 +33,14 @@ export class PatientsController {
   @Put('profile')
   @Roles(Role.PATIENT)
   @ApiOperation({ summary: 'Update patient profile' })
-  async updateProfile(@Req() req: any, @Body() dto: UpdatePatientDto) {
-    const patient = await this.patientsService.getProfile(req.user.sub);
-    return this.patientsService.update(patient.id, dto);
+  updateProfile(@Req() req: any, @Body() dto: UpdatePatientDto) {
+    return this.patientsService.updateProfile(req.user.sub, dto);
+  }
+
+  @Get('orders')
+  @Roles(Role.PATIENT)
+  @ApiOperation({ summary: 'Get patient with all orders' })
+  getOrders(@Req() req: any) {
+    return this.patientsService.getPatientWithOrders(req.user.sub);
   }
 }

@@ -2,7 +2,7 @@
 
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
-import 'dotenv/config'; // Ensure env vars are loaded
+import 'dotenv/config';
 
 const prisma = new PrismaClient();
 
@@ -36,11 +36,20 @@ async function main() {
     },
   });
 
-  console.log('✅ Super Admin created:');
-  console.log(`   Email: ${superAdminEmail}`);
-  console.log(`   Password: ${superAdminPassword}`);
+  console.log('✅ Super Admin created successfully!');
   console.log('');
-  console.log('⚠️  IMPORTANT: Change the password after first login!');
+  console.log('📧 Email:', superAdminEmail);
+  console.log('🔑 Password:', superAdminPassword);
+  console.log('');
+  console.log('⚠️  IMPORTANT SECURITY NOTICE:');
+  console.log('   1. On first login, you will be prompted to change your password');
+  console.log('   2. Use the PUT /auth/change-password endpoint after logging in');
+  console.log('   3. The system detects first login by comparing with the default password');
+  console.log('');
+  console.log('📝 Login Instructions:');
+  console.log('   1. POST /auth/login with email and password');
+  console.log('   2. If requiresPasswordChange: true, immediately call PUT /auth/change-password');
+  console.log('   3. Provide currentPassword (default) and newPassword');
   console.log('');
 }
 

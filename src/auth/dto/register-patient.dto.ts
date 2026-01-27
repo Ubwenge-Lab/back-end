@@ -31,6 +31,11 @@ export class RegisterPatientDto {
   @ApiProperty()
   @IsString()
   @IsNotEmpty()
+  confirmPassword: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
   phone: string;
 
   @ApiProperty({ required: false })

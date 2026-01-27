@@ -8,6 +8,7 @@ import {
   Req,
   HttpCode,
   HttpStatus,
+  Put,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { AuthService } from './auth.service';
@@ -15,9 +16,11 @@ import {
   LoginDto,
   RegisterPatientDto,
   RegisterPharmacyDto,
-  SuperAdminLoginDto,
   VerifyEmailDto,
   ResendVerificationDto,
+  ForgotPasswordDto,
+  ResetPasswordDto,
+  ChangePasswordDto,
 } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
@@ -29,7 +32,7 @@ export class AuthController {
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Login (Patient/Pharmacy)' })
+  @ApiOperation({ summary: 'Login (Patient/Pharmacy/Super Admin)' })
   login(@Body() dto: LoginDto) {
     return this.authService.login(dto);
   }
@@ -60,6 +63,29 @@ export class AuthController {
     return this.authService.resendVerificationCode(dto.email);
   }
 
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Request password reset code' })
+  forgotPassword(@Body() dto: ForgotPasswordDto) {
+    return this.authService.forgotPassword(dto);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Reset password with code' })
+  resetPassword(@Body() dto: ResetPasswordDto) {
+    return this.authService.resetPassword(dto);
+  }
+
+  @Put('change-password')
+  @UseGuards(JwtAuthGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Change password (authenticated users)' })
+  changePassword(@Req() req: any, @Body() dto: ChangePasswordDto) {
+    return this.authService.changePassword(req.user.sub, dto);
+  }
+
   @Post('refresh')
   @UseGuards(JwtRefreshGuard)
   @HttpCode(HttpStatus.OK)
@@ -76,12 +102,5 @@ export class AuthController {
   @ApiOperation({ summary: 'Logout' })
   logout(@Req() req: any) {
     return this.authService.logout(req.user.sub);
-  }
-
-  @Post('super-admin/login')
-  @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Super Admin Login' })
-  superAdminLogin(@Body() dto: SuperAdminLoginDto) {
-    return this.authService.superAdminLogin(dto.secretKey);
   }
 }

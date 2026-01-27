@@ -26,7 +26,7 @@ export class EmailService {
     const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
     if (!apiKey) {
       console.warn('⚠️  SendGrid not configured - skipping email');
-      return; // Don't throw error in development
+      return;
     }
 
     const msg = {
@@ -57,14 +57,57 @@ export class EmailService {
     } catch (error) {
       console.error('❌ SendGrid error:', error.response?.body || error.message);
       
-      // Log detailed error for debugging
       if (error.response?.body?.errors) {
         console.error('SendGrid detailed errors:', JSON.stringify(error.response.body.errors, null, 2));
       }
       
-      // Don't throw in development to allow registration to complete
       if (this.configService.get('NODE_ENV') === 'production') {
         throw new InternalServerErrorException('Failed to send verification email');
+      }
+    }
+  }
+
+  // ========================================
+  // SEND PASSWORD RESET EMAIL
+  // ========================================
+
+  async sendPasswordResetEmail(email: string, resetCode: string) {
+    const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+    if (!apiKey) {
+      console.warn('⚠️  SendGrid not configured - skipping email');
+      return;
+    }
+
+    const msg = {
+      to: email,
+      from: {
+        email: this.configService.get('SENDGRID_FROM_EMAIL') || 'danielntwali9@gmail.com',
+        name: this.configService.get('SENDGRID_FROM_NAME') || 'Evuze',
+      },
+      subject: 'Reset Your Evuze Password',
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #667eea;">Password Reset Request 🔐</h2>
+          <p>We received a request to reset your password. Use the code below to reset it:</p>
+          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
+            <h1 style="color: #667eea; font-size: 36px; letter-spacing: 8px; margin: 0;">${resetCode}</h1>
+          </div>
+          <p>Enter this code along with your new password in the password reset page.</p>
+          <p>This code will expire in 1 hour.</p>
+          <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+          <p style="color: #999; font-size: 12px;">If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
+        </div>
+      `,
+    };
+
+    try {
+      await sgMail.send(msg);
+      console.log(`✅ Password reset email sent to ${email}`);
+    } catch (error) {
+      console.error('❌ SendGrid error:', error.response?.body || error.message);
+      
+      if (this.configService.get('NODE_ENV') === 'production') {
+        throw new InternalServerErrorException('Failed to send password reset email');
       }
     }
   }
@@ -156,6 +199,10 @@ export class EmailService {
             <p>Your pharmacy application for <strong>${pharmacyName}</strong> requires attention.</p>
             ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
             <p>Please review and resubmit your application with the necessary corrections.</p>
+            <a href="${this.configService.get('FRONTEND_URL')}/login" 
+               style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+              Update Application
+            </a>
           </div>
         `,
     };
@@ -163,6 +210,58 @@ export class EmailService {
     try {
       await sgMail.send(msg);
       console.log(`✅ Pharmacy approval email sent to ${email}`);
+    } catch (error) {
+      console.error('❌ SendGrid error:', error.response?.body || error.message);
+    }
+  }
+
+  // ========================================
+  // SEND PHARMACY UPDATE NOTIFICATION
+  // ========================================
+
+  async sendPharmacyUpdateNotification(email: string, pharmacyName: string, approved: boolean, reason?: string) {
+    const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+    if (!apiKey) {
+      console.warn('⚠️  SendGrid not configured - skipping email');
+      return;
+    }
+
+    const msg = {
+      to: email,
+      from: {
+        email: this.configService.get('SENDGRID_FROM_EMAIL') || 'danielntwali9@gmail.com',
+        name: this.configService.get('SENDGRID_FROM_NAME') || 'Evuze',
+      },
+      subject: approved ? 'Profile Update Approved ✅' : 'Profile Update Status',
+      html: approved
+        ? `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #10b981;">Profile Update Approved 🎉</h2>
+            <p>Your profile updates for <strong>${pharmacyName}</strong> have been approved!</p>
+            <p>The changes are now live on your pharmacy profile.</p>
+            <a href="${this.configService.get('FRONTEND_URL')}/pharmacy/profile" 
+               style="display: inline-block; padding: 12px 24px; background-color: #10b981; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+              View Profile
+            </a>
+          </div>
+        `
+        : `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #ef4444;">Profile Update Needs Revision</h2>
+            <p>Your profile update for <strong>${pharmacyName}</strong> requires attention.</p>
+            ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
+            <p>Please review the feedback and make the necessary corrections.</p>
+            <a href="${this.configService.get('FRONTEND_URL')}/pharmacy/profile" 
+               style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+              Update Profile
+            </a>
+          </div>
+        `,
+    };
+
+    try {
+      await sgMail.send(msg);
+      console.log(`✅ Pharmacy update notification sent to ${email}`);
     } catch (error) {
       console.error('❌ SendGrid error:', error.response?.body || error.message);
     }

@@ -1,12 +1,20 @@
 // backend/src/pharmacies/pharmacies.service.ts
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
+import { EmailService } from '../notifications/email.service';
 
 @Injectable()
 export class PharmaciesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private emailService: EmailService,
+  ) {}
+
+  // ========================================
+  // FIND ALL PHARMACIES
+  // ========================================
 
   async findAll(status?: string) {
     const where = status ? { status: status as any } : {};
@@ -24,6 +32,10 @@ export class PharmaciesService {
       orderBy: { createdAt: 'desc' },
     });
   }
+
+  // ========================================
+  // FIND PHARMACY BY ID
+  // ========================================
 
   async findById(id: string) {
     const pharmacy = await this.prisma.pharmacy.findUnique({
@@ -46,6 +58,10 @@ export class PharmaciesService {
     return pharmacy;
   }
 
+  // ========================================
+  // FIND PHARMACY BY USER ID
+  // ========================================
+
   async findByUserId(userId: string) {
     const pharmacy = await this.prisma.pharmacy.findUnique({
       where: { userId },
@@ -63,18 +79,106 @@ export class PharmaciesService {
     return pharmacy;
   }
 
+  // ========================================
+  // UPDATE PHARMACY (Internal method)
+  // ========================================
+
   async update(id: string, dto: UpdatePharmacyDto) {
     return this.prisma.pharmacy.update({
       where: { id },
-      data: dto,
+      data: {
+        ...dto,
+        dateOfIncorporation: dto.dateOfIncorporation 
+          ? new Date(dto.dateOfIncorporation) 
+          : undefined,
+      },
     });
   }
+
+  // ========================================
+  // GET PHARMACY PROFILE
+  // ========================================
 
   async getProfile(userId: string) {
     return this.findByUserId(userId);
   }
 
-  // Get approved pharmacies for patients
+  // ========================================
+  // UPDATE PHARMACY PROFILE (WITH APPROVAL WORKFLOW)
+  // ========================================
+
+  async updateProfile(userId: string, dto: UpdatePharmacyDto) {
+    const pharmacy = await this.prisma.pharmacy.findUnique({
+      where: { userId },
+      include: { user: true },
+    });
+
+    if (!pharmacy) {
+      throw new NotFoundException('Pharmacy not found');
+    }
+
+    // Check if pharmacy is approved or rejected
+    if (pharmacy.status !== 'APPROVED' && pharmacy.status !== 'REJECTED') {
+      throw new ForbiddenException('Your pharmacy must be approved before making profile updates');
+    }
+
+    // Critical fields that require admin re-approval
+    const criticalFields = [
+      'name',
+      'representativeName',
+      'rdbCertificate',
+      'pharmacyLicense',
+      'dateOfIncorporation',
+    ];
+
+    const hasCriticalChanges = criticalFields.some(field => dto[field] !== undefined);
+
+    if (hasCriticalChanges) {
+      // Store pending changes and set status to PENDING for admin review
+      const updatedPharmacy = await this.prisma.pharmacy.update({
+        where: { id: pharmacy.id },
+        data: {
+          ...dto,
+          dateOfIncorporation: dto.dateOfIncorporation 
+            ? new Date(dto.dateOfIncorporation) 
+            : undefined,
+          status: 'PENDING', // Requires admin re-approval
+          rejectionReason: null, // Clear previous rejection reason
+        },
+      });
+
+      // Notify super admins about the update
+      await this.notifySuperAdminsPharmacyUpdate(pharmacy.id, pharmacy.name);
+
+      return {
+        message: 'Profile update submitted for admin approval. Critical changes require verification.',
+        pharmacy: updatedPharmacy,
+        requiresApproval: true,
+      };
+    } else {
+      // Non-critical fields can be updated directly
+      const updatedPharmacy = await this.prisma.pharmacy.update({
+        where: { id: pharmacy.id },
+        data: {
+          ...dto,
+          dateOfIncorporation: dto.dateOfIncorporation 
+            ? new Date(dto.dateOfIncorporation) 
+            : undefined,
+        },
+      });
+
+      return {
+        message: 'Profile updated successfully',
+        pharmacy: updatedPharmacy,
+        requiresApproval: false,
+      };
+    }
+  }
+
+  // ========================================
+  // GET APPROVED PHARMACIES (Public)
+  // ========================================
+
   async getApprovedPharmacies() {
     return this.prisma.pharmacy.findMany({
       where: { status: 'APPROVED' },
@@ -87,7 +191,123 @@ export class PharmaciesService {
     });
   }
 
-  // Calculate distance between two coordinates (Haversine formula)
+  // ========================================
+  // ADMIN: APPROVE PHARMACY OR PROFILE UPDATE
+  // ========================================
+
+  async approvePharmacy(pharmacyId: string, approved: boolean, rejectionReason?: string) {
+    const pharmacy = await this.prisma.pharmacy.findUnique({
+      where: { id: pharmacyId },
+      include: { user: true },
+    });
+
+    if (!pharmacy) {
+      throw new NotFoundException('Pharmacy not found');
+    }
+
+    const updatedPharmacy = await this.prisma.pharmacy.update({
+      where: { id: pharmacyId },
+      data: {
+        status: approved ? 'APPROVED' : 'REJECTED',
+        rejectionReason: approved ? null : rejectionReason,
+        approvedAt: approved ? new Date() : null,
+      },
+    });
+
+    // Send email notification
+    await this.emailService.sendPharmacyApproval(
+      pharmacy.user.email,
+      pharmacy.name,
+      approved,
+      rejectionReason,
+    );
+
+    // Create in-app notification
+    await this.prisma.notification.create({
+      data: {
+        pharmacyId: pharmacy.id,
+        type: approved ? 'PHARMACY_APPROVED' : 'PHARMACY_REJECTED',
+        title: approved ? 'Application Approved' : 'Application Rejected',
+        message: approved
+          ? 'Your pharmacy has been approved! You can now access your dashboard.'
+          : `Your pharmacy application was rejected. Reason: ${rejectionReason}`,
+      },
+    });
+
+    return {
+      message: approved 
+        ? 'Pharmacy approved successfully' 
+        : 'Pharmacy rejected',
+      pharmacy: updatedPharmacy,
+    };
+  }
+
+  // ========================================
+  // ADMIN: GET ALL PENDING PHARMACIES
+  // ========================================
+
+  async getPendingPharmacies() {
+    return this.prisma.pharmacy.findMany({
+      where: { status: 'PENDING' },
+      include: {
+        user: {
+          select: {
+            email: true,
+            isVerified: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ========================================
+  // ADMIN: GET ALL PHARMACIES
+  // ========================================
+
+  async getAllPharmacies(status?: string) {
+    const where = status ? { status: status as any } : {};
+
+    return this.prisma.pharmacy.findMany({
+      where,
+      include: {
+        user: {
+          select: {
+            email: true,
+            isVerified: true,
+            createdAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ========================================
+  // NOTIFY SUPER ADMINS ABOUT PHARMACY UPDATE
+  // ========================================
+
+  private async notifySuperAdminsPharmacyUpdate(pharmacyId: string, pharmacyName: string) {
+    const superAdmins = await this.prisma.user.findMany({
+      where: { role: 'SUPER_ADMIN' },
+    });
+
+    for (const admin of superAdmins) {
+      await this.prisma.notification.create({
+        data: {
+          type: 'PHARMACY_APPROVED',
+          title: 'Pharmacy Profile Update',
+          message: `${pharmacyName} has submitted profile updates for review.`,
+        },
+      });
+    }
+  }
+
+  // ========================================
+  // CALCULATE DISTANCE (Haversine formula)
+  // ========================================
+
   calculateDistance(
     lat1: number,
     lon1: number,
@@ -111,9 +331,11 @@ export class PharmaciesService {
     return deg * (Math.PI / 180);
   }
 
-  // Get delivery fee based on distance
+  // ========================================
+  // GET DELIVERY FEE BASED ON DISTANCE
+  // ========================================
+
   getDeliveryFee(pharmacyId: string, distance: number): number {
-    // Default zones if pharmacy hasn't set custom ones
     const defaultZones = [
       { name: 'Zone 1', maxDistance: 5, fee: 1000 },
       { name: 'Zone 2', maxDistance: 10, fee: 2000 },
@@ -127,6 +349,6 @@ export class PharmaciesService {
       }
     }
 
-    return 5000; // Max fee
+    return 5000;
   }
 }
