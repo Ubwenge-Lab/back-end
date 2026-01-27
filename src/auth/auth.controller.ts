@@ -4,8 +4,6 @@ import {
   Controller,
   Post,
   Body,
-  Get,
-  Query,
   UseGuards,
   Req,
   HttpCode,
@@ -18,6 +16,8 @@ import {
   RegisterPatientDto,
   RegisterPharmacyDto,
   SuperAdminLoginDto,
+  VerifyEmailDto,
+  ResendVerificationDto,
 } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
@@ -46,10 +46,18 @@ export class AuthController {
     return this.authService.registerPharmacy(dto);
   }
 
-  @Get('verify-email')
-  @ApiOperation({ summary: 'Verify email with token' })
-  verifyEmail(@Query('token') token: string) {
-    return this.authService.verifyEmail(token);
+  @Post('verify-email')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Verify email with 5-digit code' })
+  verifyEmail(@Body() dto: VerifyEmailDto) {
+    return this.authService.verifyEmail(dto);
+  }
+
+  @Post('resend-verification')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Resend verification code' })
+  resendVerification(@Body() dto: ResendVerificationDto) {
+    return this.authService.resendVerificationCode(dto.email);
   }
 
   @Post('refresh')

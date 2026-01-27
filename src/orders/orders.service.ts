@@ -6,7 +6,7 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { PatientsService } from '../patients/patients.service';
 import { PharmaciesService } from '../pharmacies/pharmacies.service';
 import { MedicationsService } from '../medications/medications.service';

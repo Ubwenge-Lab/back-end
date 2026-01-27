@@ -1,7 +1,7 @@
 // backend/src/payments/payments.service.ts
 
 import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { FlutterwaveService } from './flutterwave.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { InitiatePaymentDto, VerifyPaymentDto, MobileMoneyPaymentDto } from './dto';

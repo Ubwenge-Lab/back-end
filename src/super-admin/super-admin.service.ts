@@ -1,7 +1,7 @@
 // backend/src/super-admin/super-admin.service.ts
 
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService } from '../notifications/email.service';
 import { ApprovePharmacyDto, RejectPharmacyDto } from './dto';

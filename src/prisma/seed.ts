@@ -1,7 +1,8 @@
-// backend/prisma/seed.ts
+// backend/src/prisma/seed.ts
 
 import { PrismaClient } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
+import 'dotenv/config'; // Ensure env vars are loaded
 
 const prisma = new PrismaClient();
 
@@ -19,8 +20,8 @@ async function main() {
   }
 
   // Get super admin credentials from environment
-  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'admin@evuze.rw';
-  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || 'SuperAdmin@2025';
+  const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'danielntwali9@gmail.com';
+  const superAdminPassword = process.env.SUPER_ADMIN_PASSWORD || 'SuperAdminPower@2025';
 
   // Hash password
   const hashedPassword = await bcrypt.hash(superAdminPassword, 10);

@@ -24,20 +24,10 @@ export class PrismaService extends PrismaClient implements OnModuleInit, OnModul
   async cleanDatabase() {
     if (process.env.NODE_ENV === 'production') return;
 
-    const models = Reflect.ownKeys(this).filter((key) => key[0] !== '_');
+    const models = Reflect.ownKeys(this).filter(
+      (key) => typeof key === 'string' && key[0] !== '_'
+    ) as string[];
 
     return Promise.all(models.map((modelKey) => this[modelKey].deleteMany()));
   }
 }
-
-// backend/src/prisma/prisma.module.ts
-
-import { Global, Module } from '@nestjs/common';
-import { PrismaService } from './prisma.service';
-
-@Global()
-@Module({
-  providers: [PrismaService],
-  exports: [PrismaService],
-})
-export class PrismaModule {}

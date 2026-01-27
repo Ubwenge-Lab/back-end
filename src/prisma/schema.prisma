@@ -1,13 +1,15 @@
-// backend/prisma/schema.prisma
+// backend/src/prisma/schema.prisma
 
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
+
 
 // ========================================
 // ENUMS
@@ -79,19 +81,23 @@ enum PrescriptionStatus {
 // ========================================
 
 model User {
-  id            String    @id @default(uuid())
-  email         String    @unique
-  password      String
-  role          UserRole
-  isVerified    Boolean   @default(false)
-  verificationToken String?
-  refreshToken  String?   @db.Text
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  id                    String    @id @default(uuid())
+  email                 String    @unique
+  password              String
+  role                  UserRole
+  isVerified            Boolean   @default(false)
+  
+  // Email Verification with 5-digit code
+  verificationCode      String?
+  verificationCodeExpiry DateTime?
+  
+  refreshToken          String?   @db.Text
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
 
   // Relations
-  patient       Patient?
-  pharmacy      Pharmacy?
+  patient               Patient?
+  pharmacy              Pharmacy?
 
   @@index([email])
   @@map("users")

@@ -1,7 +1,7 @@
 // backend/src/pharmacies/pharmacies.service.ts
 
 import { Injectable, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
 
 @Injectable()

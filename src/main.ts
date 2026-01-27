@@ -12,10 +12,16 @@ async function bootstrap() {
   // Security
   app.use(helmet());
 
-  // CORS
+  // CORS - Allow frontend on port 3000
   app.enableCors({
-    origin: process.env.FRONTEND_URL || 'http://localhost:3000',
+    origin: [
+      'https://e-vuze-testing.vercel.app',
+      'http://localhost:3000',
+      /^https:\/\/e-vuze-testing.*\.vercel\.app$/,
+    ],
     credentials: true,
+    methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+    allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
   // Global prefix
@@ -48,7 +54,7 @@ async function bootstrap() {
     ║                                                           ║
     ║   🏥 E-Vuze Pharmacy API is running!                     ║
     ║                                                           ║
-    ║   🌍 Local:            http://localhost:${port}            ║
+    ║   🌐 Local:            http://localhost:${port}            ║
     ║   📚 API Docs:         http://localhost:${port}/api/docs  ║
     ║   🗄️  Database:         Connected                         ║
     ║                                                           ║

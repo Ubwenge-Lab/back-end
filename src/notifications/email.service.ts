@@ -1,43 +1,50 @@
 // backend/src/notifications/email.service.ts
 
-import { Injectable } from '@nestjs/common';
+import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import * as sgMail from '@sendgrid/mail';
+import sgMail from '@sendgrid/mail';
 
 @Injectable()
 export class EmailService {
   constructor(private configService: ConfigService) {
-    const apiKey = this.configService.get('SENDGRID_API_KEY');
-    if (apiKey) {
-      sgMail.setApiKey(apiKey);
+    const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+  
+    if (!apiKey) {
+      console.warn('⚠️  SENDGRID_API_KEY is not set - emails will not be sent');
+      return;
     }
+  
+    sgMail.setApiKey(apiKey);
+    console.log('✅ SendGrid initialized');
   }
 
   // ========================================
-  // SEND EMAIL VERIFICATION
+  // SEND EMAIL VERIFICATION WITH 5-DIGIT CODE
   // ========================================
 
-  async sendVerificationEmail(email: string, token: string) {
-    const verificationLink = `${this.configService.get('FRONTEND_URL')}/verify-email?token=${token}`;
+  async sendVerificationEmail(email: string, code: string) {
+    const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+    if (!apiKey) {
+      console.warn('⚠️  SendGrid not configured - skipping email');
+      return; // Don't throw error in development
+    }
 
     const msg = {
       to: email,
       from: {
-        email: this.configService.get('SENDGRID_FROM_EMAIL'),
-        name: this.configService.get('SENDGRID_FROM_NAME') || 'E-Vuze Healthcare',
+        email: this.configService.get('SENDGRID_FROM_EMAIL') || 'danielntwali9@gmail.com',
+        name: this.configService.get('SENDGRID_FROM_NAME') || 'Evuze',
       },
-      subject: 'Verify Your E-Vuze Account',
+      subject: 'Verify Your Evuze Account',
       html: `
         <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-          <h2 style="color: #667eea;">Welcome to E-Vuze Healthcare! 🏥</h2>
-          <p>Thank you for registering with E-Vuze. Please verify your email address by clicking the button below:</p>
-          <a href="${verificationLink}" 
-             style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
-            Verify Email Address
-          </a>
-          <p>Or copy and paste this link into your browser:</p>
-          <p style="color: #666; word-break: break-all;">${verificationLink}</p>
-          <p>This link will expire in 24 hours.</p>
+          <h2 style="color: #667eea;">Welcome to Evuze Healthcare! 🏥</h2>
+          <p>Thank you for registering with Evuze. Please verify your email address using the code below:</p>
+          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
+            <h1 style="color: #667eea; font-size: 36px; letter-spacing: 8px; margin: 0;">${code}</h1>
+          </div>
+          <p>Enter this code in the verification page to complete your registration.</p>
+          <p>This code will expire in 24 hours.</p>
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
           <p style="color: #999; font-size: 12px;">If you didn't create an account, you can safely ignore this email.</p>
         </div>
@@ -48,7 +55,17 @@ export class EmailService {
       await sgMail.send(msg);
       console.log(`✅ Verification email sent to ${email}`);
     } catch (error) {
-      console.error('❌ SendGrid error:', error);
+      console.error('❌ SendGrid error:', error.response?.body || error.message);
+      
+      // Log detailed error for debugging
+      if (error.response?.body?.errors) {
+        console.error('SendGrid detailed errors:', JSON.stringify(error.response.body.errors, null, 2));
+      }
+      
+      // Don't throw in development to allow registration to complete
+      if (this.configService.get('NODE_ENV') === 'production') {
+        throw new InternalServerErrorException('Failed to send verification email');
+      }
     }
   }
 
@@ -63,11 +80,17 @@ export class EmailService {
     status: string;
     message: string;
   }) {
+    const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+    if (!apiKey) {
+      console.warn('⚠️  SendGrid not configured - skipping email');
+      return;
+    }
+
     const msg = {
       to: data.email,
       from: {
-        email: this.configService.get('SENDGRID_FROM_EMAIL'),
-        name: this.configService.get('SENDGRID_FROM_NAME') || 'E-Vuze Healthcare',
+        email: this.configService.get('SENDGRID_FROM_EMAIL') || 'danielntwali9@gmail.com',
+        name: this.configService.get('SENDGRID_FROM_NAME') || 'Evuze',
       },
       subject: `Order ${data.orderNumber} - ${data.status}`,
       html: `
@@ -84,7 +107,7 @@ export class EmailService {
             View Order Details
           </a>
           <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-          <p style="color: #999; font-size: 12px;">Thank you for using E-Vuze Healthcare.</p>
+          <p style="color: #999; font-size: 12px;">Thank you for using Evuze Healthcare.</p>
         </div>
       `,
     };
@@ -93,7 +116,7 @@ export class EmailService {
       await sgMail.send(msg);
       console.log(`✅ Order notification sent to ${data.email}`);
     } catch (error) {
-      console.error('❌ SendGrid error:', error);
+      console.error('❌ SendGrid error:', error.response?.body || error.message);
     }
   }
 
@@ -102,11 +125,17 @@ export class EmailService {
   // ========================================
 
   async sendPharmacyApproval(email: string, pharmacyName: string, approved: boolean, reason?: string) {
+    const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+    if (!apiKey) {
+      console.warn('⚠️  SendGrid not configured - skipping email');
+      return;
+    }
+
     const msg = {
       to: email,
       from: {
-        email: this.configService.get('SENDGRID_FROM_EMAIL'),
-        name: this.configService.get('SENDGRID_FROM_NAME') || 'E-Vuze Healthcare',
+        email: this.configService.get('SENDGRID_FROM_EMAIL') || 'danielntwali9@gmail.com',
+        name: this.configService.get('SENDGRID_FROM_NAME') || 'Evuze',
       },
       subject: approved ? 'Pharmacy Application Approved ✅' : 'Pharmacy Application Status',
       html: approved
@@ -135,7 +164,7 @@ export class EmailService {
       await sgMail.send(msg);
       console.log(`✅ Pharmacy approval email sent to ${email}`);
     } catch (error) {
-      console.error('❌ SendGrid error:', error);
+      console.error('❌ SendGrid error:', error.response?.body || error.message);
     }
   }
 }

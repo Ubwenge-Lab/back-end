@@ -1,7 +1,7 @@
 // backend/src/prescriptions/prescriptions.service.ts
 
 import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { PatientsService } from '../patients/patients.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { CreatePrescriptionDto, UpdatePrescriptionStatusDto } from './dto';

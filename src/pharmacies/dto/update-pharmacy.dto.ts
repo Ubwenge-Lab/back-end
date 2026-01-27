@@ -29,12 +29,12 @@ export class UpdatePharmacyDto {
   @IsOptional()
   longitude?: number;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'JSON array of delivery zones' })
   @IsObject()
   @IsOptional()
   deliveryZones?: any;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ required: false, description: 'JSON object of operating hours' })
   @IsObject()
   @IsOptional()
   operatingHours?: any;

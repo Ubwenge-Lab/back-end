@@ -1,7 +1,7 @@
 // backend/src/notifications/notifications.service.ts
 
 import { Injectable } from '@nestjs/common';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from './email.service';
 import { NotificationType } from '@prisma/client';
 
@@ -77,8 +77,8 @@ export class NotificationsService {
   // SEND EMAIL NOTIFICATIONS
   // ========================================
 
-  async sendVerificationEmail(email: string, token: string) {
-    await this.emailService.sendVerificationEmail(email, token);
+  async sendVerificationEmail(email: string, code: string,) {
+    await this.emailService.sendVerificationEmail(email, code);
   }
 
   async notifySuperAdminsNewPharmacy(pharmacyId: string, pharmacyName: string) {

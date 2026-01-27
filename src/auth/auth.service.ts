@@ -9,12 +9,12 @@ import {
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import * as bcrypt from 'bcrypt';
-import { PrismaService } from '../../prisma/prisma.service';
+import { PrismaService } from '../prisma/prisma.service';
 import { UsersService } from '../users/users.service';
 import { PatientsService } from '../patients/patients.service';
 import { PharmaciesService } from '../pharmacies/pharmacies.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { LoginDto, RegisterPatientDto, RegisterPharmacyDto } from './dto';
+import { LoginDto, RegisterPatientDto, RegisterPharmacyDto, VerifyEmailDto } from './dto';
 
 @Injectable()
 export class AuthService {
@@ -43,8 +43,11 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
+    // Check email verification (except for PHARMACY and SUPER_ADMIN)
     if (!user.isVerified && user.role === 'PATIENT') {
-      throw new UnauthorizedException('Please verify your email first');
+      throw new UnauthorizedException(
+        'Please verify your email first. Check your inbox for the verification code.'
+      );
     }
 
     // Generate tokens
@@ -66,6 +69,7 @@ export class AuthService {
         id: user.id,
         email: user.email,
         role: user.role,
+        isVerified: user.isVerified,
         profile,
       },
       ...tokens,
@@ -86,8 +90,9 @@ export class AuthService {
     // Hash password
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    // Generate verification token
-    const verificationToken = Math.random().toString(36).substring(2, 15);
+    // Generate 5-digit verification code
+    const verificationCode = this.generateVerificationCode();
+    const verificationCodeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
 
     // Create user and patient
     const user = await this.prisma.user.create({
@@ -95,7 +100,9 @@ export class AuthService {
         email: dto.email,
         password: hashedPassword,
         role: 'PATIENT',
-        verificationToken,
+        verificationCode,
+        verificationCodeExpiry,
+        isVerified: false,
         patient: {
           create: {
             firstName: dto.firstName,
@@ -112,15 +119,29 @@ export class AuthService {
       include: { patient: true },
     });
 
-    // Send verification email (via NotificationsService)
-    await this.notificationsService.sendVerificationEmail(
-      user.email,
-      verificationToken,
-    );
+    // Send verification email (FIXED - only 2 parameters)
+    try {
+      await this.notificationsService.sendVerificationEmail(
+        user.email,
+        verificationCode,
+      );
+      console.log(`✅ Verification code sent to ${user.email}: ${verificationCode}`);
+    } catch (error) {
+      console.error('❌ Failed to send verification email:', error);
+      // In development, log the code for testing
+      if (this.configService.get('NODE_ENV') === 'development') {
+        console.log(`🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`);
+      }
+    }
 
     return {
-      message: 'Registration successful! Please check your email to verify your account.',
+      message: 'Registration successful! Please check your email for the verification code.',
       userId: user.id,
+      email: user.email,
+      // Only include code in development
+      ...(this.configService.get('NODE_ENV') === 'development' && { 
+        verificationCode 
+      }),
     };
   }
 
@@ -163,10 +184,14 @@ export class AuthService {
       throw new BadRequestException('Pharmacy profile not created');
     }
     
-    await this.notificationsService.notifySuperAdminsNewPharmacy(
-      user.pharmacy.id,
-      user.pharmacy.name,
-    );
+    try {
+      await this.notificationsService.notifySuperAdminsNewPharmacy(
+        user.pharmacy.id,
+        user.pharmacy.name,
+      );
+    } catch (error) {
+      console.error('Failed to notify super admins:', error);
+    }
 
     return {
       message: 'Registration submitted! Your pharmacy will be reviewed by our admin team.',
@@ -175,27 +200,91 @@ export class AuthService {
   }
 
   // ========================================
-  // VERIFY EMAIL
+  // VERIFY EMAIL WITH 5-DIGIT CODE
   // ========================================
 
-  async verifyEmail(token: string) {
+  async verifyEmail(dto: VerifyEmailDto) {
     const user = await this.prisma.user.findFirst({
-      where: { verificationToken: token },
+      where: { 
+        email: dto.email,
+        verificationCode: dto.code,
+      },
     });
 
     if (!user) {
-      throw new BadRequestException('Invalid verification token');
+      throw new BadRequestException('Invalid verification code or email');
     }
 
+    // Check if code is expired
+    if (user.verificationCodeExpiry && user.verificationCodeExpiry < new Date()) {
+      throw new BadRequestException('Verification code has expired. Please request a new one.');
+    }
+
+    // Verify user
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
         isVerified: true,
-        verificationToken: null,
+        verificationCode: null,
+        verificationCodeExpiry: null,
       },
     });
 
-    return { message: 'Email verified successfully! You can now login.' };
+    return { 
+      message: 'Email verified successfully! You can now login.',
+      verified: true,
+    };
+  }
+
+  // ========================================
+  // RESEND VERIFICATION CODE
+  // ========================================
+
+  async resendVerificationCode(email: string) {
+    const user = await this.usersService.findByEmail(email);
+    
+    if (!user) {
+      throw new BadRequestException('User not found');
+    }
+
+    if (user.isVerified) {
+      throw new BadRequestException('Email already verified');
+    }
+
+    // Generate new code
+    const verificationCode = this.generateVerificationCode();
+    const verificationCodeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    // Update user with new code
+    await this.prisma.user.update({
+      where: { id: user.id },
+      data: {
+        verificationCode,
+        verificationCodeExpiry,
+      },
+    });
+
+    // Send new code (FIXED - only 2 parameters)
+    try {
+      await this.notificationsService.sendVerificationEmail(
+        user.email,
+        verificationCode,
+      );
+      console.log(`✅ New verification code sent to ${user.email}: ${verificationCode}`);
+    } catch (error) {
+      console.error('❌ Failed to send verification email:', error);
+      if (this.configService.get('NODE_ENV') === 'development') {
+        console.log(`🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`);
+      }
+    }
+
+    return {
+      message: 'New verification code sent to your email',
+      // Only include code in development
+      ...(this.configService.get('NODE_ENV') === 'development' && { 
+        verificationCode 
+      }),
+    };
   }
 
   // ========================================
@@ -272,6 +361,11 @@ export class AuthService {
   // ========================================
   // HELPER FUNCTIONS
   // ========================================
+
+  private generateVerificationCode(): string {
+    // Generate a 5-digit code
+    return Math.floor(10000 + Math.random() * 90000).toString();
+  }
 
   private async generateTokens(userId: string, email: string, role: string) {
     const payload = { sub: userId, email, role };
