@@ -81,6 +81,10 @@ export class NotificationsService {
     await this.emailService.sendVerificationEmail(email, code);
   }
 
+  async sendPasswordResetEmail(email: string, resetCode: string) {
+    await this.emailService.sendPasswordResetEmail(email, resetCode);
+  }
+
   async notifySuperAdminsNewPharmacy(pharmacyId: string, pharmacyName: string) {
     // Get all super admins
     const superAdmins = await this.prisma.user.findMany({
