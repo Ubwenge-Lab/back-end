@@ -15,9 +15,9 @@ async function bootstrap() {
   // CORS - Allow frontend on port 3000
   app.enableCors({
     origin: [
-      'https://e-vuze-testing.vercel.app',
+      'https://evuze-testing.vercel.app',
       'http://localhost:3000',
-      /^https:\/\/e-vuze-testing.*\.vercel\.app$/,
+      /^https:\/\/.*\.vercel\.app$/,
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
