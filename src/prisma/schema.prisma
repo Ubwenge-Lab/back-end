@@ -133,34 +133,41 @@ model Patient {
 }
 
 model Pharmacy {
-  id                String          @id @default(uuid())
-  userId            String          @unique
-  name              String
-  phone             String
-  address           String
-  latitude          Float?
-  longitude         Float?
-  licenseNumber     String          @unique
-  licenseDocument   String          // S3 URL
+  id                  String          @id @default(uuid())
+  userId              String          @unique
+  
+  // Basic Information
+  name                String
+  representativeName  String          // Must match RDB certificate
+  phone               String
+  address             String
+  latitude            Float?
+  longitude           Float?
+  
+  // Legal Documents
+  dateOfIncorporation DateTime
+  rdbCertificate      String          // S3 URL of RDB certificate
+  pharmacyLicense     String          // S3 URL of pharmacy license certificate
   
   // Delivery Zones (JSON: [{name: "Zone 1", maxDistance: 5, fee: 1000}])
-  deliveryZones     Json?
+  deliveryZones       Json?
   
   // Operating Hours (JSON: {monday: "8:00-18:00", ...})
-  operatingHours    Json?
+  operatingHours      Json?
   
-  status            PharmacyStatus  @default(PENDING)
-  rejectionReason   String?         @db.Text
+  // Approval Status
+  status              PharmacyStatus  @default(PENDING)
+  rejectionReason     String?         @db.Text
   
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
-  approvedAt        DateTime?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  approvedAt          DateTime?
 
   // Relations
-  user              User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  medications       Medication[]
-  orders            Order[]
-  notifications     Notification[]
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  medications         Medication[]
+  orders              Order[]
+  notifications       Notification[]
 
   @@index([userId])
   @@index([status])
