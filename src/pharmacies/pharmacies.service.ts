@@ -1,4 +1,5 @@
 // backend/src/pharmacies/pharmacies.service.ts
+// FIXED VERSION - Added resubmission method for rejected pharmacies
 
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -117,9 +118,9 @@ export class PharmaciesService {
       throw new NotFoundException('Pharmacy not found');
     }
 
-    // Check if pharmacy is approved or rejected
-    if (pharmacy.status !== 'APPROVED' && pharmacy.status !== 'REJECTED') {
-      throw new ForbiddenException('Your pharmacy must be approved before making profile updates');
+    // Only approved pharmacies can update profile
+    if (pharmacy.status !== 'APPROVED') {
+      throw new ForbiddenException('Only approved pharmacies can update their profile');
     }
 
     // Critical fields that require admin re-approval
@@ -173,6 +174,48 @@ export class PharmaciesService {
         requiresApproval: false,
       };
     }
+  }
+
+  // ========================================
+  // RESUBMIT APPLICATION (FOR REJECTED PHARMACIES) - NEW
+  // ========================================
+
+  async resubmitApplication(userId: string, dto: UpdatePharmacyDto) {
+    const pharmacy = await this.prisma.pharmacy.findUnique({
+      where: { userId },
+      include: { user: true },
+    });
+
+    if (!pharmacy) {
+      throw new NotFoundException('Pharmacy not found');
+    }
+
+    // Only rejected pharmacies can resubmit
+    if (pharmacy.status !== 'REJECTED') {
+      throw new ForbiddenException('Only rejected pharmacies can resubmit their application');
+    }
+
+    // Update pharmacy with new information and set to PENDING
+    const updatedPharmacy = await this.prisma.pharmacy.update({
+      where: { id: pharmacy.id },
+      data: {
+        ...dto,
+        dateOfIncorporation: dto.dateOfIncorporation 
+          ? new Date(dto.dateOfIncorporation) 
+          : undefined,
+        status: 'PENDING',
+        rejectionReason: null,
+        approvedAt: null,
+      },
+    });
+
+    // Notify super admins about resubmission
+    await this.notifySuperAdminsPharmacyResubmission(pharmacy.id, pharmacy.name);
+
+    return {
+      message: 'Application resubmitted successfully. Your pharmacy will be reviewed by our admin team.',
+      pharmacy: updatedPharmacy,
+    };
   }
 
   // ========================================
@@ -230,7 +273,7 @@ export class PharmaciesService {
         title: approved ? 'Application Approved' : 'Application Rejected',
         message: approved
           ? 'Your pharmacy has been approved! You can now access your dashboard.'
-          : `Your pharmacy application was rejected. Reason: ${rejectionReason}`,
+          : `Your pharmacy application was rejected. Reason: ${rejectionReason}. Please update your documents and resubmit.`,
       },
     });
 
@@ -299,6 +342,26 @@ export class PharmaciesService {
           type: 'PHARMACY_APPROVED',
           title: 'Pharmacy Profile Update',
           message: `${pharmacyName} has submitted profile updates for review.`,
+        },
+      });
+    }
+  }
+
+  // ========================================
+  // NOTIFY SUPER ADMINS ABOUT PHARMACY RESUBMISSION - NEW
+  // ========================================
+
+  private async notifySuperAdminsPharmacyResubmission(pharmacyId: string, pharmacyName: string) {
+    const superAdmins = await this.prisma.user.findMany({
+      where: { role: 'SUPER_ADMIN' },
+    });
+
+    for (const admin of superAdmins) {
+      await this.prisma.notification.create({
+        data: {
+          type: 'PHARMACY_APPROVED',
+          title: 'Pharmacy Application Resubmitted',
+          message: `${pharmacyName} has resubmitted their application with updated documents for review.`,
         },
       });
     }

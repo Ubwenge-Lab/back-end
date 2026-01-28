@@ -1,9 +1,11 @@
 // backend/src/pharmacies/pharmacies.controller.ts
+// FIXED VERSION - Added resubmission endpoint for rejected pharmacies
 
 import {
   Controller,
   Get,
   Put,
+  Patch,
   Post,
   Body,
   Param,
@@ -62,6 +64,16 @@ export class PharmaciesController {
   @ApiOperation({ summary: 'Update pharmacy profile (critical changes require admin approval)' })
   updateProfile(@Req() req: any, @Body() dto: UpdatePharmacyDto) {
     return this.pharmaciesService.updateProfile(req.user.sub, dto);
+  }
+
+  // NEW: Resubmit for rejected pharmacies
+  @Patch('profile/resubmit')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Resubmit pharmacy application with updated documents (for rejected pharmacies)' })
+  resubmitApplication(@Req() req: any, @Body() dto: UpdatePharmacyDto) {
+    return this.pharmaciesService.resubmitApplication(req.user.sub, dto);
   }
 
   // ========================================

@@ -1,5 +1,5 @@
 // backend/src/super-admin/super-admin.service.ts
-// FIXED VERSION - Added getAllPatients method
+// FIXED VERSION - Added getAllPatients and document preview methods
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -96,7 +96,7 @@ export class SuperAdminService {
   }
 
   // ========================================
-  // GET PHARMACY BY ID
+  // GET PHARMACY BY ID (with full documents)
   // ========================================
 
   async getPharmacyById(id: string) {
@@ -137,6 +137,39 @@ export class SuperAdminService {
   }
 
   // ========================================
+  // GET PHARMACY DOCUMENT (NEW)
+  // ========================================
+
+  async getPharmacyDocument(pharmacyId: string, documentType: 'rdb' | 'license') {
+    const pharmacy = await this.prisma.pharmacy.findUnique({
+      where: { id: pharmacyId },
+      select: {
+        rdbCertificate: true,
+        pharmacyLicense: true,
+        name: true,
+      },
+    });
+
+    if (!pharmacy) {
+      throw new NotFoundException('Pharmacy not found');
+    }
+
+    const documentUrl = documentType === 'rdb' 
+      ? pharmacy.rdbCertificate 
+      : pharmacy.pharmacyLicense;
+
+    if (!documentUrl) {
+      throw new NotFoundException(`${documentType === 'rdb' ? 'RDB Certificate' : 'Pharmacy License'} not found`);
+    }
+
+    return {
+      pharmacyName: pharmacy.name,
+      documentType: documentType === 'rdb' ? 'RDB Certificate' : 'Pharmacy License',
+      documentUrl,
+    };
+  }
+
+  // ========================================
   // APPROVE PHARMACY
   // ========================================
 
@@ -158,6 +191,7 @@ export class SuperAdminService {
       data: {
         status: 'APPROVED',
         approvedAt: new Date(),
+        rejectionReason: null, // Clear any previous rejection reason
       },
     });
 
@@ -209,6 +243,7 @@ export class SuperAdminService {
       data: {
         status: 'REJECTED',
         rejectionReason: dto.reason,
+        approvedAt: null,
       },
     });
 
@@ -230,7 +265,7 @@ export class SuperAdminService {
         pharmacyId: pharmacy.id,
         type: 'PHARMACY_REJECTED',
         title: 'Pharmacy Application Update',
-        message: `Your pharmacy application requires attention. Reason: ${dto.reason}`,
+        message: `Your pharmacy application requires attention. Reason: ${dto.reason}. Please update your documents and resubmit.`,
       });
     } catch (error) {
       console.error('Failed to create notification:', error);

@@ -1,5 +1,5 @@
 // backend/src/super-admin/super-admin.controller.ts
-// FIXED VERSION - Added PATCH methods and patient endpoint
+// FIXED VERSION - Added document preview endpoints and patient list
 
 import {
   Controller,
@@ -46,12 +46,25 @@ export class SuperAdminController {
   }
 
   @Get('pharmacies/:id')
-  @ApiOperation({ summary: 'Get pharmacy by ID' })
+  @ApiOperation({ summary: 'Get pharmacy by ID with full details' })
   getPharmacyById(@Param('id') id: string) {
     return this.superAdminService.getPharmacyById(id);
   }
 
-  // ADDED: PATCH method for frontend compatibility
+  // NEW: Document Preview Endpoints
+  @Get('pharmacies/:id/documents/rdb-certificate')
+  @ApiOperation({ summary: 'Get RDB Certificate URL for preview' })
+  getRdbCertificate(@Param('id') id: string) {
+    return this.superAdminService.getPharmacyDocument(id, 'rdb');
+  }
+
+  @Get('pharmacies/:id/documents/pharmacy-license')
+  @ApiOperation({ summary: 'Get Pharmacy License URL for preview' })
+  getPharmacyLicense(@Param('id') id: string) {
+    return this.superAdminService.getPharmacyDocument(id, 'license');
+  }
+
+  // PATCH method for frontend compatibility
   @Patch('pharmacies/:id/approve')
   @ApiOperation({ summary: 'Approve pharmacy (PATCH)' })
   patchApprovePharmacy(@Param('id') id: string, @Body() dto: ApprovePharmacyDto) {
@@ -65,7 +78,7 @@ export class SuperAdminController {
     return this.superAdminService.approvePharmacy(id, dto);
   }
 
-  // ADDED: PATCH method for frontend compatibility
+  // PATCH method for frontend compatibility
   @Patch('pharmacies/:id/reject')
   @ApiOperation({ summary: 'Reject pharmacy (PATCH)' })
   patchRejectPharmacy(@Param('id') id: string, @Body() dto: RejectPharmacyDto) {
@@ -79,7 +92,7 @@ export class SuperAdminController {
     return this.superAdminService.rejectPharmacy(id, dto);
   }
 
-  // ADDED: Get all patients
+  // Get all patients
   @Get('patients')
   @ApiOperation({ summary: 'Get all patients' })
   getAllPatients() {
