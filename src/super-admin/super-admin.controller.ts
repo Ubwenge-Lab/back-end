@@ -1,9 +1,11 @@
 // backend/src/super-admin/super-admin.controller.ts
+// FIXED VERSION - Added PATCH methods and patient endpoint
 
 import {
   Controller,
   Get,
   Put,
+  Patch,
   Param,
   Body,
   Query,
@@ -49,16 +51,39 @@ export class SuperAdminController {
     return this.superAdminService.getPharmacyById(id);
   }
 
-  @Put('pharmacies/:id/approve')
-  @ApiOperation({ summary: 'Approve pharmacy' })
-  approvePharmacy(@Param('id') id: string, @Body() dto: ApprovePharmacyDto) {
+  // ADDED: PATCH method for frontend compatibility
+  @Patch('pharmacies/:id/approve')
+  @ApiOperation({ summary: 'Approve pharmacy (PATCH)' })
+  patchApprovePharmacy(@Param('id') id: string, @Body() dto: ApprovePharmacyDto) {
     return this.superAdminService.approvePharmacy(id, dto);
   }
 
-  @Put('pharmacies/:id/reject')
-  @ApiOperation({ summary: 'Reject pharmacy' })
-  rejectPharmacy(@Param('id') id: string, @Body() dto: RejectPharmacyDto) {
+  // Keep PUT for backward compatibility
+  @Put('pharmacies/:id/approve')
+  @ApiOperation({ summary: 'Approve pharmacy (PUT)' })
+  putApprovePharmacy(@Param('id') id: string, @Body() dto: ApprovePharmacyDto) {
+    return this.superAdminService.approvePharmacy(id, dto);
+  }
+
+  // ADDED: PATCH method for frontend compatibility
+  @Patch('pharmacies/:id/reject')
+  @ApiOperation({ summary: 'Reject pharmacy (PATCH)' })
+  patchRejectPharmacy(@Param('id') id: string, @Body() dto: RejectPharmacyDto) {
     return this.superAdminService.rejectPharmacy(id, dto);
+  }
+
+  // Keep PUT for backward compatibility
+  @Put('pharmacies/:id/reject')
+  @ApiOperation({ summary: 'Reject pharmacy (PUT)' })
+  putRejectPharmacy(@Param('id') id: string, @Body() dto: RejectPharmacyDto) {
+    return this.superAdminService.rejectPharmacy(id, dto);
+  }
+
+  // ADDED: Get all patients
+  @Get('patients')
+  @ApiOperation({ summary: 'Get all patients' })
+  getAllPatients() {
+    return this.superAdminService.getAllPatients();
   }
 
   @Get('orders/recent')

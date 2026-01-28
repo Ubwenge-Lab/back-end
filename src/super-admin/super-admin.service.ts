@@ -1,4 +1,5 @@
 // backend/src/super-admin/super-admin.service.ts
+// FIXED VERSION - Added getAllPatients method
 
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -161,19 +162,27 @@ export class SuperAdminService {
     });
 
     // Send approval email
-    await this.emailService.sendPharmacyApproval(
-      pharmacy.user.email,
-      pharmacy.name,
-      true,
-    );
+    try {
+      await this.emailService.sendPharmacyApproval(
+        pharmacy.user.email,
+        pharmacy.name,
+        true,
+      );
+    } catch (error) {
+      console.error('Failed to send approval email:', error);
+    }
 
     // Create notification
-    await this.notificationsService.create({
-      pharmacyId: pharmacy.id,
-      type: 'PHARMACY_APPROVED',
-      title: 'Pharmacy Approved',
-      message: `Congratulations! Your pharmacy "${pharmacy.name}" has been approved and is now live on E-Vuze.`,
-    });
+    try {
+      await this.notificationsService.create({
+        pharmacyId: pharmacy.id,
+        type: 'PHARMACY_APPROVED',
+        title: 'Pharmacy Approved',
+        message: `Congratulations! Your pharmacy "${pharmacy.name}" has been approved and is now live on E-Vuze.`,
+      });
+    } catch (error) {
+      console.error('Failed to create notification:', error);
+    }
 
     return updated;
   }
@@ -204,22 +213,52 @@ export class SuperAdminService {
     });
 
     // Send rejection email
-    await this.emailService.sendPharmacyApproval(
-      pharmacy.user.email,
-      pharmacy.name,
-      false,
-      dto.reason,
-    );
+    try {
+      await this.emailService.sendPharmacyApproval(
+        pharmacy.user.email,
+        pharmacy.name,
+        false,
+        dto.reason,
+      );
+    } catch (error) {
+      console.error('Failed to send rejection email:', error);
+    }
 
     // Create notification
-    await this.notificationsService.create({
-      pharmacyId: pharmacy.id,
-      type: 'PHARMACY_REJECTED',
-      title: 'Pharmacy Application Update',
-      message: `Your pharmacy application requires attention. Reason: ${dto.reason}`,
-    });
+    try {
+      await this.notificationsService.create({
+        pharmacyId: pharmacy.id,
+        type: 'PHARMACY_REJECTED',
+        title: 'Pharmacy Application Update',
+        message: `Your pharmacy application requires attention. Reason: ${dto.reason}`,
+      });
+    } catch (error) {
+      console.error('Failed to create notification:', error);
+    }
 
     return updated;
+  }
+
+  // ========================================
+  // GET ALL PATIENTS - ADDED
+  // ========================================
+
+  async getAllPatients() {
+    return this.prisma.patient.findMany({
+      include: {
+        user: {
+          select: {
+            email: true,
+            isVerified: true,
+            createdAt: true,
+          },
+        },
+        _count: {
+          select: { orders: true },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
   }
 
   // ========================================
