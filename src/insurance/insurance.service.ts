@@ -106,7 +106,7 @@ export class InsuranceService {
     const coverageMap: Record<string, number> = {
       MMI: 80,
       RSSB: 85,
-      Sanlam: 75,
+      Sanlam: 100,
       RAMA: 80,
       Britam: 80,
       Radiant: 70,
