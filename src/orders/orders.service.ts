@@ -40,7 +40,6 @@ export class OrdersService {
     let subtotal = 0;
     const orderItems: { medicationId: string; quantity: number; price: number }[] = [];
 
-
     for (const item of dto.items) {
       const medication = await this.medicationsService.findById(item.medicationId);
 
@@ -84,7 +83,7 @@ export class OrdersService {
 
       // For MVP, use fixed delivery zones
       // In production, calculate based on actual coordinates
-      deliveryFee = this.pharmaciesService.getDeliveryFee(dto.pharmacyId, 5); // Assume 5km
+      deliveryFee = 2000; // Fixed delivery fee for MVP
       deliveryZone = 'Zone 1';
     }
 
@@ -170,7 +169,7 @@ export class OrdersService {
   // GET ORDER BY ID
   // ========================================
 
-  async findById(id: string) {
+  async findById(id: string, userId?: string) {
     const order = await this.prisma.order.findUnique({
       where: { id },
       include: {
@@ -289,6 +288,11 @@ export class OrdersService {
       include: {
         patient: true,
         pharmacy: true,
+        orderItems: {
+          include: {
+            medication: true,
+          },
+        },
       },
     });
 

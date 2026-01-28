@@ -4,7 +4,7 @@ import {
   Controller,
   Get,
   Post,
-  Put,
+  Patch,
   Body,
   Param,
   Query,
@@ -26,13 +26,7 @@ import { CreateOrderDto, UpdateOrderStatusDto, CancelOrderDto } from './dto';
 export class OrdersController {
   constructor(private ordersService: OrdersService) {}
 
-  @Post()
-  @Roles(Role.PATIENT)
-  @ApiOperation({ summary: 'Create order (Patient)' })
-  create(@Req() req: any, @Body() dto: CreateOrderDto) {
-    return this.ordersService.create(req.user.sub, dto);
-  }
-
+  // Patient - Get my orders (MUST be before :id route)
   @Get('my-orders')
   @Roles(Role.PATIENT)
   @ApiOperation({ summary: 'Get patient orders' })
@@ -40,6 +34,7 @@ export class OrdersController {
     return this.ordersService.findByPatient(req.user.sub, status);
   }
 
+  // Pharmacy - Get pharmacy orders (MUST be before :id route)
   @Get('pharmacy-orders')
   @Roles(Role.PHARMACY)
   @ApiOperation({ summary: 'Get pharmacy orders' })
@@ -47,13 +42,23 @@ export class OrdersController {
     return this.ordersService.findByPharmacy(req.user.sub, status);
   }
 
+  // Get order by ID
   @Get(':id')
   @ApiOperation({ summary: 'Get order by ID' })
-  getOrderById(@Param('id') id: string) {
-    return this.ordersService.findById(id);
+  getOrderById(@Param('id') id: string, @Req() req: any) {
+    return this.ordersService.findById(id, req.user.sub);
   }
 
-  @Put(':id/status')
+  // Patient - Create order
+  @Post()
+  @Roles(Role.PATIENT)
+  @ApiOperation({ summary: 'Create order (Patient)' })
+  create(@Req() req: any, @Body() dto: CreateOrderDto) {
+    return this.ordersService.create(req.user.sub, dto);
+  }
+
+  // Pharmacy - Update order status
+  @Patch(':id/status')
   @Roles(Role.PHARMACY)
   @ApiOperation({ summary: 'Update order status (Pharmacy)' })
   updateStatus(
@@ -64,7 +69,8 @@ export class OrdersController {
     return this.ordersService.updateStatus(id, req.user.sub, dto);
   }
 
-  @Put(':id/cancel')
+  // Patient - Cancel order
+  @Patch(':id/cancel')
   @Roles(Role.PATIENT)
   @ApiOperation({ summary: 'Cancel order (Patient)' })
   cancelOrder(@Param('id') id: string, @Req() req: any, @Body() dto: CancelOrderDto) {

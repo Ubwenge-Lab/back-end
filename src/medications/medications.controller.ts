@@ -32,23 +32,41 @@ export class MedicationsController {
     return this.medicationsService.search(dto);
   }
 
-  // Get medication by ID
-  @Get(':id')
-  @ApiOperation({ summary: 'Get medication by ID' })
-  getMedicationById(@Param('id') id: string) {
-    return this.medicationsService.findById(id);
+  // Pharmacy - Get low stock (MUST be before :id route)
+  @Get('pharmacy/low-stock')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get low stock medications' })
+  getLowStock(@Req() req: any) {
+    return this.medicationsService.getLowStock(req.user.sub);
   }
 
-  // Pharmacy - Get their medications
+  // Pharmacy - Get out of stock (MUST be before :id route)
+  @Get('pharmacy/out-of-stock')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get out of stock medications' })
+  getOutOfStock(@Req() req: any) {
+    return this.medicationsService.getOutOfStock(req.user.sub);
+  }
+
+  // Pharmacy - Get their medications (MUST be before :id route)
   @Get('pharmacy/my-medications')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get pharmacy medications' })
   async getMyMedications(@Req() req: any) {
-    const pharmacy = await req.user.sub;
-    // This will be handled in the service
-    return this.medicationsService.findByPharmacy(pharmacy);
+    return this.medicationsService.findByPharmacyUserId(req.user.sub);
+  }
+
+  // Get medication by ID
+  @Get(':id')
+  @ApiOperation({ summary: 'Get medication by ID' })
+  getMedicationById(@Param('id') id: string) {
+    return this.medicationsService.findById(id);
   }
 
   // Pharmacy - Create medication
@@ -79,25 +97,5 @@ export class MedicationsController {
   @ApiOperation({ summary: 'Delete medication' })
   delete(@Param('id') id: string, @Req() req: any) {
     return this.medicationsService.delete(id, req.user.sub);
-  }
-
-  // Pharmacy - Get low stock
-  @Get('pharmacy/low-stock')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get low stock medications' })
-  getLowStock(@Req() req: any) {
-    return this.medicationsService.getLowStock(req.user.sub);
-  }
-
-  // Pharmacy - Get out of stock
-  @Get('pharmacy/out-of-stock')
-  @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY)
-  @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get out of stock medications' })
-  getOutOfStock(@Req() req: any) {
-    return this.medicationsService.getOutOfStock(req.user.sub);
   }
 }
