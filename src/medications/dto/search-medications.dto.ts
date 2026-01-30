@@ -16,6 +16,11 @@ export class SearchMedicationsDto {
   category?: string;
 
   @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  pharmacyId?: string;
+
+  @ApiProperty({ required: false })
   @IsBoolean()
   @IsOptional()
   @Transform(({ value }) => value === 'true' || value === true)

@@ -160,6 +160,11 @@ export class MedicationsService {
   async search(dto: SearchMedicationsDto) {
     const where: any = {};
 
+    // Filter by specific pharmacy if provided
+    if (dto.pharmacyId) {
+      where.pharmacyId = dto.pharmacyId;
+    }
+
     if (dto.query) {
       where.OR = [
         { name: { contains: dto.query, mode: 'insensitive' } },
