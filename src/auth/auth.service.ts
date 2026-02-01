@@ -92,7 +92,10 @@ export class AuthService {
         throw new UnauthorizedException('Pharmacy profile not found');
       }
 
-      const tokens = await this.generateTokens(user.id, user.email, user.role);
+      // ✅ FIX: pass pharmacy.status so it gets signed into the JWT payload.
+      // The middleware decodes the token and checks payload.pharmacyStatus —
+      // without this the field was always undefined and every status check was skipped.
+      const tokens = await this.generateTokens(user.id, user.email, user.role, pharmacy.status);
       await this.updateRefreshToken(user.id, tokens.refreshToken);
 
       return {
@@ -510,7 +513,17 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    // ✅ FIX: if this is a PHARMACY user, fetch the current status from the DB
+    // so the new access token reflects any approval/rejection that happened
+    // while the old token was still alive (e.g. super admin approved the pharmacy
+    // between the original login and this refresh).
+    let pharmacyStatus: string | undefined;
+    if (user.role === 'PHARMACY') {
+      const pharmacy = await this.pharmaciesService.findByUserId(user.id);
+      pharmacyStatus = pharmacy?.status;
+    }
+
+    const tokens = await this.generateTokens(user.id, user.email, user.role, pharmacyStatus);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
@@ -541,8 +554,13 @@ export class AuthService {
     return Math.floor(100000 + Math.random() * 900000).toString();
   }
 
-  private async generateTokens(userId: string, email: string, role: string) {
-    const payload = { sub: userId, email, role };
+  // FIX: added optional pharmacyStatus parameter.
+  private async generateTokens(userId: string, email: string, role: string, pharmacyStatus?: string) {
+    const payload: Record<string, any> = { sub: userId, email, role };
+
+    if (pharmacyStatus) {
+      payload.pharmacyStatus = pharmacyStatus;
+    }
 
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
