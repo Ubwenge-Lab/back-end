@@ -15,10 +15,10 @@ import { UsersService } from '../users/users.service';
 import { PatientsService } from '../patients/patients.service';
 import { PharmaciesService } from '../pharmacies/pharmacies.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { 
-  LoginDto, 
-  RegisterPatientDto, 
-  RegisterPharmacyDto, 
+import {
+  LoginDto,
+  RegisterPatientDto,
+  RegisterPharmacyDto,
   VerifyEmailDto,
   ForgotPasswordDto,
   ResetPasswordDto,
@@ -78,7 +78,7 @@ export class AuthService {
           requiresPasswordChange: isDefaultPassword,
         },
         ...tokens,
-        message: isDefaultPassword 
+        message: isDefaultPassword
           ? 'Please change your password for security purposes.'
           : null,
       };
@@ -87,7 +87,7 @@ export class AuthService {
     // Check pharmacy approval status
     if (user.role === 'PHARMACY') {
       const pharmacy = await this.pharmaciesService.findByUserId(user.id);
-      
+
       if (!pharmacy) {
         throw new UnauthorizedException('Pharmacy profile not found');
       }
@@ -109,7 +109,7 @@ export class AuthService {
           rejectionReason: pharmacy.rejectionReason || null,
         },
         ...tokens,
-        message: pharmacy.status === 'PENDING' 
+        message: pharmacy.status === 'PENDING'
           ? 'Your account is under review. Please wait for approval.'
           : pharmacy.status === 'REJECTED'
           ? 'Your account was rejected. Please update your documents and resubmit.'
@@ -200,8 +200,8 @@ export class AuthService {
       message: 'Registration successful! Please check your email for the verification code.',
       userId: user.id,
       email: user.email,
-      ...(this.configService.get('NODE_ENV') === 'development' && { 
-        verificationCode 
+      ...(this.configService.get('NODE_ENV') === 'development' && {
+        verificationCode
       }),
     };
   }
@@ -271,8 +271,8 @@ export class AuthService {
       userId: user.id,
       pharmacyId: user.pharmacy.id,
       status: 'PENDING',
-      ...(this.configService.get('NODE_ENV') === 'development' && { 
-        verificationCode 
+      ...(this.configService.get('NODE_ENV') === 'development' && {
+        verificationCode
       }),
     };
   }
@@ -283,7 +283,7 @@ export class AuthService {
 
   async verifyEmail(dto: VerifyEmailDto) {
     const user = await this.prisma.user.findFirst({
-      where: { 
+      where: {
         email: dto.email,
         verificationCode: dto.code,
       },
@@ -321,9 +321,9 @@ export class AuthService {
       }
     }
 
-    return { 
-      message: user.role === 'PHARMACY' 
-        ? 'Email verified! Your pharmacy will be reviewed by our admin team.' 
+    return {
+      message: user.role === 'PHARMACY'
+        ? 'Email verified! Your pharmacy will be reviewed by our admin team.'
         : 'Email verified successfully! You can now login.',
       verified: true,
     };
@@ -335,7 +335,7 @@ export class AuthService {
 
   async resendVerificationCode(email: string) {
     const user = await this.usersService.findByEmail(email);
-    
+
     if (!user) {
       throw new BadRequestException('User not found');
     }
@@ -370,8 +370,8 @@ export class AuthService {
 
     return {
       message: 'New verification code sent to your email',
-      ...(this.configService.get('NODE_ENV') === 'development' && { 
-        verificationCode 
+      ...(this.configService.get('NODE_ENV') === 'development' && {
+        verificationCode
       }),
     };
   }
@@ -382,7 +382,7 @@ export class AuthService {
 
   async forgotPassword(dto: ForgotPasswordDto) {
     const user = await this.usersService.findByEmail(dto.email);
-    
+
     if (!user) {
       // Don't reveal if email exists for security
       return {
@@ -410,16 +410,13 @@ export class AuthService {
       console.log(`✅ Password reset code sent to ${user.email}: ${resetCode}`);
     } catch (error) {
       console.error('❌ Failed to send reset email:', error);
-      if (this.configService.get('NODE_ENV') === 'development') {
-        console.log(`🔑 RESET CODE FOR ${user.email}: ${resetCode}`);
-      }
+      // if (this.configService.get('NODE_ENV') === 'development') {
+      //   console.log(`🔑 RESET CODE FOR ${user.email}: ${resetCode}`);
+      // }
     }
 
     return {
-      message: 'If your email is registered, you will receive a password reset code.',
-      ...(this.configService.get('NODE_ENV') === 'development' && { 
-        resetCode 
-      }),
+      message: 'If your email is registered, you will receive a password reset code.'
     };
   }
 
@@ -433,7 +430,7 @@ export class AuthService {
     }
 
     const user = await this.prisma.user.findFirst({
-      where: { 
+      where: {
         email: dto.email,
         verificationCode: dto.resetCode,
       },
@@ -459,7 +456,7 @@ export class AuthService {
       },
     });
 
-    return { 
+    return {
       message: 'Password reset successfully! You can now login with your new password.',
     };
   }
@@ -493,7 +490,7 @@ export class AuthService {
       },
     });
 
-    return { 
+    return {
       message: 'Password changed successfully! Please login again with your new password.',
     };
   }
