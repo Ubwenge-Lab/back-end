@@ -24,6 +24,7 @@ import {
   ResetPasswordDto,
   ChangePasswordDto,
 } from './dto';
+import { randomInt } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -543,12 +544,20 @@ export class AuthService {
   // HELPER FUNCTIONS
   // ========================================
 
+  // private generateVerificationCode(): string {
+  //   return Math.floor(10000 + Math.random() * 90000).toString();
+  // }
+
+  // private generateResetCode(): string {
+  //   return Math.floor(100000 + Math.random() * 900000).toString();
+  // }
+
   private generateVerificationCode(): string {
-    return Math.floor(10000 + Math.random() * 90000).toString();
+    return randomInt(10000, 99999).toString();
   }
 
   private generateResetCode(): string {
-    return Math.floor(100000 + Math.random() * 900000).toString();
+    return randomInt(100000, 999999).toString();
   }
 
   // FIX: added optional pharmacyStatus parameter.
