@@ -21,6 +21,8 @@
     "seed": "ts-node src/prisma/seed.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.1",
+    "@google/generative-ai": "^0.24.1",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -31,6 +33,7 @@
     "@nestjs/swagger": "^11.2.4",
     "@prisma/client": "^6.19.2",
     "@sendgrid/mail": "^8.1.6",
+    "anthropic-ai": "^0.0.10",
     "aws-sdk": "^2.1693.0",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",

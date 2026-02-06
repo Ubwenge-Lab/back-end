@@ -1,5 +1,5 @@
 // backend/src/pharmacies/pharmacies.controller.ts
-// FIXED VERSION - Added resubmission endpoint for rejected pharmacies
+// COMPLETE VERSION - All Endpoints Including Stats, Analytics, Patients
 
 import {
   Controller,
@@ -45,9 +45,40 @@ export class PharmaciesController {
   }
 
   // ========================================
-  // PHARMACY ENDPOINTS (Authenticated)
+  // PHARMACY AUTHENTICATED ENDPOINTS
   // ========================================
 
+  // Dashboard Statistics
+  @Get('dashboard/stats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get pharmacy dashboard statistics' })
+  getStats(@Req() req: any) {
+    return this.pharmaciesService.getStats(req.user.sub);
+  }
+
+  // Analytics
+  @Get('dashboard/analytics')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get pharmacy analytics data' })
+  getAnalytics(@Req() req: any) {
+    return this.pharmaciesService.getAnalytics(req.user.sub);
+  }
+
+  // View All Past Patients
+  @Get('dashboard/patients')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get all past patients with order history' })
+  getPatients(@Req() req: any) {
+    return this.pharmaciesService.getPatients(req.user.sub);
+  }
+
+  // Profile
   @Get('profile/me')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
@@ -66,7 +97,7 @@ export class PharmaciesController {
     return this.pharmaciesService.updateProfile(req.user.sub, dto);
   }
 
-  // NEW: Resubmit for rejected pharmacies
+  // Resubmit for rejected pharmacies
   @Patch('profile/resubmit')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
@@ -74,6 +105,50 @@ export class PharmaciesController {
   @ApiOperation({ summary: 'Resubmit pharmacy application with updated documents (for rejected pharmacies)' })
   resubmitApplication(@Req() req: any, @Body() dto: UpdatePharmacyDto) {
     return this.pharmaciesService.resubmitApplication(req.user.sub, dto);
+  }
+
+  // ========================================
+  // BACKWARD COMPATIBILITY ALIASES
+  // ========================================
+
+  // Alias for stats (frontend may call /pharmacies/stats)
+  @Get('stats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get pharmacy stats (alias)' })
+  getStatsAlias(@Req() req: any) {
+    return this.pharmaciesService.getStats(req.user.sub);
+  }
+
+  // Alias for analytics (frontend may call /pharmacies/analytics)
+  @Get('analytics')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get pharmacy analytics (alias)' })
+  getAnalyticsAlias(@Req() req: any) {
+    return this.pharmaciesService.getAnalytics(req.user.sub);
+  }
+
+  // Alias for profile GET (frontend may call /pharmacies/me)
+  @Get('me')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get pharmacy profile (alias)' })
+  getProfileAlias(@Req() req: any) {
+    return this.pharmaciesService.getProfile(req.user.sub);
+  }
+
+  // Alias for profile UPDATE (frontend may call PATCH /pharmacies/me)
+  @Patch('me')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Update pharmacy profile (alias)' })
+  updateProfileAlias(@Req() req: any, @Body() dto: UpdatePharmacyDto) {
+    return this.pharmaciesService.updateProfile(req.user.sub, dto);
   }
 
   // ========================================

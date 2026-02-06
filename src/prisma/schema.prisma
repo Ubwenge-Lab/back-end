@@ -1,4 +1,5 @@
-// backend/src/prisma/schema.prisma
+// backend/prisma/schema.prisma
+// Updated schema with AI prescription features
 
 generator client {
   provider = "prisma-client-js"
@@ -66,6 +67,7 @@ enum NotificationType {
   ORDER_DELIVERED
   ORDER_CANCELLED
   PRESCRIPTION_REJECTED
+  PRESCRIPTION_APPROVED
   PHARMACY_APPROVED
   PHARMACY_REJECTED
 }
@@ -74,6 +76,13 @@ enum PrescriptionStatus {
   PENDING
   APPROVED
   REJECTED
+}
+
+enum AIProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
 
 // ========================================
@@ -87,7 +96,6 @@ model User {
   role                  UserRole
   isVerified            Boolean   @default(false)
   
-  // Email Verification with 5-digit code
   verificationCode      String?
   verificationCodeExpiry DateTime?
   
@@ -95,7 +103,6 @@ model User {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  // Relations
   patient               Patient?
   pharmacy              Pharmacy?
 
@@ -113,20 +120,19 @@ model Patient {
   gender        String?
   address       String?
   
-  // Insurance Info
   insuranceProvider String?
   insurancePolicy   String?
   insuranceMemberId String?
-  insuranceCoverage Int?    @default(0) // Percentage (0-100)
+  insuranceCoverage Int?    @default(0)
 
   createdAt     DateTime  @default(now())
   updatedAt     DateTime  @updatedAt
 
-  // Relations
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders        Order[]
   prescriptions Prescription[]
   notifications Notification[]
+  cartItems     CartItem[]
 
   @@index([userId])
   @@map("patients")
@@ -136,26 +142,20 @@ model Pharmacy {
   id                  String          @id @default(uuid())
   userId              String          @unique
   
-  // Basic Information
   name                String
-  representativeName  String          // Must match RDB certificate
+  representativeName  String
   phone               String
   address             String
   latitude            Float?
   longitude           Float?
   
-  // Legal Documents
   dateOfIncorporation DateTime
-  rdbCertificate      String          // S3 URL of RDB certificate
-  pharmacyLicense     String          // S3 URL of pharmacy license certificate
+  rdbCertificate      String
+  pharmacyLicense     String
   
-  // Delivery Zones (JSON: [{name: "Zone 1", maxDistance: 5, fee: 1000}])
   deliveryZones       Json?
-  
-  // Operating Hours (JSON: {monday: "8:00-18:00", ...})
   operatingHours      Json?
   
-  // Approval Status
   status              PharmacyStatus  @default(PENDING)
   rejectionReason     String?         @db.Text
   
@@ -163,11 +163,11 @@ model Pharmacy {
   updatedAt           DateTime        @updatedAt
   approvedAt          DateTime?
 
-  // Relations
   user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   medications         Medication[]
   orders              Order[]
   notifications       Notification[]
+  cartItems           CartItem[]
 
   @@index([userId])
   @@index([status])
@@ -189,9 +189,10 @@ model Medication {
   createdAt             DateTime  @default(now())
   updatedAt             DateTime  @updatedAt
 
-  // Relations
   pharmacy              Pharmacy  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
   orderItems            OrderItem[]
+  prescriptionMedications PrescriptionMedication[]
+  cartItems             CartItem[]
 
   @@index([pharmacyId])
   @@index([name])
@@ -203,35 +204,29 @@ model Order {
   patientId         String
   pharmacyId        String
   
-  // Order Details
   orderNumber       String        @unique
   type              OrderType
   status            OrderStatus   @default(PENDING)
   
-  // Delivery Info
   deliveryAddress   String?
   deliveryFee       Float         @default(0)
   deliveryZone      String?
   
-  // Prescription Info
   prescriptionId    String?       @unique
   
-  // Payment Info
   subtotal          Float
   total             Float
   paymentMethod     PaymentMethod
   paymentStatus     PaymentStatus @default(PENDING)
-  insuranceCoverage Float?        // Amount covered by insurance
-  patientPayment    Float         // Amount patient pays
+  insuranceCoverage Float?
+  patientPayment    Float
   
-  // Cancellation
   cancellationReason String?      @db.Text
   cancelledAt       DateTime?
   
   createdAt         DateTime      @default(now())
   updatedAt         DateTime      @updatedAt
 
-  // Relations
   patient           Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
   pharmacy          Pharmacy      @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
   prescription      Prescription? @relation(fields: [prescriptionId], references: [id])
@@ -251,11 +246,10 @@ model OrderItem {
   orderId       String
   medicationId  String
   quantity      Int
-  price         Float       // Price at time of order
+  price         Float
   
   createdAt     DateTime    @default(now())
 
-  // Relations
   order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
   medication    Medication  @relation(fields: [medicationId], references: [id])
 
@@ -265,54 +259,96 @@ model OrderItem {
 }
 
 model Prescription {
-  id                String              @id @default(uuid())
-  patientId         String
-  fileUrl           String              // S3 URL of prescription image/PDF
-  fileName          String
-  fileType          String
+  id                    String                    @id @default(uuid())
+  patientId             String
+  fileUrl               String
+  fileName              String
+  fileType              String
   
-  status            PrescriptionStatus  @default(PENDING)
-  rejectionReason   String?             @db.Text
-  reviewedAt        DateTime?
+  status                PrescriptionStatus        @default(PENDING)
+  rejectionReason       String?                   @db.Text
+  reviewedAt            DateTime?
   
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
+  aiProcessingStatus    AIProcessingStatus?       @default(PENDING)
+  aiProcessingError     String?                   @db.Text
+  extractedMedications  Json?
+  
+  createdAt             DateTime                  @default(now())
+  updatedAt             DateTime                  @updatedAt
 
-  // Relations
-  patient           Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  order             Order?
+  patient               Patient                   @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  order                 Order?
+  prescriptionMedications PrescriptionMedication[]
+  cartItems             CartItem[]
 
   @@index([patientId])
   @@index([status])
   @@map("prescriptions")
 }
 
+model PrescriptionMedication {
+  id                   String        @id @default(uuid())
+  prescriptionId       String
+  medicationName       String
+  dosage               String?
+  frequency            String?
+  duration             String?
+  quantity             Int           @default(1)
+  matchedMedicationId  String?
+  available            Boolean       @default(false)
+  createdAt            DateTime      @default(now())
+  
+  prescription         Prescription  @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  matchedMedication    Medication?   @relation(fields: [matchedMedicationId], references: [id], onDelete: SetNull)
+  
+  @@index([prescriptionId])
+  @@index([matchedMedicationId])
+  @@map("prescription_medications")
+}
+
+model CartItem {
+  id              String        @id @default(uuid())
+  patientId       String
+  pharmacyId      String
+  medicationId    String
+  quantity        Int           @default(1)
+  prescriptionId  String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  
+  patient         Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pharmacy        Pharmacy      @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  medication      Medication    @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  prescription    Prescription? @relation(fields: [prescriptionId], references: [id], onDelete: SetNull)
+  
+  @@unique([patientId, medicationId])
+  @@index([patientId])
+  @@index([pharmacyId])
+  @@index([medicationId])
+  @@map("cart_items")
+}
+
 model Payment {
   id                  String        @id @default(uuid())
   orderId             String        @unique
   
-  // Payment Details
   amount              Float
   paymentMethod       PaymentMethod
   status              PaymentStatus @default(PENDING)
   
-  // Flutterwave Transaction Details
   transactionId       String?       @unique
   flutterwaveRef      String?       @unique
   
-  // Insurance Details (if applicable)
   insuranceProvider   String?
   insurancePolicyNumber String?
   insuranceCoverage   Float?
   insuranceVerified   Boolean       @default(false)
   
-  // Payment Response (JSON)
   paymentResponse     Json?
   
   createdAt           DateTime      @default(now())
   updatedAt           DateTime      @updatedAt
 
-  // Relations
   order               Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
@@ -322,7 +358,7 @@ model Payment {
 
 model Notification {
   id          String            @id @default(uuid())
-  userId      String?           // Can be patient or pharmacy
+  userId      String?
   patientId   String?
   pharmacyId  String?
   orderId     String?
@@ -334,7 +370,6 @@ model Notification {
   
   createdAt   DateTime          @default(now())
 
-  // Relations
   patient     Patient?          @relation(fields: [patientId], references: [id], onDelete: Cascade)
   pharmacy    Pharmacy?         @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
   order       Order?            @relation(fields: [orderId], references: [id], onDelete: Cascade)
