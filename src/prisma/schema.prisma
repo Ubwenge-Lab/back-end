@@ -44,7 +44,7 @@ model Patient {
   insuranceCoverage Int?           @default(0)
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
-  cart_items        cart_items[]
+  cartItems         CartItem[]
   notifications     Notification[]
   orders            Order[]
   user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -76,7 +76,7 @@ model Pharmacy {
   businessRegistration String
 
   branches      Branch[]
-  cart_items    cart_items[]
+  cartItems     CartItem[]
   medications   Medication[]
   notifications Notification[]
   orders        Order[]
@@ -105,7 +105,7 @@ model Branch {
   medications Medication[]
   orders      Order[]
 
-  //NEW: Support for transfers
+  // Support for transfers
   sentTransfers     StockTransfer[] @relation("FromBranch")
   receivedTransfers StockTransfer[] @relation("ToBranch")
 
@@ -151,12 +151,12 @@ model Medication {
   requiresPrescription     Boolean                    @default(false)
   imageUrl                 String?
   createdAt                DateTime                   @default(now())
-  updatedAt                DateTime
-  cart_items               cart_items[]
+  updatedAt                DateTime                   @updatedAt
+  cartItems                CartItem[]
   branch                   Branch                     @relation(fields: [branchId], references: [id], onDelete: Cascade)
   pharmacy                 Pharmacy                   @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
   orderItems               OrderItem[]
-  prescription_medications prescription_medications[]
+  prescriptionMedications  PrescriptionMedication[]
   transferItems            StockTransferItem[]
 
   @@index([name])
@@ -177,6 +177,8 @@ model StockTransfer {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@map("stock_transfers")
 }
 
 model StockTransferItem {
@@ -187,6 +189,8 @@ model StockTransferItem {
 
   transfer   StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
   medication Medication    @relation(fields: [medicationId], references: [id])
+
+  @@map("stock_transfer_items")
 }
 
 model Order {
@@ -257,9 +261,9 @@ model Prescription {
   aiProcessingError        String?
   aiProcessingStatus       AIProcessingStatus?        @default(PENDING)
   extractedMedications     Json?
-  cart_items               cart_items[]
+  cartItems                CartItem[]
   order                    Order?
-  prescription_medications prescription_medications[]
+  prescriptionMedications  PrescriptionMedication[]
   patient                  Patient                    @relation(fields: [patientId], references: [id], onDelete: Cascade)
 
   @@index([patientId])
@@ -311,28 +315,31 @@ model Notification {
   @@map("notifications")
 }
 
-model cart_items {
-  id             String        @id
+// FIX: Renamed from cart_items to CartItem (PascalCase) and mapped to snake_case table
+model CartItem {
+  id             String        @id @default(uuid())
   patientId      String
   pharmacyId     String
   medicationId   String
   quantity       Int           @default(1)
   prescriptionId String?
   createdAt      DateTime      @default(now())
-  updatedAt      DateTime
-  medications    Medication    @relation(fields: [medicationId], references: [id], onDelete: Cascade)
-  patients       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  pharmacies     Pharmacy      @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
-  prescriptions  Prescription? @relation(fields: [prescriptionId], references: [id])
+  updatedAt      DateTime      @updatedAt
+  medication     Medication    @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  patient        Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pharmacy       Pharmacy      @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  prescription   Prescription? @relation(fields: [prescriptionId], references: [id])
 
   @@unique([patientId, medicationId])
   @@index([medicationId])
   @@index([patientId])
   @@index([pharmacyId])
+  @@map("cart_items")
 }
 
-model prescription_medications {
-  id                  String       @id
+// FIX: Renamed from prescription_medications to PrescriptionMedication (PascalCase) and mapped to snake_case table
+model PrescriptionMedication {
+  id                  String       @id @default(uuid())
   prescriptionId      String
   medicationName      String
   dosage              String?
@@ -342,11 +349,13 @@ model prescription_medications {
   matchedMedicationId String?
   available           Boolean      @default(false)
   createdAt           DateTime     @default(now())
-  medications         Medication?  @relation(fields: [matchedMedicationId], references: [id])
-  prescriptions       Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+  updatedAt           DateTime     @updatedAt
+  medication          Medication?  @relation(fields: [matchedMedicationId], references: [id])
+  prescription        Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
 
   @@index([matchedMedicationId])
   @@index([prescriptionId])
+  @@map("prescription_medications")
 }
 
 enum UserRole {
