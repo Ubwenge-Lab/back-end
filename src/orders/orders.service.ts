@@ -37,11 +37,14 @@ export class OrdersService {
     }
 
     // Validate items and calculate subtotal
+    return await this.prisma.$transaction(async (tx) => {
     let subtotal = 0;
     const orderItems: { medicationId: string; quantity: number; price: number }[] = [];
 
     for (const item of dto.items) {
-      const medication = await this.medicationsService.findById(item.medicationId);
+      //Fetching medication within the transaction to ensure stock is up-to-date
+      const medication = await tx.medication.findUnique({where:{id:item.medicationId}});
+      if (!medication) throw new NotFoundException(`Medication ${item.medicationId} not found`);
 
       // Check stock
       if (medication.quantity < item.quantity) {
@@ -69,6 +72,12 @@ export class OrdersService {
         medicationId: medication.id,
         quantity: item.quantity,
         price: medication.price,
+      });
+
+      //reduce stock immediately
+      await tx.medication.update({
+        where: {id:item.medicationId},
+        data:{quantity:{decrement:item.quantity}}
       });
     }
 
@@ -107,7 +116,7 @@ export class OrdersService {
     const orderNumber = await this.generateOrderNumber();
 
     // Create order
-    const order = await this.prisma.order.create({
+    const order = await tx.order.create({
       data: {
         patientId: patient.id,
         pharmacyId: dto.pharmacyId,
@@ -139,11 +148,6 @@ export class OrdersService {
       },
     });
 
-    // Reduce medication stock
-    for (const item of dto.items) {
-      await this.medicationsService.reduceStock(item.medicationId, item.quantity);
-    }
-
     // Send notification to pharmacy
     await this.notificationsService.create({
       pharmacyId: pharmacy.id,
@@ -163,7 +167,8 @@ export class OrdersService {
     });
 
     return order;
-  }
+  });
+}
 
   // ========================================
   // GET ORDER BY ID
@@ -191,8 +196,17 @@ export class OrdersService {
       },
     });
 
-    if (!order) {
-      throw new NotFoundException('Order not found');
+    //Verify identity
+    if (userId) {
+      const patient = await this.patientsService.findByUserId(userId).catch(() => null);
+      const pharmacy = await this.pharmaciesService.findByUserId(userId).catch(() => null);
+
+      const isOwner = (patient && order.patientId === patient.id) ||
+                      (pharmacy && order.pharmacyId === pharmacy.id);
+
+      if (!isOwner) {
+        throw new ForbiddenException('You are not authorized to access this order');
+      }
     }
 
     return order;

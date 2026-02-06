@@ -1,5 +1,4 @@
 // backend/prisma/schema.prisma
-// Updated schema with AI prescription features
 
 generator client {
   provider = "prisma-client-js"
@@ -125,8 +124,9 @@ model Patient {
   insuranceMemberId String?
   insuranceCoverage Int?    @default(0)
 
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
+  @@index([userId])
+  @@map("patients")
+}
 
   user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   orders        Order[]
@@ -134,8 +134,9 @@ model Patient {
   notifications Notification[]
   cartItems     CartItem[]
 
+  @@index([status])
   @@index([userId])
-  @@map("patients")
+  @@map("pharmacies")
 }
 
 model Pharmacy {
@@ -169,33 +170,35 @@ model Pharmacy {
   notifications       Notification[]
   cartItems           CartItem[]
 
-  @@index([userId])
-  @@index([status])
-  @@map("pharmacies")
+  //NEW: Support for transfers
+  sentTransfers     StockTransfer[] @relation("FromBranch")
+  receivedTransfers StockTransfer[] @relation("ToBranch")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@map("branches")
 }
 
-model Medication {
-  id                    String    @id @default(uuid())
-  pharmacyId            String
-  name                  String
-  description           String?   @db.Text
-  category              String
-  price                 Float
-  quantity              Int
-  lowStockThreshold     Int       @default(10)
-  requiresPrescription  Boolean   @default(false)
-  imageUrl              String?
-  
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
+model Staff {
+  id           String      @id @default(uuid())
+  userId       String      @unique
+  branchId     String
+  firstName    String
+  lastName     String
+  nationalId   String?     @unique
+  gender       String?
+  dateOfBirth  DateTime?
+  status       StaffStatus @default(ACTIVE)
+  workingHours Json?
 
   pharmacy              Pharmacy  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
   orderItems            OrderItem[]
   prescriptionMedications PrescriptionMedication[]
   cartItems             CartItem[]
 
-  @@index([pharmacyId])
   @@index([name])
+  @@index([pharmacyId])
   @@map("medications")
 }
 
@@ -379,4 +382,127 @@ model Notification {
   @@index([orderId])
   @@index([isRead])
   @@map("notifications")
+}
+
+model cart_items {
+  id             String        @id
+  patientId      String
+  pharmacyId     String
+  medicationId   String
+  quantity       Int           @default(1)
+  prescriptionId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime
+  medications    Medication    @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  patients       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pharmacies     Pharmacy      @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  prescriptions  Prescription? @relation(fields: [prescriptionId], references: [id])
+
+  @@unique([patientId, medicationId])
+  @@index([medicationId])
+  @@index([patientId])
+  @@index([pharmacyId])
+}
+
+model prescription_medications {
+  id                  String       @id
+  prescriptionId      String
+  medicationName      String
+  dosage              String?
+  frequency           String?
+  duration            String?
+  quantity            Int          @default(1)
+  matchedMedicationId String?
+  available           Boolean      @default(false)
+  createdAt           DateTime     @default(now())
+  medications         Medication?  @relation(fields: [matchedMedicationId], references: [id])
+  prescriptions       Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@index([matchedMedicationId])
+  @@index([prescriptionId])
+}
+
+enum UserRole {
+  SUPER_ADMIN
+  PHARMACY
+  PATIENT
+  BRANCH_MANAGER
+  PHARMACIST
+  CASHIER
+}
+
+enum TransferStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SHIPPED
+  COMPLETED
+}
+
+enum StaffStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum PharmacyStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum OrderStatus {
+  PENDING
+  ACCEPTED
+  PREPARING
+  OUT_FOR_DELIVERY
+  READY_FOR_PICKUP
+  DELIVERED
+  COMPLETED
+  CANCELLED
+}
+
+enum OrderType {
+  DELIVERY
+  PICKUP
+}
+
+enum PaymentMethod {
+  MTN_MOMO
+  AIRTEL_MONEY
+  CARD
+  INSURANCE
+}
+
+enum PaymentStatus {
+  PENDING
+  COMPLETED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationType {
+  ORDER_PLACED
+  ORDER_ACCEPTED
+  ORDER_PREPARING
+  ORDER_OUT_FOR_DELIVERY
+  ORDER_READY_FOR_PICKUP
+  ORDER_DELIVERED
+  ORDER_CANCELLED
+  PRESCRIPTION_REJECTED
+  PHARMACY_APPROVED
+  PHARMACY_REJECTED
+  PRESCRIPTION_APPROVED
+}
+
+enum PrescriptionStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum AIProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }
