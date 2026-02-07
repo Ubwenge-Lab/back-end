@@ -346,4 +346,83 @@ export class EmailService {
       console.error('SendGrid error:', error.response?.body || error.message);
     }
   }
+
+  // ========================================
+  // SEND STAFF CREDENTIALS
+  // ========================================
+
+  async sendStaffCredentials(
+    email: string,
+    tempPassword: string,
+    pharmacyName: string,
+    branchName: string,
+    role: string,
+  ) {
+    const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+    if (!apiKey) {
+      console.warn('⚠️  SendGrid not configured - skipping email');
+      return;
+    }
+
+    const loginUrl = `${this.configService.get('FRONTEND_URL')}/login`;
+
+    // Log for development
+    console.log('==========================================');
+    console.log(`📧 EMAILING STAFF MEMBER: ${email}`);
+    console.log(`👤 ROLE: ${role}`);
+    console.log(`🔑 TEMP PASSWORD: ${tempPassword}`);
+    console.log('==========================================');
+
+    const msg = {
+      to: email,
+      from: {
+        email: this.configService.get('SENDGRID_FROM_EMAIL') || 'danielntwali9@gmail.com',
+        name: this.configService.get('SENDGRID_FROM_NAME') || 'Evuze',
+      },
+      subject: `Staff Account Created - ${pharmacyName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #667eea;">Welcome to ${pharmacyName}! 👋</h2>
+          <p>You have been added as a <strong>${role}</strong> at <strong>${branchName}</strong>.</p>
+          
+          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0 0 10px 0;"><strong>Email:</strong> ${email}</p>
+            <p style="margin: 0 0 10px 0;"><strong>Role:</strong> ${role}</p>
+            <p style="margin: 0;"><strong>Temporary Password:</strong> <code style="background: #fff; padding: 4px 8px; border-radius: 4px;">${tempPassword}</code></p>
+          </div>
+
+          <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
+            <p style="margin: 0; color: #92400e;"><strong>⚠️ Important:</strong> This temporary password expires in 7 days. Please log in and change it immediately for security purposes.</p>
+          </div>
+
+          <a href="${loginUrl}" 
+             style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+            Log In Now
+          </a>
+
+          <h3 style="color: #667eea; margin-top: 30px;">First Login Steps:</h3>
+          <ol style="line-height: 1.8;">
+            <li>Click the "Log In Now" button above</li>
+            <li>Enter your email and temporary password</li>
+            <li>You'll be prompted to create a new permanent password</li>
+            <li>Start managing orders and inventory!</li>
+          </ol>
+
+          <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+          <p style="color: #999; font-size: 12px;">If you did not expect this email, please contact your branch manager immediately.</p>
+        </div>
+      `,
+    };
+
+    try {
+      await sgMail.send(msg);
+      console.log(`✅ Staff credentials email sent to ${email}`);
+    } catch (error) {
+      console.error('❌ SendGrid error:', error.response?.body || error.message);
+      
+      if (this.configService.get('NODE_ENV') === 'production') {
+        throw new InternalServerErrorException('Failed to send staff credentials email');
+      }
+    }
+  }
 }

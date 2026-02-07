@@ -1,4 +1,5 @@
 // backend/src/auth/auth.service.ts
+// CORRECTED VERSION - Staff login properly integrated
 
 import {
   Injectable,
@@ -93,9 +94,6 @@ export class AuthService {
         throw new UnauthorizedException('Pharmacy profile not found');
       }
 
-      // ✅ FIX: pass pharmacy.status so it gets signed into the JWT payload.
-      // The middleware decodes the token and checks payload.pharmacyStatus —
-      // without this the field was always undefined and every status check was skipped.
       const tokens = await this.generateTokens(user.id, user.email, user.role, pharmacy.status);
       await this.updateRefreshToken(user.id, tokens.refreshToken);
 
@@ -118,6 +116,7 @@ export class AuthService {
       };
     }
 
+    // BRANCH_MANAGER login
     if (user.role === 'BRANCH_MANAGER') {
       const branch = await this.prisma.branch.findFirst({
         where: { managerId: user.id },
@@ -149,6 +148,68 @@ export class AuthService {
           requiresPasswordChange: !!isUsingTempPassword,
         },
         ...tokens,
+      };
+    }
+
+    // ========================================
+    // STAFF LOGIN (PHARMACIST, CASHIER, NURSE)
+    // ========================================
+    if (['PHARMACIST', 'CASHIER', 'NURSE'].includes(user.role)) {
+      const staff = await this.prisma.staff.findFirst({
+        where: { userId: user.id },
+        include: {
+          branch: {
+            include: {
+              pharmacy: { select: { name: true } },
+            },
+          },
+          permissions: true,
+        },
+      });
+
+      if (!staff) {
+        throw new UnauthorizedException('Staff profile not found');
+      }
+
+      if (staff.status !== 'ACTIVE') {
+        throw new UnauthorizedException('Your account has been deactivated. Please contact your branch manager.');
+      }
+
+      // Check branch status
+      if (staff.branch.branchStatus !== 'APPROVED') {
+        throw new UnauthorizedException('Branch is not yet approved. Please wait for approval.');
+      }
+
+      // Check if using temporary password
+      const isUsingTempPassword = 
+        staff.tempPasswordHash && 
+        await bcrypt.compare(dto.password, staff.tempPasswordHash);
+
+      if (isUsingTempPassword) {
+        if (staff.tempPasswordExpiry && staff.tempPasswordExpiry < new Date()) {
+          throw new ForbiddenException('Temporary password expired. Contact your branch manager to resend credentials.');
+        }
+      }
+
+      const tokens = await this.generateTokens(user.id, user.email, user.role);
+      await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          branchId: staff.branchId,
+          branchName: staff.branch.name,
+          pharmacyName: staff.branch.pharmacy.name,
+          status: staff.status,
+          permissions: staff.permissions?.permissions || [],
+          requiresPasswordChange: !!isUsingTempPassword,
+        },
+        ...tokens,
+        message: isUsingTempPassword 
+          ? 'Please change your password for security purposes.'
+          : null,
       };
     }
 
@@ -446,9 +507,6 @@ export class AuthService {
       console.log(`✅ Password reset code sent to ${user.email}: ${resetCode}`);
     } catch (error) {
       console.error('❌ Failed to send reset email:', error);
-      // if (this.configService.get('NODE_ENV') === 'development') {
-      //   console.log(`🔑 RESET CODE FOR ${user.email}: ${resetCode}`);
-      // }
     }
 
     return {
@@ -599,10 +657,6 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    // ✅ FIX: if this is a PHARMACY user, fetch the current status from the DB
-    // so the new access token reflects any approval/rejection that happened
-    // while the old token was still alive (e.g. super admin approved the pharmacy
-    // between the original login and this refresh).
     let pharmacyStatus: string | undefined;
     if (user.role === 'PHARMACY') {
       const pharmacy = await this.pharmaciesService.findByUserId(user.id);
@@ -632,14 +686,6 @@ export class AuthService {
   // HELPER FUNCTIONS
   // ========================================
 
-  // private generateVerificationCode(): string {
-  //   return Math.floor(10000 + Math.random() * 90000).toString();
-  // }
-
-  // private generateResetCode(): string {
-  //   return Math.floor(100000 + Math.random() * 900000).toString();
-  // }
-
   private generateVerificationCode(): string {
     return randomInt(10000, 99999).toString();
   }
@@ -648,7 +694,6 @@ export class AuthService {
     return randomInt(100000, 999999).toString();
   }
 
-  // FIX: added optional pharmacyStatus parameter.
   private async generateTokens(userId: string, email: string, role: string, pharmacyStatus?: string) {
     const payload: Record<string, any> = { sub: userId, email, role };
 

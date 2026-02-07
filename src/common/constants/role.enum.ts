@@ -1,4 +1,4 @@
-// backend/src/common/constants/roles.enum.ts
+// backend/src/common/constants/role.enum.ts
 
 export enum Role {
   SUPER_ADMIN = 'SUPER_ADMIN',
@@ -7,4 +7,5 @@ export enum Role {
   BRANCH_MANAGER = 'BRANCH_MANAGER',
   PHARMACIST = 'PHARMACIST',
   CASHIER = 'CASHIER',
+  NURSE = 'NURSE', 
 }

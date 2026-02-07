@@ -1,4 +1,5 @@
 // backend/prisma/schema.prisma
+// UPDATED VERSION - Added Staff Permissions and Temp Password Fields
 
 generator client {
   provider = "prisma-client-js"
@@ -21,6 +22,7 @@ enum UserRole {
   BRANCH_MANAGER
   PHARMACIST
   CASHIER
+  NURSE // NEW ROLE
 }
 
 enum PharmacyStatus {
@@ -230,26 +232,44 @@ model Branch {
 }
 
 model Staff {
-  id           String      @id @default(uuid())
-  userId       String      @unique
-  branchId     String
-  firstName    String
-  lastName     String
-  nationalId   String?     @unique
-  gender       String?
-  dateOfBirth  DateTime?
-  status       StaffStatus @default(ACTIVE)
-  workingHours Json?
+  id                  String          @id @default(uuid())
+  userId              String          @unique
+  branchId            String
+  firstName           String
+  lastName            String
+  nationalId          String?         @unique
+  gender              String?
+  dateOfBirth         DateTime?
+  status              StaffStatus     @default(ACTIVE)
+  workingHours        Json?
+  tempPasswordHash    String?         // NEW - for first login password
+  tempPasswordExpiry  DateTime?       // NEW - temp password expiration
 
-  createdAt    DateTime    @default(now())
-  updatedAt    DateTime    @updatedAt
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
 
-  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
-  branch       Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch              Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
+  permissions         StaffPermission? // NEW - relation to permissions
 
   @@index([branchId])
   @@index([userId])
   @@map("staff")
+}
+
+// NEW MODEL - Staff Permissions
+model StaffPermission {
+  id          String   @id @default(uuid())
+  staffId     String   @unique
+  permissions String[] // Array of permission strings
+  
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  
+  staff       Staff    @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  
+  @@index([staffId])
+  @@map("staff_permissions")
 }
 
 model Medication {
