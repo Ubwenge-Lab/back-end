@@ -246,6 +246,7 @@ export class AuthService {
             dateOfIncorporation: new Date(dto.dateOfIncorporation),
             rdbCertificate: dto.rdbCertificate,
             pharmacyLicense: dto.pharmacyLicense,
+            businessRegistration: dto.businessRegistration,
             status: 'PENDING',
           },
         },

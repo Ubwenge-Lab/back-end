@@ -37,138 +37,166 @@ export class OrdersService {
     }
 
     // Validate items and calculate subtotal
-    return await this.prisma.$transaction(async (tx) => {
-    let subtotal = 0;
-    const orderItems: { medicationId: string; quantity: number; price: number }[] = [];
+    const order = await this.prisma.$transaction(async (tx) => {
+      let subtotal = 0;
+      const orderItems: { medicationId: string; quantity: number; price: number }[] = [];
 
-    for (const item of dto.items) {
-      //Fetching medication within the transaction to ensure stock is up-to-date
-      const medication = await tx.medication.findUnique({where:{id:item.medicationId}});
-      if (!medication) throw new NotFoundException(`Medication ${item.medicationId} not found`);
+      for (const item of dto.items) {
+        // Fetching medication within the transaction to ensure stock is up-to-date
+        const medication = await tx.medication.findUnique({
+          where: { id: item.medicationId }
+        });
+        
+        if (!medication) {
+          throw new NotFoundException(`Medication ${item.medicationId} not found`);
+        }
 
-      // Check stock
-      if (medication.quantity < item.quantity) {
-        throw new BadRequestException(
-          `Insufficient stock for ${medication.name}. Available: ${medication.quantity}`,
-        );
+        // Check stock
+        if (medication.quantity < item.quantity) {
+          throw new BadRequestException(
+            `Insufficient stock for ${medication.name}. Available: ${medication.quantity}`,
+          );
+        }
+
+        // Check pharmacy match
+        if (medication.pharmacyId !== dto.pharmacyId) {
+          throw new BadRequestException(
+            `Medication ${medication.name} does not belong to this pharmacy`,
+          );
+        }
+
+        // Check prescription requirement
+        if (medication.requiresPrescription && !dto.prescriptionId) {
+          throw new BadRequestException(
+            `Prescription required for ${medication.name}`,
+          );
+        }
+
+        subtotal += medication.price * item.quantity;
+        orderItems.push({
+          medicationId: medication.id,
+          quantity: item.quantity,
+          price: medication.price,
+        });
+
+        // FIX: Use atomic update with condition to prevent race conditions
+        // This prevents overselling by ensuring quantity doesn't go negative
+        const updateResult = await tx.medication.updateMany({
+          where: {
+            id: item.medicationId,
+            quantity: { gte: item.quantity } // Only update if sufficient stock
+          },
+          data: {
+            quantity: { decrement: item.quantity }
+          }
+        });
+
+        // If no rows were updated, stock was insufficient (race condition occurred)
+        if (updateResult.count === 0) {
+          throw new BadRequestException(
+            `Insufficient stock for ${medication.name}. Stock may have been depleted by another order.`,
+          );
+        }
       }
 
-      // Check pharmacy match
-      if (medication.pharmacyId !== dto.pharmacyId) {
-        throw new BadRequestException(
-          `Medication ${medication.name} does not belong to this pharmacy`,
-        );
+      // Calculate delivery fee if applicable
+      let deliveryFee = 0;
+      let deliveryZone: string | null = null;
+
+      if (dto.type === 'DELIVERY') {
+        if (!dto.deliveryAddress) {
+          throw new BadRequestException('Delivery address is required for delivery orders');
+        }
+
+        // For MVP, use fixed delivery zones
+        // In production, calculate based on actual coordinates
+        deliveryFee = 2000; // Fixed delivery fee for MVP
+        deliveryZone = 'Zone 1';
       }
 
-      // Check prescription requirement
-      if (medication.requiresPrescription && !dto.prescriptionId) {
-        throw new BadRequestException(
-          `Prescription required for ${medication.name}`,
-        );
+      // Calculate total
+      const total = subtotal + deliveryFee;
+
+      // Handle insurance if applicable
+      let insuranceCoverage = 0;
+      let patientPayment = total;
+
+      if (dto.paymentMethod === 'INSURANCE') {
+        if (!patient.insuranceProvider || !patient.insuranceCoverage) {
+          throw new BadRequestException('Patient does not have valid insurance');
+        }
+
+        insuranceCoverage = (subtotal * patient.insuranceCoverage) / 100;
+        patientPayment = subtotal - insuranceCoverage + deliveryFee;
       }
 
-      subtotal += medication.price * item.quantity;
-      orderItems.push({
-        medicationId: medication.id,
-        quantity: item.quantity,
-        price: medication.price,
-      });
+      // Generate unique order number
+      const orderNumber = await this.generateOrderNumber(tx);
 
-      //reduce stock immediately
-      await tx.medication.update({
-        where: {id:item.medicationId},
-        data:{quantity:{decrement:item.quantity}}
-      });
-    }
-
-    // Calculate delivery fee if applicable
-    let deliveryFee = 0;
-    let deliveryZone: string | null = null;
-
-    if (dto.type === 'DELIVERY') {
-      if (!dto.deliveryAddress) {
-        throw new BadRequestException('Delivery address is required for delivery orders');
-      }
-
-      // For MVP, use fixed delivery zones
-      // In production, calculate based on actual coordinates
-      deliveryFee = 2000; // Fixed delivery fee for MVP
-      deliveryZone = 'Zone 1';
-    }
-
-    // Calculate total
-    const total = subtotal + deliveryFee;
-
-    // Handle insurance if applicable
-    let insuranceCoverage = 0;
-    let patientPayment = total;
-
-    if (dto.paymentMethod === 'INSURANCE') {
-      if (!patient.insuranceProvider || !patient.insuranceCoverage) {
-        throw new BadRequestException('Patient does not have valid insurance');
-      }
-
-      insuranceCoverage = (subtotal * patient.insuranceCoverage) / 100;
-      patientPayment = subtotal - insuranceCoverage + deliveryFee;
-    }
-
-    // Generate unique order number
-    const orderNumber = await this.generateOrderNumber();
-
-    // Create order
-    const order = await tx.order.create({
-      data: {
-        patientId: patient.id,
-        pharmacyId: dto.pharmacyId,
-        orderNumber,
-        type: dto.type,
-        status: 'PENDING',
-        deliveryAddress: dto.deliveryAddress,
-        deliveryFee,
-        deliveryZone,
-        prescriptionId: dto.prescriptionId,
-        subtotal,
-        total,
-        paymentMethod: dto.paymentMethod,
-        paymentStatus: 'PENDING',
-        insuranceCoverage,
-        patientPayment,
-        orderItems: {
-          create: orderItems,
-        },
-      },
-      include: {
-        orderItems: {
-          include: {
-            medication: true,
+      // Create order
+      const createdOrder = await tx.order.create({
+        data: {
+          patientId: patient.id,
+          pharmacyId: dto.pharmacyId,
+          branchId: dto.branchId,
+          orderNumber,
+          type: dto.type,
+          status: 'PENDING',
+          deliveryAddress: dto.deliveryAddress,
+          deliveryFee,
+          deliveryZone,
+          prescriptionId: dto.prescriptionId,
+          subtotal,
+          total,
+          paymentMethod: dto.paymentMethod,
+          paymentStatus: 'PENDING',
+          insuranceCoverage,
+          patientPayment,
+          orderItems: {
+            create: orderItems,
           },
         },
-        pharmacy: true,
-        prescription: true,
-      },
+        include: {
+          orderItems: {
+            include: {
+              medication: true,
+            },
+          },
+          pharmacy: true,
+          prescription: true,
+        },
+      });
+
+      return createdOrder;
     });
 
-    // Send notification to pharmacy
-    await this.notificationsService.create({
-      pharmacyId: pharmacy.id,
-      orderId: order.id,
-      type: 'ORDER_PLACED',
-      title: 'New Order Received',
-      message: `New order #${orderNumber} from ${patient.firstName} ${patient.lastName}`,
-    });
+    // FIX: Send notifications AFTER transaction commits to avoid foreign key issues
+    // This ensures the order exists in the database before creating notifications
+    try {
+      // Send notification to pharmacy
+      await this.notificationsService.create({
+        pharmacyId: pharmacy.id,
+        orderId: order.id,
+        type: 'ORDER_PLACED',
+        title: 'New Order Received',
+        message: `New order #${order.orderNumber} from ${patient.firstName} ${patient.lastName}`,
+      });
 
-    // Send notification to patient
-    await this.notificationsService.create({
-      patientId: patient.id,
-      orderId: order.id,
-      type: 'ORDER_PLACED',
-      title: 'Order Placed Successfully',
-      message: `Your order #${orderNumber} has been placed and is awaiting pharmacy confirmation.`,
-    });
+      // Send notification to patient
+      await this.notificationsService.create({
+        patientId: patient.id,
+        orderId: order.id,
+        type: 'ORDER_PLACED',
+        title: 'Order Placed Successfully',
+        message: `Your order #${order.orderNumber} has been placed and is awaiting pharmacy confirmation.`,
+      });
+    } catch (notificationError) {
+      // Log error but don't fail the order creation
+      console.error('Failed to send notifications:', notificationError);
+    }
 
     return order;
-  });
-}
+  }
 
   // ========================================
   // GET ORDER BY ID
@@ -196,7 +224,12 @@ export class OrdersService {
       },
     });
 
-    //Verify identity
+    // FIX: Added null check for order
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    // Verify identity
     if (userId) {
       const patient = await this.patientsService.findByUserId(userId).catch(() => null);
       const pharmacy = await this.pharmaciesService.findByUserId(userId).catch(() => null);
@@ -367,13 +400,16 @@ export class OrdersService {
   // HELPER FUNCTIONS
   // ========================================
 
-  private async generateOrderNumber(): Promise<string> {
+  // FIX: Accept transaction parameter to use within transaction
+  private async generateOrderNumber(tx?: any): Promise<string> {
     const date = new Date();
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
 
-    const count = await this.prisma.order.count({
+    const prismaClient = tx || this.prisma;
+    
+    const count = await prismaClient.order.count({
       where: {
         createdAt: {
           gte: new Date(date.setHours(0, 0, 0, 0)),

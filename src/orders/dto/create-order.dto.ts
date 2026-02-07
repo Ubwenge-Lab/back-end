@@ -19,6 +19,10 @@ export class CreateOrderDto {
   @IsString()
   pharmacyId: string;
 
+  @ApiProperty({ description: 'Branch ID where the order will be fulfilled' })
+  @IsString()
+  branchId: string;
+
   @ApiProperty({ enum: ['DELIVERY', 'PICKUP'] })
   @IsEnum(['DELIVERY', 'PICKUP'])
   type: 'DELIVERY' | 'PICKUP';
