@@ -8,12 +8,12 @@ import sgMail from '@sendgrid/mail';
 export class EmailService {
   constructor(private configService: ConfigService) {
     const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
-  
+
     if (!apiKey) {
       console.warn('⚠️  SENDGRID_API_KEY is not set - emails will not be sent');
       return;
     }
-  
+
     sgMail.setApiKey(apiKey);
     console.log('✅ SendGrid initialized');
   }
@@ -56,11 +56,11 @@ export class EmailService {
       console.log(`✅ Verification email sent to ${email}`);
     } catch (error) {
       console.error('❌ SendGrid error:', error.response?.body || error.message);
-      
+
       if (error.response?.body?.errors) {
         console.error('SendGrid detailed errors:', JSON.stringify(error.response.body.errors, null, 2));
       }
-      
+
       if (this.configService.get('NODE_ENV') === 'production') {
         throw new InternalServerErrorException('Failed to send verification email');
       }
@@ -105,7 +105,7 @@ export class EmailService {
       console.log(`✅ Password reset email sent to ${email}`);
     } catch (error) {
       console.error('❌ SendGrid error:', error.response?.body || error.message);
-      
+
       if (this.configService.get('NODE_ENV') === 'production') {
         throw new InternalServerErrorException('Failed to send password reset email');
       }
@@ -264,6 +264,86 @@ export class EmailService {
       console.log(`✅ Pharmacy update notification sent to ${email}`);
     } catch (error) {
       console.error('❌ SendGrid error:', error.response?.body || error.message);
+    }
+  }
+
+  async sendBranchCredentials(email: string, tempPassword: string, pharmacyName: string) {
+    const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+    if (!apiKey) {
+      console.warn('SendGrid not configured - skipping email');
+      return;
+    }
+
+    const loginUrl = `${this.configService.get('FRONTEND_URL')}/login`;
+
+    // Log for development
+    console.log('==========================================');
+    console.log(`📧 EMAILING BRANCH MANAGER: ${email}`);
+    console.log(`🔑 TEMP PASSWORD: ${tempPassword}`);
+    console.log('==========================================');
+
+    const msg = {
+      to: email,
+      from: {
+        email: this.configService.get('SENDGRID_FROM_EMAIL') || 'danielntwali9@gmail.com',
+        name: this.configService.get('SENDGRID_FROM_NAME') || 'Evuze',
+      },
+      subject: `Branch Manager Account - ${pharmacyName}`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #667eea;">Branch Manager Account Created</h2>
+          <p>You have been assigned as a branch manager for <strong>${pharmacyName}</strong>.</p>
+          <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
+            <p style="margin: 0 0 10px 0;"><strong>Email:</strong> ${email}</p>
+            <p style="margin: 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
+          </div>
+          <p style="color: #ef4444;"><strong>Important:</strong> This password expires in 5 days. Please log in and change it immediately.</p>
+          <a href="${loginUrl}" style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
+            Log In Now
+          </a>
+          <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
+          <p style="color: #999; font-size: 12px;">If you did not expect this email, please contact your pharmacy headquarters.</p>
+        </div>
+      `,
+    };
+
+    try {
+      await sgMail.send(msg);
+      console.log(`Branch credentials email sent to ${email}`);
+    } catch (error) {
+      console.error('SendGrid error:', error.response?.body || error.message);
+    }
+  }
+
+  async sendBranchApproval(email: string, branchName: string, approved: boolean, reason?: string) {
+    const apiKey = this.configService.get<string>('SENDGRID_API_KEY');
+    if (!apiKey) return;
+
+    const msg = {
+      to: email,
+      from: {
+        email: this.configService.get('SENDGRID_FROM_EMAIL') || 'danielntwali9@gmail.com',
+        name: this.configService.get('SENDGRID_FROM_NAME') || 'Evuze',
+      },
+      subject: approved ? `Branch Approved - ${branchName}` : `Branch Application Status - ${branchName}`,
+      html: approved
+        ? `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #10b981;">Branch Approved</h2>
+            <p>The branch <strong>${branchName}</strong> has been approved and is now active.</p>
+            <a href="${this.configService.get('FRONTEND_URL')}/login" style="display: inline-block; padding: 12px 24px; background-color: #10b981; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">Log In</a>
+          </div>`
+        : `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #ef4444;">Branch Application Update</h2>
+            <p>The branch application for <strong>${branchName}</strong> requires attention.</p>
+            ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
+            <p>Please review and address the issues.</p>
+          </div>`,
+    };
+
+    try {
+      await sgMail.send(msg);
+    } catch (error) {
+      console.error('SendGrid error:', error.response?.body || error.message);
     }
   }
 }

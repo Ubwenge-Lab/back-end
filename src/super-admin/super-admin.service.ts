@@ -13,7 +13,7 @@ export class SuperAdminService {
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
     private emailService: EmailService,
-  ) {}
+  ) { }
 
   // ========================================
   // GET PLATFORM ANALYTICS
@@ -154,8 +154,8 @@ export class SuperAdminService {
       throw new NotFoundException('Pharmacy not found');
     }
 
-    const documentUrl = documentType === 'rdb' 
-      ? pharmacy.rdbCertificate 
+    const documentUrl = documentType === 'rdb'
+      ? pharmacy.rdbCertificate
       : pharmacy.pharmacyLicense;
 
     if (!documentUrl) {
@@ -361,5 +361,67 @@ export class SuperAdminService {
       transactionCount: payments.length,
       revenueByDate,
     };
+  }
+
+  async getPendingBranches() {
+    return this.prisma.branch.findMany({
+      where: { branchStatus: 'PENDING' },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        phone: true,
+        branchManagerEmail: true,
+        pharmacyLicense: true,
+        createdAt: true,
+        pharmacy: { select: { id: true, name: true, representativeName: true } },
+        manager: { select: { email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async approveBranch(branchId: string) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      include: { pharmacy: { include: { user: true } }, manager: true },
+    });
+    if (!branch) throw new NotFoundException('Branch not found');
+
+    const updated = await this.prisma.branch.update({
+      where: { id: branchId },
+      data: { branchStatus: 'APPROVED', isActive: true },
+    });
+
+    if (branch.manager?.email) {
+      await this.emailService.sendBranchApproval(branch.manager.email, branch.name, true);
+    }
+    if (branch.pharmacy.user?.email) {
+      await this.emailService.sendBranchApproval(branch.pharmacy.user.email, branch.name, true);
+    }
+
+    return updated;
+  }
+
+  async rejectBranch(branchId: string, reason: string) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      include: { pharmacy: { include: { user: true } }, manager: true },
+    });
+    if (!branch) throw new NotFoundException('Branch not found');
+
+    const updated = await this.prisma.branch.update({
+      where: { id: branchId },
+      data: { branchStatus: 'REJECTED', isActive: false },
+    });
+
+    if (branch.manager?.email) {
+      await this.emailService.sendBranchApproval(branch.manager.email, branch.name, false, reason);
+    }
+    if (branch.pharmacy.user?.email) {
+      await this.emailService.sendBranchApproval(branch.pharmacy.user.email, branch.name, false, reason);
+    }
+
+    return updated;
   }
 }

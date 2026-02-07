@@ -17,7 +17,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
-import { ApprovePharmacyDto, RejectPharmacyDto } from './dto';
+import { ApprovePharmacyDto, RejectPharmacyDto, RejectBranchDto } from './dto';
 
 @ApiTags('Super Admin')
 @Controller('super-admin')
@@ -25,7 +25,7 @@ import { ApprovePharmacyDto, RejectPharmacyDto } from './dto';
 @Roles(Role.SUPER_ADMIN)
 @ApiBearerAuth()
 export class SuperAdminController {
-  constructor(private superAdminService: SuperAdminService) {}
+  constructor(private superAdminService: SuperAdminService) { }
 
   @Get('analytics')
   @ApiOperation({ summary: 'Get platform analytics' })
@@ -115,5 +115,23 @@ export class SuperAdminController {
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
     );
+  }
+
+  @Get('branches/pending')
+  @ApiOperation({ summary: 'Get pending branch applications' })
+  getPendingBranches() {
+    return this.superAdminService.getPendingBranches();
+  }
+
+  @Patch('branches/:id/approve')
+  @ApiOperation({ summary: 'Approve branch' })
+  approveBranch(@Param('id') id: string) {
+    return this.superAdminService.approveBranch(id);
+  }
+
+  @Patch('branches/:id/reject')
+  @ApiOperation({ summary: 'Reject branch' })
+  rejectBranch(@Param('id') id: string, @Body() dto: RejectBranchDto) {
+    return this.superAdminService.rejectBranch(id, dto.reason);
   }
 }

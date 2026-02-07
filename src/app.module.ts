@@ -15,6 +15,7 @@ import { InsuranceModule } from './insurance/insurance.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { UploadModule } from './upload/upload.module';
+import { BranchesModule } from './branches/branches.module';
 
 @Module({
   imports: [
@@ -35,6 +36,7 @@ import { UploadModule } from './upload/upload.module';
     NotificationsModule,
     SuperAdminModule,
     UploadModule,
+    BranchesModule,
   ],
 })
-export class AppModule {}
+export class AppModule { }

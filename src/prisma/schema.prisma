@@ -99,6 +99,13 @@ enum StaffStatus {
   INACTIVE
 }
 
+enum BranchStatus {
+  INVITED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
 // ========================================
 // MODELS
 // ========================================
@@ -190,19 +197,24 @@ model Pharmacy {
 }
 
 model Branch {
-  id             String    @id @default(uuid())
-  pharmacyId     String
-  managerId      String?   @unique
-  name           String
-  address        String
-  phone          String?
-  latitude       Float?
-  longitude      Float?
-  isActive       Boolean   @default(true)
-  operatingHours Json?
+  id                  String        @id @default(uuid())
+  pharmacyId          String
+  managerId           String?       @unique
+  name                String
+  address             String
+  phone               String?
+  latitude            Float?
+  longitude           Float?
+  isActive            Boolean       @default(true)
+  operatingHours      Json?
+  branchStatus        BranchStatus  @default(INVITED)
+  branchManagerEmail  String
+  pharmacyLicense     String?
+  tempPasswordHash    String?
+  tempPasswordExpiry  DateTime?
 
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
+  createdAt           DateTime      @default(now())
+  updatedAt           DateTime      @updatedAt
 
   pharmacy          Pharmacy        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
   manager           User?           @relation("BranchManager", fields: [managerId], references: [id])
@@ -213,6 +225,7 @@ model Branch {
   receivedTransfers StockTransfer[] @relation("ToBranch")
 
   @@index([pharmacyId])
+  @@index([branchStatus])
   @@map("branches")
 }
 

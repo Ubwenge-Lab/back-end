@@ -36,7 +36,7 @@ export class AuthService {
     private patientsService: PatientsService,
     private pharmaciesService: PharmaciesService,
     private notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   // ========================================
   // LOGIN (For ALL users including SUPER_ADMIN)
@@ -113,8 +113,42 @@ export class AuthService {
         message: pharmacy.status === 'PENDING'
           ? 'Your account is under review. Please wait for approval.'
           : pharmacy.status === 'REJECTED'
-          ? 'Your account was rejected. Please update your documents and resubmit.'
-          : null,
+            ? 'Your account was rejected. Please update your documents and resubmit.'
+            : null,
+      };
+    }
+
+    if (user.role === 'BRANCH_MANAGER') {
+      const branch = await this.prisma.branch.findFirst({
+        where: { managerId: user.id },
+        include: { pharmacy: { select: { name: true } } },
+      });
+
+      if (!branch) throw new UnauthorizedException('Branch not found');
+
+      const isUsingTempPassword = branch.tempPasswordHash && await bcrypt.compare(dto.password, branch.tempPasswordHash);
+
+      if (isUsingTempPassword) {
+        if (branch.tempPasswordExpiry && branch.tempPasswordExpiry < new Date()) {
+          throw new ForbiddenException('Temporary password expired. Contact HQ to resend credentials.');
+        }
+      }
+
+      const tokens = await this.generateTokens(user.id, user.email, user.role, branch.branchStatus);
+      await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          branchId: branch.id,
+          branchName: branch.name,
+          pharmacyName: branch.pharmacy.name,
+          branchStatus: branch.branchStatus,
+          requiresPasswordChange: !!isUsingTempPassword,
+        },
+        ...tokens,
       };
     }
 
@@ -488,13 +522,66 @@ export class AuthService {
       where: { id: userId },
       data: {
         password: hashedPassword,
-        refreshToken: null, // Invalidate all sessions
+        refreshToken: null,
       },
     });
 
     return {
       message: 'Password changed successfully! Please login again with your new password.',
     };
+  }
+
+  async changeBranchPassword(userId: string, dto: { tempPassword: string; newPassword: string; confirmPassword: string }) {
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    const branch = await this.prisma.branch.findFirst({
+      where: { managerId: userId },
+      select: { id: true, tempPasswordHash: true, tempPasswordExpiry: true },
+    });
+
+    if (!branch) throw new BadRequestException('Branch not found');
+    if (!branch.tempPasswordHash) throw new BadRequestException('No temporary password set');
+
+    const isValid = await bcrypt.compare(dto.tempPassword, branch.tempPasswordHash);
+    if (!isValid) throw new BadRequestException('Invalid temporary password');
+
+    if (branch.tempPasswordExpiry && branch.tempPasswordExpiry < new Date()) {
+      throw new ForbiddenException('Temporary password expired');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: userId },
+        data: { password: hashedPassword },
+      }),
+      this.prisma.branch.update({
+        where: { id: branch.id },
+        data: { tempPasswordHash: null, tempPasswordExpiry: null },
+      }),
+    ]);
+
+    return { message: 'Password changed successfully' };
+  }
+
+  async uploadBranchLicense(userId: string, licenseUrl: string) {
+    const branch = await this.prisma.branch.findFirst({
+      where: { managerId: userId },
+      select: { id: true, branchStatus: true },
+    });
+
+    if (!branch) throw new BadRequestException('Branch not found');
+    if (branch.branchStatus === 'APPROVED') throw new BadRequestException('Branch already approved');
+
+    await this.prisma.branch.update({
+      where: { id: branch.id },
+      data: { pharmacyLicense: licenseUrl, branchStatus: 'PENDING' },
+    });
+
+    return { message: 'License uploaded. Awaiting admin approval.' };
   }
 
   // ========================================
