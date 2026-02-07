@@ -138,6 +138,7 @@ export class OrdersService {
         data: {
           patientId: patient.id,
           pharmacyId: dto.pharmacyId,
+          branchId: dto.branchId,
           orderNumber,
           type: dto.type,
           status: 'PENDING',

@@ -4,9 +4,18 @@ import { IsString, IsNumber, IsBoolean, IsOptional, Min } from 'class-validator'
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateMedicationDto {
+  @ApiProperty({ description: 'Branch ID where this medication is stocked' })
+  @IsString()
+  branchId: string;
+
   @ApiProperty()
   @IsString()
   name: string;
+
+  @ApiProperty({ required: false, description: 'Chemical/generic name of the medication' })
+  @IsString()
+  @IsOptional()
+  chemicalName?: string;
 
   @ApiProperty({ required: false })
   @IsString()
