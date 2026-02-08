@@ -64,8 +64,8 @@ export class StaffController {
   @Roles(Role.BRANCH_MANAGER)
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete staff member (Branch Manager only)' })
-  deleteStaff(@Req() req: any, @Param('id') id: string) {
-    return this.staffService.deleteStaff(req.user.sub, id);
+  async deleteStaff(@Req() req: any, @Param('id') id: string): Promise<void> {
+    await this.staffService.deleteStaff(req.user.sub, id);
   }
 
   @Post(':id/resend-credentials')

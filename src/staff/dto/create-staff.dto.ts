@@ -4,7 +4,7 @@ import {
   IsEmail, 
   IsNotEmpty, 
   IsString, 
-  IsEnum, 
+  IsIn,
   IsArray, 
   IsOptional, 
   IsDateString,
@@ -12,7 +12,6 @@ import {
   MaxLength 
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import { UserRole } from '@prisma/client';
 import { StaffPermission } from '../../common/constants/staff-permission.enum';
 import { Transform } from 'class-transformer';
 
@@ -47,7 +46,7 @@ export class CreateStaffDto {
 
   @ApiProperty({ enum: ['PHARMACIST', 'CASHIER', 'NURSE'], example: 'PHARMACIST' })
   @IsNotEmpty()
-  @IsEnum(['PHARMACIST', 'CASHIER', 'NURSE'])
+  @IsIn(['PHARMACIST', 'CASHIER', 'NURSE'])
   role: 'PHARMACIST' | 'CASHIER' | 'NURSE';
 
   @ApiProperty({ 
@@ -56,7 +55,7 @@ export class CreateStaffDto {
     isArray: true 
   })
   @IsArray()
-  @IsEnum(StaffPermission, { each: true })
+  @IsIn(Object.values(StaffPermission), { each: true })
   permissions: StaffPermission[];
 
   @ApiProperty({ example: '1199012345678', required: false })

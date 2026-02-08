@@ -2,7 +2,7 @@
 
 import { 
   IsString, 
-  IsEnum, 
+  IsIn,
   IsArray, 
   IsOptional, 
   IsDateString,
@@ -44,12 +44,12 @@ export class UpdateStaffDto {
   })
   @IsOptional()
   @IsArray()
-  @IsEnum(StaffPermission, { each: true })
+  @IsIn(Object.values(StaffPermission), { each: true })
   permissions?: StaffPermission[];
 
   @ApiProperty({ enum: StaffStatus, required: false })
   @IsOptional()
-  @IsEnum(StaffStatus)
+  @IsIn(Object.values(StaffStatus))
   status?: StaffStatus;
 
   @ApiProperty({ required: false })

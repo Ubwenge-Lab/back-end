@@ -1,5 +1,5 @@
 // backend/prisma/schema.prisma
-// UPDATED VERSION - Added Staff Permissions and Temp Password Fields
+// UPDATED VERSION - Added Staff Permissions, Temp Password Fields, and Phone
 
 generator client {
   provider = "prisma-client-js"
@@ -22,7 +22,7 @@ enum UserRole {
   BRANCH_MANAGER
   PHARMACIST
   CASHIER
-  NURSE // NEW ROLE
+  NURSE
 }
 
 enum PharmacyStatus {
@@ -102,10 +102,10 @@ enum StaffStatus {
 }
 
 enum BranchStatus {
-  INVITED
   PENDING
   APPROVED
   REJECTED
+  SUSPENDED
 }
 
 // ========================================
@@ -131,7 +131,6 @@ model User {
   staff                  Staff?
   managedBranch          Branch?   @relation("BranchManager")
 
-  @@index([email])
   @@map("users")
 }
 
@@ -209,7 +208,7 @@ model Branch {
   longitude           Float?
   isActive            Boolean       @default(true)
   operatingHours      Json?
-  branchStatus        BranchStatus  @default(INVITED)
+  branchStatus        BranchStatus  @default(PENDING)
   branchManagerEmail  String
   pharmacyLicense     String?
   tempPasswordHash    String?
@@ -237,31 +236,31 @@ model Staff {
   branchId            String
   firstName           String
   lastName            String
+  phone               String?
   nationalId          String?         @unique
   gender              String?
   dateOfBirth         DateTime?
   status              StaffStatus     @default(ACTIVE)
   workingHours        Json?
-  tempPasswordHash    String?         // NEW - for first login password
-  tempPasswordExpiry  DateTime?       // NEW - temp password expiration
+  tempPasswordHash    String?
+  tempPasswordExpiry  DateTime?
 
   createdAt           DateTime        @default(now())
   updatedAt           DateTime        @updatedAt
 
   user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
   branch              Branch          @relation(fields: [branchId], references: [id], onDelete: Cascade)
-  permissions         StaffPermission? // NEW - relation to permissions
+  permissions         StaffPermission?
 
   @@index([branchId])
   @@index([userId])
   @@map("staff")
 }
 
-// NEW MODEL - Staff Permissions
 model StaffPermission {
   id          String   @id @default(uuid())
   staffId     String   @unique
-  permissions String[] // Array of permission strings
+  permissions String[] @default([])
   
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt

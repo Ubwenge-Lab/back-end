@@ -11,7 +11,6 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../notifications/email.service';
 import { CreateStaffDto, UpdateStaffDto } from './dto';
 import { UserRole } from '@prisma/client';
-import { DEFAULT_PERMISSIONS } from '../common/constants/staff-permission.enum';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -64,7 +63,6 @@ export class StaffService {
     // Generate temporary password
     const tempPassword = this.generateSecurePassword();
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
-    const tempPasswordHash = await bcrypt.hash(tempPassword, 12);
     const tempPasswordExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000); // 7 days
 
     // Convert role string to UserRole enum
@@ -89,11 +87,14 @@ export class StaffService {
           branchId: branch.id,
           firstName: dto.firstName,
           lastName: dto.lastName,
+          phone: dto.phone,
           nationalId: dto.nationalId,
           gender: dto.gender,
           dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
           status: 'ACTIVE',
           workingHours: dto.workingHours || null,
+          tempPasswordHash: hashedPassword,
+          tempPasswordExpiry,
         },
         include: {
           user: { select: { email: true, role: true } },
@@ -109,19 +110,11 @@ export class StaffService {
         },
       });
 
-      // Store temp password info (we'll add this to Staff model)
-      await tx.staff.update({
-        where: { id: staff.id },
-        data: {
-          tempPasswordHash,
-          tempPasswordExpiry,
-        },
-      });
-
       return staff;
     });
 
     // Send credentials email
+    let emailSent = false;
     try {
       await this.emailService.sendStaffCredentials(
         dto.email,
@@ -130,13 +123,17 @@ export class StaffService {
         branch.name,
         dto.role,
       );
+      emailSent = true;
     } catch (error) {
       console.error('Failed to send staff credentials email:', error);
     }
 
     return {
-      message: 'Staff member created successfully. Credentials sent via email.',
+      message: emailSent 
+        ? 'Staff member created successfully. Credentials sent via email.'
+        : 'Staff member created successfully. Warning: Email delivery failed.',
       staff: result,
+      emailSent,
     };
   }
 
@@ -231,6 +228,7 @@ export class StaffService {
         data: {
           firstName: dto.firstName,
           lastName: dto.lastName,
+          phone: dto.phone,
           gender: dto.gender,
           dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : undefined,
           status: dto.status,
@@ -242,11 +240,15 @@ export class StaffService {
         },
       });
 
-      // Update permissions if provided
+      // Update permissions if provided (using upsert to handle missing permissions)
       if (dto.permissions) {
-        await tx.staffPermission.update({
+        await tx.staffPermission.upsert({
           where: { staffId: staff.id },
-          data: { permissions: dto.permissions },
+          update: { permissions: dto.permissions },
+          create: {
+            staffId: staff.id,
+            permissions: dto.permissions,
+          },
         });
       }
 
@@ -263,7 +265,7 @@ export class StaffService {
   // DELETE STAFF
   // ========================================
 
-  async deleteStaff(branchManagerUserId: string, staffId: string) {
+  async deleteStaff(branchManagerUserId: string, staffId: string): Promise<void> {
     const branch = await this.prisma.branch.findFirst({
       where: { managerId: branchManagerUserId },
     });
@@ -284,14 +286,10 @@ export class StaffService {
       throw new ForbiddenException('This staff member belongs to another branch');
     }
 
-    // Delete staff (cascade will delete user and permissions)
-    await this.prisma.staff.delete({
-      where: { id: staffId },
+    // Delete user account (cascade will delete staff and permissions via FK)
+    await this.prisma.user.delete({
+      where: { id: staff.userId },
     });
-
-    return {
-      message: 'Staff member deleted successfully',
-    };
   }
 
   // ========================================
@@ -326,7 +324,6 @@ export class StaffService {
     // Generate new temporary password
     const tempPassword = this.generateSecurePassword();
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
-    const tempPasswordHash = await bcrypt.hash(tempPassword, 12);
     const tempPasswordExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
     // Update user password and staff temp password
@@ -337,11 +334,15 @@ export class StaffService {
       }),
       this.prisma.staff.update({
         where: { id: staffId },
-        data: { tempPasswordHash, tempPasswordExpiry },
+        data: { 
+          tempPasswordHash: hashedPassword, 
+          tempPasswordExpiry 
+        },
       }),
     ]);
 
     // Send credentials email
+    let emailSent = false;
     try {
       await this.emailService.sendStaffCredentials(
         staff.user.email,
@@ -350,12 +351,16 @@ export class StaffService {
         branch.name,
         staff.user.role.toLowerCase(),
       );
+      emailSent = true;
     } catch (error) {
       console.error('Failed to send staff credentials email:', error);
     }
 
     return {
-      message: 'Credentials resent successfully',
+      message: emailSent 
+        ? 'Credentials resent successfully'
+        : 'Credentials updated but email delivery failed',
+      emailSent,
     };
   }
 
@@ -415,7 +420,6 @@ export class StaffService {
 
     const staff = await this.prisma.staff.findUnique({
       where: { userId },
-      // ✅ FIXED: Removed select to get full object and avoid TypeScript errors
     });
 
     if (!staff) {
