@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../notifications/email.service';
 import { CreateStaffDto, UpdateStaffDto } from './dto';
 import { UserRole } from '@prisma/client';
+import { StaffPermission } from '../common/constants/staff-permission.enum';
 import * as bcrypt from 'bcrypt';
 import * as crypto from 'crypto';
 
@@ -222,7 +223,19 @@ export class StaffService {
 
     // Update staff and permissions in transaction
     const updated = await this.prisma.$transaction(async (tx) => {
-      // Update staff profile
+      // Update permissions first if provided
+      if (dto.permissions) {
+        await tx.staffPermission.upsert({
+          where: { staffId: staff.id },
+          update: { permissions: dto.permissions },
+          create: {
+            staffId: staff.id,
+            permissions: dto.permissions,
+          },
+        });
+      }
+
+      // Then update staff profile and fetch with updated permissions
       const updatedStaff = await tx.staff.update({
         where: { id: staffId },
         data: {
@@ -239,18 +252,6 @@ export class StaffService {
           permissions: true,
         },
       });
-
-      // Update permissions if provided (using upsert to handle missing permissions)
-      if (dto.permissions) {
-        await tx.staffPermission.upsert({
-          where: { staffId: staff.id },
-          update: { permissions: dto.permissions },
-          create: {
-            staffId: staff.id,
-            permissions: dto.permissions,
-          },
-        });
-      }
 
       return updatedStaff;
     });
@@ -390,10 +391,10 @@ export class StaffService {
   }
 
   // ========================================
-  // CHECK STAFF PERMISSION
+  // CHECK STAFF PERMISSION (Type-Safe)
   // ========================================
 
-  async hasPermission(userId: string, permission: string): Promise<boolean> {
+  async hasPermission(userId: string, permission: StaffPermission): Promise<boolean> {
     const staff = await this.prisma.staff.findUnique({
       where: { userId },
       include: { permissions: true },
