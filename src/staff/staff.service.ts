@@ -1,11 +1,11 @@
 // backend/src/staff/staff.service.ts
 
-import { 
-  Injectable, 
-  NotFoundException, 
-  ForbiddenException, 
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
   ConflictException,
-  BadRequestException 
+  BadRequestException
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../notifications/email.service';
@@ -104,7 +104,7 @@ export class StaffService {
       });
 
       // Store permissions in a separate table
-      await tx.staffPermission.create({
+      await tx.staffPermissions.create({
         data: {
           staffId: staff.id,
           permissions: dto.permissions,
@@ -130,7 +130,7 @@ export class StaffService {
     }
 
     return {
-      message: emailSent 
+      message: emailSent
         ? 'Staff member created successfully. Credentials sent via email.'
         : 'Staff member created successfully. Warning: Email delivery failed.',
       staff: result,
@@ -225,7 +225,7 @@ export class StaffService {
     const updated = await this.prisma.$transaction(async (tx) => {
       // Update permissions first if provided
       if (dto.permissions) {
-        await tx.staffPermission.upsert({
+        await tx.staffPermissions.upsert({
           where: { staffId: staff.id },
           update: { permissions: dto.permissions },
           create: {
@@ -335,9 +335,9 @@ export class StaffService {
       }),
       this.prisma.staff.update({
         where: { id: staffId },
-        data: { 
-          tempPasswordHash: hashedPassword, 
-          tempPasswordExpiry 
+        data: {
+          tempPasswordHash: hashedPassword,
+          tempPasswordExpiry
         },
       }),
     ]);
@@ -358,7 +358,7 @@ export class StaffService {
     }
 
     return {
-      message: emailSent 
+      message: emailSent
         ? 'Credentials resent successfully'
         : 'Credentials updated but email delivery failed',
       emailSent,
@@ -412,7 +412,7 @@ export class StaffService {
   // ========================================
 
   async changeStaffPassword(
-    userId: string, 
+    userId: string,
     dto: { tempPassword: string; newPassword: string; confirmPassword: string }
   ) {
     if (dto.newPassword !== dto.confirmPassword) {

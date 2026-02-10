@@ -37,11 +37,10 @@ export class MedicationsService {
     const existingMedication = await this.prisma.medication.findFirst({
       where: {
         branchId: dto.branchId,
-        pharmacyId: pharmacy.id,
-        name: {
-          equals: dto.name,
-          mode: 'insensitive',
-        },
+        OR: [
+          { name: {equals:dto.name, mode:'insensitive'}},
+          {chemicalName: {equals: dto.chemicalName, mode:'insensitive'}}
+        ]
       },
     });
 
@@ -177,7 +176,7 @@ export class MedicationsService {
     // If updating the name, check for duplicates in the same branch
     if (dto.name) {
       const targetBranchId = dto.branchId || medication.branchId;
-      
+
       const existingMedication = await this.prisma.medication.findFirst({
         where: {
           branchId: targetBranchId,

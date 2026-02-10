@@ -70,10 +70,29 @@ export class PrescriptionsService {
 
     return {
       prescription,
-      message: this.genAI 
+      message: this.genAI
         ? 'Prescription uploaded successfully. AI is processing your prescription...'
         : 'Prescription uploaded successfully.',
     };
+  }
+
+  //=========================================
+  // Prescription Verification
+  //=========================================
+
+  async verifyPrescriptionManually(prescriptionId: string,staffUserId: string, isApproved:boolean, notes?: string){
+    const staff = await this.prisma.staff.findUnique({where: {userId: staffUserId}});
+    if(!staff) throw new ForbiddenException('Only pharmacy staff can verify prescriptions');
+
+    return this.prisma.prescription.update({
+      where: {id: prescriptionId},
+      data: {
+        status: isApproved ? 'APPROVED' : 'REJECTED',
+        rejectionReason: isApproved ? null : notes,
+        reviewedAt: new Date(),
+      }
+    })
+
   }
 
   // ========================================
@@ -125,7 +144,7 @@ export class PrescriptionsService {
       const prescription = await this.findById(prescriptionId);
       const availableCount = matchedMeds.filter(m => m.available).length;
       const totalCount = matchedMeds.length;
-      
+
       await this.notificationsService.create({
         patientId: prescription.patientId,
         type: 'PRESCRIPTION_APPROVED',
@@ -157,7 +176,7 @@ export class PrescriptionsService {
       const imageBase64 = await this.downloadImageAsBase64(fileUrl);
 
       // Use Gemini Flash model (free and fast)
-      const model = this.genAI.getGenerativeModel({ 
+      const model = this.genAI.getGenerativeModel({
         model: 'gemini-1.5-flash',
         generationConfig: {
           temperature: 0.1, // Low temperature for accuracy
@@ -199,10 +218,10 @@ Do not include any explanation, only the JSON array.`,
       // Parse Gemini's response
       const responseText = result.response.text();
       console.log('Gemini response:', responseText);
-      
+
       // Extract JSON from response
       const jsonMatch = responseText.match(/\[[\s\S]*\]/);
-      
+
       if (!jsonMatch) {
         console.error('No valid JSON found in Gemini response');
         return [];
@@ -210,7 +229,7 @@ Do not include any explanation, only the JSON array.`,
 
       const medications: ExtractedMedication[] = JSON.parse(jsonMatch[0]);
       console.log(`Extracted ${medications.length} medications from prescription`);
-      
+
       return medications;
 
     } catch (error) {
