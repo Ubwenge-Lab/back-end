@@ -71,6 +71,7 @@ enum NotificationType {
   PRESCRIPTION_APPROVED
   PHARMACY_APPROVED
   PHARMACY_REJECTED
+  LOW_STOCK
 }
 
 enum PrescriptionStatus {

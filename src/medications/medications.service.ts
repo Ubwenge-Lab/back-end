@@ -3,6 +3,7 @@
 import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PharmaciesService } from '../pharmacies/pharmacies.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateMedicationDto, UpdateMedicationDto, SearchMedicationsDto } from './dto';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class MedicationsService {
   constructor(
     private prisma: PrismaService,
     private pharmaciesService: PharmaciesService,
+    private notificationsService: NotificationsService,
   ) {}
 
   // Create medication (Pharmacy only)
@@ -306,13 +308,19 @@ export class MedicationsService {
   async getLowStock(userId: string) {
     const pharmacy = await this.pharmaciesService.findByUserId(userId);
 
+    // Use raw query to compare quantity against lowStockThreshold column
+    const lowStockIds = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM medications
+      WHERE "pharmacyId" = ${pharmacy.id}
+        AND quantity <= "lowStockThreshold"
+        AND quantity > 0
+    `;
+
+    if (lowStockIds.length === 0) return [];
+
     return this.prisma.medication.findMany({
       where: {
-        pharmacyId: pharmacy.id,
-        quantity: {
-          lte: this.prisma.medication.fields.lowStockThreshold,
-          gt: 0,
-        },
+        id: { in: lowStockIds.map((m) => m.id) },
       },
       include: {
         branch: {
@@ -341,16 +349,27 @@ export class MedicationsService {
     });
   }
 
-  // FIX: Reduce stock with atomic operation (NO LONGER NEEDED - handled in orders service)
-  // This method is kept for backward compatibility but should not be used for order creation
+  // Reduce stock with atomic operation + low-stock alerts
   async reduceStock(medicationId: string, quantity: number) {
-    const medication = await this.findById(medicationId);
+    // Check stock BEFORE decrementing
+    const medication = await this.prisma.medication.findUnique({
+      where: { id: medicationId },
+      include: {
+        branch: { select: { name: true } },
+        pharmacy: { select: { id: true, userId: true, name: true } },
+      },
+    });
+
+    if (!medication) {
+      throw new NotFoundException('Medication not found');
+    }
 
     if (medication.quantity < quantity) {
       throw new ForbiddenException('Insufficient stock');
     }
 
-    return this.prisma.medication.update({
+    // Atomically decrement stock
+    const updated = await this.prisma.medication.update({
       where: { id: medicationId },
       data: {
         quantity: {
@@ -358,6 +377,36 @@ export class MedicationsService {
         },
       },
     });
+
+    // Send low-stock notification to pharmacy owner
+    if (updated.quantity <= medication.lowStockThreshold && updated.quantity > 0) {
+      try {
+        await this.notificationsService.create({
+          pharmacyId: medication.pharmacy.id,
+          type: 'LOW_STOCK',
+          title: 'Low Stock Alert',
+          message: `Warning: ${medication.name}${medication.chemicalName ? ` (${medication.chemicalName})` : ''} is running low. Only ${updated.quantity} left in ${medication.branch.name}.`,
+        });
+      } catch (error) {
+        console.error('Failed to send low stock notification:', error);
+      }
+    }
+
+    // Send out-of-stock notification
+    if (updated.quantity === 0) {
+      try {
+        await this.notificationsService.create({
+          pharmacyId: medication.pharmacy.id,
+          type: 'LOW_STOCK',
+          title: 'Out of Stock Alert',
+          message: `${medication.name}${medication.chemicalName ? ` (${medication.chemicalName})` : ''} is now OUT OF STOCK in ${medication.branch.name}. Please restock immediately.`,
+        });
+      } catch (error) {
+        console.error('Failed to send out-of-stock notification:', error);
+      }
+    }
+
+    return updated;
   }
 
   // Restore stock (called when order is cancelled)
