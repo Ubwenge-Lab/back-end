@@ -1,5 +1,3 @@
-// backend/src/prisma/schema.prisma
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,10 +8,257 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+model User {
+  id                     String    @id @default(uuid())
+  email                  String    @unique
+  password               String
+  role                   UserRole
+  isVerified             Boolean   @default(false)
+  refreshToken           String?
+  createdAt              DateTime  @default(now())
+  updatedAt              DateTime  @updatedAt
+  verificationCode       String?
+  verificationCodeExpiry DateTime?
+  patient                Patient?
+  pharmacy               Pharmacy?
 
-// ========================================
-// ENUMS
-// ========================================
+  @@index([email])
+  @@map("users")
+}
+
+model Patient {
+  id                String         @id @default(uuid())
+  userId            String         @unique
+  firstName         String
+  lastName          String
+  phone             String
+  dateOfBirth       DateTime?
+  gender            String?
+  address           String?
+  insuranceProvider String?
+  insurancePolicy   String?
+  insuranceMemberId String?
+  insuranceCoverage Int?           @default(0)
+  createdAt         DateTime       @default(now())
+  updatedAt         DateTime       @updatedAt
+  cart_items        cart_items[]
+  notifications     Notification[]
+  orders            Order[]
+  user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prescriptions     Prescription[]
+
+  @@index([userId])
+  @@map("patients")
+}
+
+model Pharmacy {
+  id                  String         @id @default(uuid())
+  userId              String         @unique
+  name                String
+  phone               String
+  address             String
+  latitude            Float?
+  longitude           Float?
+  deliveryZones       Json?
+  operatingHours      Json?
+  status              PharmacyStatus @default(PENDING)
+  rejectionReason     String?
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  approvedAt          DateTime?
+  dateOfIncorporation DateTime
+  pharmacyLicense     String
+  rdbCertificate      String
+  representativeName  String
+  cart_items          cart_items[]
+  medications         Medication[]
+  notifications       Notification[]
+  orders              Order[]
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([status])
+  @@map("pharmacies")
+}
+
+model Medication {
+  id                       String                     @id @default(uuid())
+  pharmacyId               String
+  name                     String
+  description              String?
+  category                 String
+  price                    Float
+  quantity                 Int
+  lowStockThreshold        Int                        @default(10)
+  requiresPrescription     Boolean                    @default(false)
+  imageUrl                 String?
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+  cart_items               cart_items[]
+  pharmacy                 Pharmacy                   @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  orderItems               OrderItem[]
+  prescription_medications prescription_medications[]
+
+  @@index([pharmacyId])
+  @@index([name])
+  @@map("medications")
+}
+
+model Order {
+  id                 String         @id @default(uuid())
+  patientId          String
+  pharmacyId         String
+  orderNumber        String         @unique
+  type               OrderType
+  status             OrderStatus    @default(PENDING)
+  deliveryAddress    String?
+  deliveryFee        Float          @default(0)
+  deliveryZone       String?
+  prescriptionId     String?        @unique
+  subtotal           Float
+  total              Float
+  paymentMethod      PaymentMethod
+  paymentStatus      PaymentStatus  @default(PENDING)
+  insuranceCoverage  Float?
+  patientPayment     Float
+  cancellationReason String?
+  cancelledAt        DateTime?
+  createdAt          DateTime       @default(now())
+  updatedAt          DateTime       @updatedAt
+  notifications      Notification[]
+  orderItems         OrderItem[]
+  patient            Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pharmacy           Pharmacy       @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  prescription       Prescription?  @relation(fields: [prescriptionId], references: [id])
+  payment            Payment?
+
+  @@index([patientId])
+  @@index([pharmacyId])
+  @@index([orderNumber])
+  @@index([status])
+  @@map("orders")
+}
+
+model OrderItem {
+  id           String     @id @default(uuid())
+  orderId      String
+  medicationId String
+  quantity     Int
+  price        Float
+  createdAt    DateTime   @default(now())
+  medication   Medication @relation(fields: [medicationId], references: [id])
+  order        Order      @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([medicationId])
+  @@map("order_items")
+}
+
+model Prescription {
+  id                       String                     @id @default(uuid())
+  patientId                String
+  fileUrl                  String
+  fileName                 String
+  fileType                 String
+  status                   PrescriptionStatus         @default(PENDING)
+  rejectionReason          String?
+  reviewedAt               DateTime?
+  createdAt                DateTime                   @default(now())
+  updatedAt                DateTime                   @updatedAt
+  aiProcessingError        String?
+  aiProcessingStatus       AIProcessingStatus?        @default(PENDING)
+  extractedMedications     Json?
+  cart_items               cart_items[]
+  order                    Order?
+  prescription_medications prescription_medications[]
+  patient                  Patient                    @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([status])
+  @@map("prescriptions")
+}
+
+model Payment {
+  id                    String        @id @default(uuid())
+  orderId               String        @unique
+  amount                Float
+  paymentMethod         PaymentMethod
+  status                PaymentStatus @default(PENDING)
+  transactionId         String?       @unique
+  flutterwaveRef        String?       @unique
+  insuranceProvider     String?
+  insurancePolicyNumber String?
+  insuranceCoverage     Float?
+  insuranceVerified     Boolean       @default(false)
+  paymentResponse       Json?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+  order                 Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId])
+  @@index([transactionId])
+  @@map("payments")
+}
+
+model Notification {
+  id         String           @id @default(uuid())
+  userId     String?
+  patientId  String?
+  pharmacyId String?
+  orderId    String?
+  type       NotificationType
+  title      String
+  message    String
+  isRead     Boolean          @default(false)
+  createdAt  DateTime         @default(now())
+  order      Order?           @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  patient    Patient?         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pharmacy   Pharmacy?        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([pharmacyId])
+  @@index([orderId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model cart_items {
+  id             String        @id
+  patientId      String
+  pharmacyId     String
+  medicationId   String
+  quantity       Int           @default(1)
+  prescriptionId String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime
+  medications    Medication    @relation(fields: [medicationId], references: [id], onDelete: Cascade)
+  patients       Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  pharmacies     Pharmacy      @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  prescriptions  Prescription? @relation(fields: [prescriptionId], references: [id])
+
+  @@unique([patientId, medicationId])
+  @@index([medicationId])
+  @@index([patientId])
+  @@index([pharmacyId])
+}
+
+model prescription_medications {
+  id                  String       @id
+  prescriptionId      String
+  medicationName      String
+  dosage              String?
+  frequency           String?
+  duration            String?
+  quantity            Int          @default(1)
+  matchedMedicationId String?
+  available           Boolean      @default(false)
+  createdAt           DateTime     @default(now())
+  medications         Medication?  @relation(fields: [matchedMedicationId], references: [id])
+  prescriptions       Prescription @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
+
+  @@index([matchedMedicationId])
+  @@index([prescriptionId])
+}
 
 enum UserRole {
   SUPER_ADMIN
@@ -68,6 +313,7 @@ enum NotificationType {
   PRESCRIPTION_REJECTED
   PHARMACY_APPROVED
   PHARMACY_REJECTED
+  PRESCRIPTION_APPROVED
 }
 
 enum PrescriptionStatus {
@@ -76,272 +322,9 @@ enum PrescriptionStatus {
   REJECTED
 }
 
-// ========================================
-// MODELS
-// ========================================
-
-model User {
-  id                    String    @id @default(uuid())
-  email                 String    @unique
-  password              String
-  role                  UserRole
-  isVerified            Boolean   @default(false)
-  
-  // Email Verification with 5-digit code
-  verificationCode      String?
-  verificationCodeExpiry DateTime?
-  
-  refreshToken          String?   @db.Text
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-
-  // Relations
-  patient               Patient?
-  pharmacy              Pharmacy?
-
-  @@index([email])
-  @@map("users")
-}
-
-model Patient {
-  id            String    @id @default(uuid())
-  userId        String    @unique
-  firstName     String
-  lastName      String
-  phone         String
-  dateOfBirth   DateTime?
-  gender        String?
-  address       String?
-  
-  // Insurance Info
-  insuranceProvider String?
-  insurancePolicy   String?
-  insuranceMemberId String?
-  insuranceCoverage Int?    @default(0) // Percentage (0-100)
-
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-
-  // Relations
-  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  orders        Order[]
-  prescriptions Prescription[]
-  notifications Notification[]
-
-  @@index([userId])
-  @@map("patients")
-}
-
-model Pharmacy {
-  id                  String          @id @default(uuid())
-  userId              String          @unique
-  
-  // Basic Information
-  name                String
-  representativeName  String          // Must match RDB certificate
-  phone               String
-  address             String
-  latitude            Float?
-  longitude           Float?
-  
-  // Legal Documents
-  dateOfIncorporation DateTime
-  rdbCertificate      String          // S3 URL of RDB certificate
-  pharmacyLicense     String          // S3 URL of pharmacy license certificate
-  
-  // Delivery Zones (JSON: [{name: "Zone 1", maxDistance: 5, fee: 1000}])
-  deliveryZones       Json?
-  
-  // Operating Hours (JSON: {monday: "8:00-18:00", ...})
-  operatingHours      Json?
-  
-  // Approval Status
-  status              PharmacyStatus  @default(PENDING)
-  rejectionReason     String?         @db.Text
-  
-  createdAt           DateTime        @default(now())
-  updatedAt           DateTime        @updatedAt
-  approvedAt          DateTime?
-
-  // Relations
-  user                User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  medications         Medication[]
-  orders              Order[]
-  notifications       Notification[]
-
-  @@index([userId])
-  @@index([status])
-  @@map("pharmacies")
-}
-
-model Medication {
-  id                    String    @id @default(uuid())
-  pharmacyId            String
-  name                  String
-  description           String?   @db.Text
-  category              String
-  price                 Float
-  quantity              Int
-  lowStockThreshold     Int       @default(10)
-  requiresPrescription  Boolean   @default(false)
-  imageUrl              String?
-  
-  createdAt             DateTime  @default(now())
-  updatedAt             DateTime  @updatedAt
-
-  // Relations
-  pharmacy              Pharmacy  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
-  orderItems            OrderItem[]
-
-  @@index([pharmacyId])
-  @@index([name])
-  @@map("medications")
-}
-
-model Order {
-  id                String        @id @default(uuid())
-  patientId         String
-  pharmacyId        String
-  
-  // Order Details
-  orderNumber       String        @unique
-  type              OrderType
-  status            OrderStatus   @default(PENDING)
-  
-  // Delivery Info
-  deliveryAddress   String?
-  deliveryFee       Float         @default(0)
-  deliveryZone      String?
-  
-  // Prescription Info
-  prescriptionId    String?       @unique
-  
-  // Payment Info
-  subtotal          Float
-  total             Float
-  paymentMethod     PaymentMethod
-  paymentStatus     PaymentStatus @default(PENDING)
-  insuranceCoverage Float?        // Amount covered by insurance
-  patientPayment    Float         // Amount patient pays
-  
-  // Cancellation
-  cancellationReason String?      @db.Text
-  cancelledAt       DateTime?
-  
-  createdAt         DateTime      @default(now())
-  updatedAt         DateTime      @updatedAt
-
-  // Relations
-  patient           Patient       @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  pharmacy          Pharmacy      @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
-  prescription      Prescription? @relation(fields: [prescriptionId], references: [id])
-  orderItems        OrderItem[]
-  payment           Payment?
-  notifications     Notification[]
-
-  @@index([patientId])
-  @@index([pharmacyId])
-  @@index([orderNumber])
-  @@index([status])
-  @@map("orders")
-}
-
-model OrderItem {
-  id            String      @id @default(uuid())
-  orderId       String
-  medicationId  String
-  quantity      Int
-  price         Float       // Price at time of order
-  
-  createdAt     DateTime    @default(now())
-
-  // Relations
-  order         Order       @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  medication    Medication  @relation(fields: [medicationId], references: [id])
-
-  @@index([orderId])
-  @@index([medicationId])
-  @@map("order_items")
-}
-
-model Prescription {
-  id                String              @id @default(uuid())
-  patientId         String
-  fileUrl           String              // S3 URL of prescription image/PDF
-  fileName          String
-  fileType          String
-  
-  status            PrescriptionStatus  @default(PENDING)
-  rejectionReason   String?             @db.Text
-  reviewedAt        DateTime?
-  
-  createdAt         DateTime            @default(now())
-  updatedAt         DateTime            @updatedAt
-
-  // Relations
-  patient           Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  order             Order?
-
-  @@index([patientId])
-  @@index([status])
-  @@map("prescriptions")
-}
-
-model Payment {
-  id                  String        @id @default(uuid())
-  orderId             String        @unique
-  
-  // Payment Details
-  amount              Float
-  paymentMethod       PaymentMethod
-  status              PaymentStatus @default(PENDING)
-  
-  // Flutterwave Transaction Details
-  transactionId       String?       @unique
-  flutterwaveRef      String?       @unique
-  
-  // Insurance Details (if applicable)
-  insuranceProvider   String?
-  insurancePolicyNumber String?
-  insuranceCoverage   Float?
-  insuranceVerified   Boolean       @default(false)
-  
-  // Payment Response (JSON)
-  paymentResponse     Json?
-  
-  createdAt           DateTime      @default(now())
-  updatedAt           DateTime      @updatedAt
-
-  // Relations
-  order               Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@index([orderId])
-  @@index([transactionId])
-  @@map("payments")
-}
-
-model Notification {
-  id          String            @id @default(uuid())
-  userId      String?           // Can be patient or pharmacy
-  patientId   String?
-  pharmacyId  String?
-  orderId     String?
-  
-  type        NotificationType
-  title       String
-  message     String            @db.Text
-  isRead      Boolean           @default(false)
-  
-  createdAt   DateTime          @default(now())
-
-  // Relations
-  patient     Patient?          @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  pharmacy    Pharmacy?         @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
-  order       Order?            @relation(fields: [orderId], references: [id], onDelete: Cascade)
-
-  @@index([patientId])
-  @@index([pharmacyId])
-  @@index([orderId])
-  @@index([isRead])
-  @@map("notifications")
+enum AIProcessingStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  FAILED
 }

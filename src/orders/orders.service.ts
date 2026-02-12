@@ -37,11 +37,14 @@ export class OrdersService {
     }
 
     // Validate items and calculate subtotal
+    return await this.prisma.$transaction(async (tx) => {
     let subtotal = 0;
     const orderItems: { medicationId: string; quantity: number; price: number }[] = [];
 
     for (const item of dto.items) {
-      const medication = await this.medicationsService.findById(item.medicationId);
+      //Fetching medication within the transaction to ensure stock is up-to-date
+      const medication = await tx.medication.findUnique({where:{id:item.medicationId}});
+      if (!medication) throw new NotFoundException(`Medication ${item.medicationId} not found`);
 
       // Check stock
       if (medication.quantity < item.quantity) {
@@ -70,6 +73,7 @@ export class OrdersService {
         quantity: item.quantity,
         price: medication.price,
       });
+
     }
 
     // Calculate delivery fee if applicable
@@ -107,7 +111,7 @@ export class OrdersService {
     const orderNumber = await this.generateOrderNumber();
 
     // Create order
-    const order = await this.prisma.order.create({
+    const order = await tx.order.create({
       data: {
         patientId: patient.id,
         pharmacyId: dto.pharmacyId,
@@ -139,11 +143,6 @@ export class OrdersService {
       },
     });
 
-    // Reduce medication stock
-    for (const item of dto.items) {
-      await this.medicationsService.reduceStock(item.medicationId, item.quantity);
-    }
-
     // Send notification to pharmacy
     await this.notificationsService.create({
       pharmacyId: pharmacy.id,
@@ -163,7 +162,8 @@ export class OrdersService {
     });
 
     return order;
-  }
+  });
+}
 
   // ========================================
   // GET ORDER BY ID
@@ -191,8 +191,17 @@ export class OrdersService {
       },
     });
 
-    if (!order) {
-      throw new NotFoundException('Order not found');
+    //Verify identity
+    if (userId) {
+      const patient = await this.patientsService.findByUserId(userId).catch(() => null);
+      const pharmacy = await this.pharmaciesService.findByUserId(userId).catch(() => null);
+
+      const isOwner = (patient && order.patientId === patient.id) ||
+                      (pharmacy && order.pharmacyId === pharmacy.id);
+
+      if (!isOwner) {
+        throw new ForbiddenException('You are not authorized to access this order');
+      }
     }
 
     return order;
@@ -316,7 +325,8 @@ export class OrdersService {
     }
 
     // Check if cancellation is allowed (only until PREPARING)
-    if (['PREPARING', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'DELIVERED', 'COMPLETED'].includes(order.status)) {
+    if (['PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'DELIVERED', 'COMPLETED'].includes(order.status)
+) {
       throw new BadRequestException(
         'Cannot cancel order at this stage. Please contact the pharmacy.',
       );
@@ -332,10 +342,15 @@ export class OrdersService {
       },
     });
 
-    // Restore medication stock
-    for (const item of order.orderItems) {
-      await this.medicationsService.restoreStock(item.medicationId, item.quantity);
-    }
+    // Restore stock only if payment completed
+if (order.paymentStatus === 'COMPLETED') {
+  for (const item of order.orderItems) {
+    await this.medicationsService.restoreStock(
+      item.medicationId,
+      item.quantity,
+    );
+  }
+}
 
     // Notify pharmacy
     await this.notificationsService.create({
@@ -372,21 +387,23 @@ export class OrdersService {
   }
 
   private validateStatusTransition(currentStatus: string, newStatus: string) {
-    const validTransitions: Record<string, string[]> = {
-      PENDING: ['ACCEPTED', 'CANCELLED'],
-      ACCEPTED: ['PREPARING', 'CANCELLED'],
-      PREPARING: ['OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'],
-      OUT_FOR_DELIVERY: ['DELIVERED'],
-      READY_FOR_PICKUP: ['COMPLETED'],
-      DELIVERED: ['COMPLETED'],
-    };
+  const validTransitions: Record<string, string[]> = {
 
-    if (!validTransitions[currentStatus]?.includes(newStatus)) {
-      throw new BadRequestException(
-        `Cannot transition from ${currentStatus} to ${newStatus}`,
-      );
-    }
+    PENDING: ['PREPARING', 'CANCELLED'],
+    PREPARING: ['READY', 'READY_FOR_PICKUP'],
+    READY: ['OUT_FOR_DELIVERY'],
+    OUT_FOR_DELIVERY: ['DELIVERED'],
+    READY_FOR_PICKUP: ['COMPLETED'],
+    DELIVERED: ['COMPLETED'],
+  };
+
+  if (!validTransitions[currentStatus]?.includes(newStatus)) {
+    throw new BadRequestException(
+      `Cannot transition from ${currentStatus} to ${newStatus}`,
+    );
   }
+}
+
 
   private async sendStatusNotification(order: any) {
     const notificationMap: Record<string, { title: string; message: string; type: any }> = {
@@ -431,4 +448,61 @@ export class OrdersService {
       });
     }
   }
+
+  async confirmDelivery(orderId: string, userId: string) {
+  const order = await this.findById(orderId);
+  const patient = await this.patientsService.findByUserId(userId);
+
+  if (order.patientId !== patient.id) {
+    throw new ForbiddenException();
+  }
+
+  if (order.status !== 'OUT_FOR_DELIVERY') {
+    throw new BadRequestException('Invalid state');
+  }
+
+  const updated = await this.prisma.order.update({
+    where: { id: orderId },
+    data: { status: 'DELIVERED' },
+  });
+
+  await this.sendStatusNotification(updated);
+
+  return updated;
+}
+
+async handlePaymentSuccess(orderId: string) {
+  return await this.prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { orderItems: true },
+    });
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    // Prevent double processing
+    if (order.paymentStatus === 'COMPLETED') {
+      return order; // Already processed
+    }
+
+    // NOW reduce stock (this is the ONLY place stock should be reduced)
+    for (const item of order.orderItems) {
+      await tx.medication.update({
+        where: { id: item.medicationId },
+        data: { quantity: { decrement: item.quantity } },
+      });
+    }
+
+    // Update order status to PENDING (ready for pharmacy to prepare)
+    const updated = await tx.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'PENDING',
+        paymentStatus: 'COMPLETED'
+      },
+    });
+
+    return updated;
+  });
+}
 }

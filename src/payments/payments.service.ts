@@ -1,10 +1,19 @@
 // backend/src/payments/payments.service.ts
 
-import { Injectable, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FlutterwaveService } from './flutterwave.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { InitiatePaymentDto, VerifyPaymentDto, MobileMoneyPaymentDto } from './dto';
+import {
+  InitiatePaymentDto,
+  VerifyPaymentDto,
+  MobileMoneyPaymentDto,
+} from './dto';
+import { OrdersService } from 'src/orders/orders.service';
 
 @Injectable()
 export class PaymentsService {
@@ -12,6 +21,7 @@ export class PaymentsService {
     private prisma: PrismaService,
     private flutterwaveService: FlutterwaveService,
     private notificationsService: NotificationsService,
+    private ordersService: OrdersService,
   ) {}
 
   // ========================================
@@ -38,6 +48,12 @@ export class PaymentsService {
       throw new BadRequestException('Order already paid');
     }
 
+    // After finding the order, add:
+if (order.status === 'CANCELLED') {
+  throw new BadRequestException('Cannot pay for cancelled order');
+}
+
+
     // Create payment record
     const payment = await this.prisma.payment.create({
       data: {
@@ -58,16 +74,15 @@ export class PaymentsService {
     switch (order.paymentMethod) {
       case 'MTN_MOMO':
       case 'AIRTEL_MONEY':
-
         if (!dto.phoneNumber) {
           throw new BadRequestException(
-            'Phone number is required for mobile money payments'
+            'Phone number is required for mobile money payments',
           );
         }
         paymentResponse = await this.flutterwaveService.chargeMobileMoney({
           orderId: order.orderNumber,
           amount: order.patientPayment,
-          phoneNumber: dto.phoneNumber, 
+          phoneNumber: dto.phoneNumber,
           provider: order.paymentMethod === 'MTN_MOMO' ? 'MTN' : 'AIRTEL',
           customerEmail: order.patient.user.email,
           customerName: `${order.patient.firstName} ${order.patient.lastName}`,
@@ -87,7 +102,10 @@ export class PaymentsService {
 
       case 'INSURANCE':
         // Insurance payment - already calculated
-        paymentResponse = { status: 'success', message: 'Insurance coverage applied' };
+        paymentResponse = {
+          status: 'success',
+          message: 'Insurance coverage applied',
+        };
         break;
     }
 
@@ -128,7 +146,9 @@ export class PaymentsService {
     }
 
     // Verify with Flutterwave
-    const verification = await this.flutterwaveService.verifyPayment(dto.transactionId);
+    const verification = await this.flutterwaveService.verifyPayment(
+      dto.transactionId,
+    );
 
     if (verification.data.status === 'successful') {
       // Update payment
@@ -140,14 +160,8 @@ export class PaymentsService {
           paymentResponse: verification as any,
         },
       });
-
-      // Update order
-      await this.prisma.order.update({
-        where: { id: payment.orderId },
-        data: {
-          paymentStatus: 'COMPLETED',
-        },
-      });
+      // Trigger stock reduction & order status update
+      await this.ordersService.handlePaymentSuccess(payment.orderId);
 
       // Send notifications
       await this.notificationsService.create({
@@ -188,6 +202,14 @@ export class PaymentsService {
   async validateOTP(paymentId: string, otp: string) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
+       include: { 
+      order: {
+        include: {
+          patient: true,
+          pharmacy: true,
+        },
+      },
+    },
     });
 
     if (!payment || !payment.flutterwaveRef) {
@@ -207,12 +229,24 @@ export class PaymentsService {
           transactionId: validation.data.tx_ref,
         },
       });
+       // Trigger stock reduction & order status update
+      await this.ordersService.handlePaymentSuccess(payment.orderId);
 
-      await this.prisma.order.update({
-        where: { id: payment.orderId },
-        data: {
-          paymentStatus: 'COMPLETED',
-        },
+      // Send notifications
+      await this.notificationsService.create({
+        patientId: payment.order.patientId,
+        orderId: payment.orderId,
+        type: 'ORDER_PLACED',
+        title: 'Payment Successful',
+        message: `Payment of ${payment.amount} RWF completed for order #${payment.order.orderNumber}`,
+      });
+
+      await this.notificationsService.create({
+        pharmacyId: payment.order.pharmacyId,
+        orderId: payment.orderId,
+        type: 'ORDER_PLACED',
+        title: 'Payment Received',
+        message: `Payment received for order #${payment.order.orderNumber}`,
       });
 
       return { success: true, message: 'OTP validated successfully' };
