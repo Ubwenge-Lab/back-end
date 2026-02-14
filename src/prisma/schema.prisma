@@ -21,6 +21,8 @@ model User {
   verificationCodeExpiry DateTime?
   patient                Patient?
   pharmacy               Pharmacy?
+  staff                  Staff?
+  branch                 Branch?   @relation("BranchManager")
 
   @@index([email])
   @@map("users")
@@ -74,6 +76,7 @@ model Pharmacy {
   medications         Medication[]
   notifications       Notification[]
   orders              Order[]
+  branches            Branch[]
   user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
@@ -84,6 +87,7 @@ model Pharmacy {
 model Medication {
   id                       String                     @id @default(uuid())
   pharmacyId               String
+  branchId                 String
   name                     String
   description              String?
   category                 String
@@ -96,10 +100,13 @@ model Medication {
   updatedAt                DateTime                   @updatedAt
   cart_items               cart_items[]
   pharmacy                 Pharmacy                   @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  branch                   Branch                     @relation(fields: [branchId], references: [id], onDelete: Cascade)
   orderItems               OrderItem[]
   prescription_medications prescription_medications[]
+  transferItems            StockTransferItem[]
 
   @@index([pharmacyId])
+  @@index([branchId])
   @@index([name])
   @@map("medications")
 }
@@ -108,6 +115,7 @@ model Order {
   id                 String         @id @default(uuid())
   patientId          String
   pharmacyId         String
+  branchId           String
   orderNumber        String         @unique
   type               OrderType
   status             OrderStatus    @default(PENDING)
@@ -129,11 +137,13 @@ model Order {
   orderItems         OrderItem[]
   patient            Patient        @relation(fields: [patientId], references: [id], onDelete: Cascade)
   pharmacy           Pharmacy       @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  branch             Branch         @relation(fields: [branchId], references: [id], onDelete: Cascade)
   prescription       Prescription?  @relation(fields: [prescriptionId], references: [id])
   payment            Payment?
 
   @@index([patientId])
   @@index([pharmacyId])
+  @@index([branchId])
   @@index([orderNumber])
   @@index([status])
   @@map("orders")
@@ -260,10 +270,97 @@ model prescription_medications {
   @@index([prescriptionId])
 }
 
+model Branch {
+  id                 String       @id @default(uuid())
+  pharmacyId         String
+  managerId          String?      @unique
+  name               String
+  address            String
+  phone              String?
+  latitude           Float?
+  longitude          Float?
+  isActive           Boolean      @default(true)
+  operatingHours     Json?
+  branchStatus       BranchStatus @default(INVITED)
+  branchManagerEmail String
+  pharmacyLicense    String?
+  tempPasswordHash   String?
+  tempPasswordExpiry DateTime?
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  pharmacy           Pharmacy     @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  manager            User?        @relation("BranchManager", fields: [managerId], references: [id])
+  staff              Staff[]
+  medications        Medication[]
+  orders             Order[]
+  sentTransfers      StockTransfer[] @relation("FromBranch")
+  receivedTransfers  StockTransfer[] @relation("ToBranch")
+
+  @@index([pharmacyId])
+  @@index([branchStatus])
+  @@map("branches")
+}
+
+model Staff {
+  id           String      @id @default(uuid())
+  userId       String      @unique
+  branchId     String
+  firstName    String
+  lastName     String
+  nationalId   String?     @unique
+  gender       String?
+  dateOfBirth  DateTime?
+  status       StaffStatus @default(ACTIVE)
+  workingHours Json?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  user         User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  branch       Branch      @relation(fields: [branchId], references: [id], onDelete: Cascade)
+
+  @@index([branchId])
+  @@index([userId])
+  @@map("staff")
+}
+
+model StockTransfer {
+  id           String         @id @default(uuid())
+  fromBranchId String
+  toBranchId   String
+  status       TransferStatus @default(PENDING)
+  notes        String?        @db.Text
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  fromBranch   Branch         @relation("FromBranch", fields: [fromBranchId], references: [id])
+  toBranch     Branch         @relation("ToBranch", fields: [toBranchId], references: [id])
+  items        StockTransferItem[]
+
+  @@index([fromBranchId])
+  @@index([toBranchId])
+  @@index([status])
+  @@map("stock_transfers")
+}
+
+model StockTransferItem {
+  id           String        @id @default(uuid())
+  transferId   String
+  medicationId String
+  quantity     Int
+  createdAt    DateTime      @default(now())
+  transfer     StockTransfer @relation(fields: [transferId], references: [id], onDelete: Cascade)
+  medication   Medication    @relation(fields: [medicationId], references: [id])
+
+  @@index([transferId])
+  @@index([medicationId])
+  @@map("stock_transfer_items")
+}
+
 enum UserRole {
   SUPER_ADMIN
   PHARMACY
   PATIENT
+  BRANCH_MANAGER
+  PHARMACIST
+  CASHIER
 }
 
 enum PharmacyStatus {
@@ -327,4 +424,24 @@ enum AIProcessingStatus {
   PROCESSING
   COMPLETED
   FAILED
+}
+
+enum BranchStatus {
+  INVITED
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum TransferStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SHIPPED
+  COMPLETED
+}
+
+enum StaffStatus {
+  ACTIVE
+  INACTIVE
 }
