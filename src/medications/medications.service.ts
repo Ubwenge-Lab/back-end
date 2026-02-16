@@ -73,13 +73,27 @@ export class MedicationsService {
       });
     }
 
+    // Check if registry ID is provided
+    let registryData = null;
+    if (dto.registryId) {
+      registryData = await this.prisma.medicationRegistry.findUnique({
+        where: { id: dto.registryId },
+      });
+
+      if (!registryData) {
+        throw new NotFoundException('Registry medication not found');
+      }
+    }
+
     // Create new medication if it doesn't exist
     return this.prisma.medication.create({
       data: {
-        name: dto.name,
-        chemicalName: dto.chemicalName,
-        description: dto.description,
-        category: dto.category,
+        name: registryData ? registryData.brandName : dto.name,
+        chemicalName: registryData ? registryData.genericName : dto.chemicalName,
+        description: registryData
+          ? `${registryData.dosageForm} - ${registryData.dosageStrength}. Manufactured by ${registryData.manufacturerName}.`
+          : dto.description,
+        category: dto.category, // Category still needs to be provided manually or mapped
         price: dto.price,
         quantity: dto.quantity,
         lowStockThreshold: dto.lowStockThreshold ?? 10,
@@ -87,6 +101,7 @@ export class MedicationsService {
         imageUrl: dto.imageUrl,
         pharmacyId: pharmacy.id,
         branchId: dto.branchId,
+        registryId: dto.registryId, // Link to registry
       },
       include: {
         pharmacy: {
@@ -407,6 +422,24 @@ export class MedicationsService {
     }
 
     return updated;
+  }
+
+  // Search official FDA registry
+  async searchRegistry(query: string) {
+    if (!query || query.length < 2) {
+      return [];
+    }
+
+    return this.prisma.medicationRegistry.findMany({
+      where: {
+        OR: [
+          { brandName: { contains: query, mode: 'insensitive' } },
+          { genericName: { contains: query, mode: 'insensitive' } },
+          { registrationNumber: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      take: 20,
+    });
   }
 
   // Restore stock (called when order is cancelled)

@@ -283,6 +283,32 @@ model StaffPermissions {
   @@map("staff_permissions")
 }
 
+model MedicationRegistry {
+  id                    String   @id @default(uuid())
+  registrationNumber    String   @unique
+  brandName             String
+  genericName           String
+  dosageStrength        String
+  dosageForm            String
+  packSize              String
+  packagingType         String
+  shelfLife             String
+  manufacturerName      String
+  manufacturerAddress   String
+  manufacturerCountry   String
+  marketingAuthHolder   String?
+  localTechRep          String?
+  registrationDate      DateTime
+  expiryDate            DateTime?
+
+  medications           Medication[]
+
+  @@index([brandName])
+  @@index([genericName])
+  @@index([registrationNumber])
+  @@map("medication_registry")
+}
+
 model Medication {
   id                      String                   @id @default(uuid())
   pharmacyId              String
@@ -307,9 +333,13 @@ model Medication {
   cartItems               CartItem[]
   transferItems           StockTransferItem[]
 
+  registryId              String?
+  registry                MedicationRegistry? @relation(fields: [registryId], references: [id])
+
   @@index([name])
   @@index([pharmacyId])
   @@index([branchId])
+  @@index([registryId])
   @@map("medications")
 }
 
