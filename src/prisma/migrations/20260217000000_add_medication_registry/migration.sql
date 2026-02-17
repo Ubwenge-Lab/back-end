@@ -33,7 +33,7 @@ CREATE INDEX "medication_registry_genericName_idx" ON "medication_registry"("gen
 CREATE INDEX "medication_registry_registrationNumber_idx" ON "medication_registry"("registrationNumber");
 
 -- AlterTable
-ALTER TABLE "Medication" ADD COLUMN "registryId" TEXT;
+ALTER TABLE "medications" ADD COLUMN "registryId" TEXT;
 
 -- AddForeignKey
-ALTER TABLE "Medication" ADD CONSTRAINT "Medication_registryId_fkey" FOREIGN KEY ("registryId") REFERENCES "medication_registry"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+ALTER TABLE "medications" ADD CONSTRAINT "medications_registryId_fkey" FOREIGN KEY ("registryId") REFERENCES "medication_registry"("id") ON DELETE SET NULL ON UPDATE CASCADE;
