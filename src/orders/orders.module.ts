@@ -9,6 +9,7 @@ import { MedicationsModule } from '../medications/medications.module';
 import { PrescriptionsModule } from '../prescriptions/prescriptions.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { PaymentsModule } from '../payments/payments.module';
+import { StaffModule } from '../staff/staff.module';
 
 @Module({
   imports: [
@@ -18,6 +19,7 @@ import { PaymentsModule } from '../payments/payments.module';
     PrescriptionsModule,
     NotificationsModule,
     PaymentsModule,
+    StaffModule,
   ],
   controllers: [OrdersController],
   providers: [OrdersService],

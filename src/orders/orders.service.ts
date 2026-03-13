@@ -11,6 +11,7 @@ import { PatientsService } from '../patients/patients.service';
 import { PharmaciesService } from '../pharmacies/pharmacies.service';
 import { MedicationsService } from '../medications/medications.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { StaffService } from '../staff/staff.service';
 import { CreateOrderDto, UpdateOrderStatusDto, CancelOrderDto } from './dto';
 
 @Injectable()
@@ -21,6 +22,7 @@ export class OrdersService {
     private pharmaciesService: PharmaciesService,
     private medicationsService: MedicationsService,
     private notificationsService: NotificationsService,
+    private staffService: StaffService,
   ) {}
 
   // ========================================
@@ -46,7 +48,7 @@ export class OrdersService {
         const medication = await tx.medication.findUnique({
           where: { id: item.medicationId }
         });
-        
+
         if (!medication) {
           throw new NotFoundException(`Medication ${item.medicationId} not found`);
         }
@@ -233,9 +235,11 @@ export class OrdersService {
     if (userId) {
       const patient = await this.patientsService.findByUserId(userId).catch(() => null);
       const pharmacy = await this.pharmaciesService.findByUserId(userId).catch(() => null);
+      const staff = await this.staffService.findByUserId(userId).catch(() => null);
 
       const isOwner = (patient && order.patientId === patient.id) ||
-                      (pharmacy && order.pharmacyId === pharmacy.id);
+                      (pharmacy && order.pharmacyId === pharmacy.id) ||
+                      (staff && staff.branch.id === order.branchId); // Allow staff to view branch orders
 
       if (!isOwner) {
         throw new ForbiddenException('You are not authorized to access this order');
@@ -280,9 +284,23 @@ export class OrdersService {
   // ========================================
 
   async findByPharmacy(userId: string, status?: string) {
-    const pharmacy = await this.pharmaciesService.findByUserId(userId);
+    let pharmacyId: string;
+    let branchId: string | undefined;
 
-    const where: any = { pharmacyId: pharmacy.id };
+    try {
+      const pharmacy = await this.pharmaciesService.findByUserId(userId);
+      pharmacyId = pharmacy.id;
+    } catch (e) {
+      // Try finding as Staff
+      const staff = await this.staffService.findByUserId(userId);
+      pharmacyId = staff.branch.pharmacyId;
+      branchId = staff.branch.id;
+    }
+
+    const where: any = { pharmacyId };
+    if (branchId) {
+      where.branchId = branchId;
+    }
     if (status) {
       where.status = status;
     }
@@ -314,10 +332,24 @@ export class OrdersService {
 
   async updateStatus(id: string, userId: string, dto: UpdateOrderStatusDto) {
     const order = await this.findById(id);
-    const pharmacy = await this.pharmaciesService.findByUserId(userId);
 
-    // Verify pharmacy owns this order
-    if (order.pharmacyId !== pharmacy.id) {
+    let isAuthorized = false;
+
+    // Check if Pharmacy Owner
+    try {
+      const pharmacy = await this.pharmaciesService.findByUserId(userId);
+      if (order.pharmacyId === pharmacy.id) isAuthorized = true;
+    } catch (e) {
+      // Check if Staff
+      try {
+        const staff = await this.staffService.findByUserId(userId);
+        if (staff.branch.id === order.branchId) isAuthorized = true;
+      } catch (err) {
+        // Not staff either
+      }
+    }
+
+    if (!isAuthorized) {
       throw new ForbiddenException('You can only update your own orders');
     }
 
@@ -408,7 +440,7 @@ export class OrdersService {
     const day = String(date.getDate()).padStart(2, '0');
 
     const prismaClient = tx || this.prisma;
-    
+
     const count = await prismaClient.order.count({
       where: {
         createdAt: {
