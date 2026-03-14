@@ -1,8 +1,9 @@
 // backend/src/medications/medications.service.ts
 
-import { Injectable, NotFoundException, ForbiddenException, ConflictException } from '@nestjs/common';
+import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PharmaciesService } from '../pharmacies/pharmacies.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateMedicationDto, UpdateMedicationDto, SearchMedicationsDto } from './dto';
 
 @Injectable()
@@ -10,6 +11,7 @@ export class MedicationsService {
   constructor(
     private prisma: PrismaService,
     private pharmaciesService: PharmaciesService,
+    private notificationsService: NotificationsService,
   ) {}
 
   // Create medication (Pharmacy only)
@@ -20,18 +22,31 @@ export class MedicationsService {
       throw new ForbiddenException('Pharmacy not approved yet');
     }
 
-    // Check if medication with same name already exists for this pharmacy
-    const existingMedication = await this.prisma.medication.findFirst({
+    // FIX: Verify branch belongs to pharmacy
+    const branch = await this.prisma.branch.findFirst({
       where: {
+        id: dto.branchId,
         pharmacyId: pharmacy.id,
-        name: {
-          equals: dto.name,
-          mode: 'insensitive',
-        },
+        isActive: true, // Only allow active branches
       },
     });
 
-    // If medication exists, add to the quantity instead of creating a new one
+    if (!branch) {
+      throw new BadRequestException('Invalid branch or branch does not belong to your pharmacy');
+    }
+
+    // Check if medication with same name already exists for this branch
+    const existingMedication = await this.prisma.medication.findFirst({
+      where: {
+        branchId: dto.branchId,
+        OR: [
+          { name: {equals:dto.name, mode:'insensitive'}},
+          {chemicalName: {equals: dto.chemicalName, mode:'insensitive'}}
+        ]
+      },
+    });
+
+    // If medication exists in this branch, add to the quantity instead of creating a new one
     if (existingMedication) {
       return this.prisma.medication.update({
         where: { id: existingMedication.id },
@@ -41,6 +56,7 @@ export class MedicationsService {
           },
           // Optionally update other fields if provided
           price: dto.price ?? existingMedication.price,
+          chemicalName: dto.chemicalName ?? existingMedication.chemicalName,
           description: dto.description ?? existingMedication.description,
           category: dto.category ?? existingMedication.category,
           lowStockThreshold: dto.lowStockThreshold ?? existingMedication.lowStockThreshold,
@@ -50,19 +66,49 @@ export class MedicationsService {
           pharmacy: {
             select: { name: true },
           },
+          branch: {
+            select: { name: true, address: true },
+          },
         },
       });
+    }
+
+    // Check if registry ID is provided
+    let registryData = null;
+    if (dto.registryId) {
+      registryData = await this.prisma.medicationRegistry.findUnique({
+        where: { id: dto.registryId },
+      });
+
+      if (!registryData) {
+        throw new NotFoundException('Registry medication not found');
+      }
     }
 
     // Create new medication if it doesn't exist
     return this.prisma.medication.create({
       data: {
-        ...dto,
+        name: registryData ? registryData.brandName : dto.name,
+        chemicalName: registryData ? registryData.genericName : dto.chemicalName,
+        description: registryData
+          ? `${registryData.dosageForm} - ${registryData.dosageStrength}. Manufactured by ${registryData.manufacturerName}.`
+          : dto.description,
+        category: dto.category, // Category still needs to be provided manually or mapped
+        price: dto.price,
+        quantity: dto.quantity,
+        lowStockThreshold: dto.lowStockThreshold ?? 10,
+        requiresPrescription: dto.requiresPrescription,
+        imageUrl: dto.imageUrl,
         pharmacyId: pharmacy.id,
+        branchId: dto.branchId,
+        registryId: dto.registryId, // Link to registry
       },
       include: {
         pharmacy: {
           select: { name: true },
+        },
+        branch: {
+          select: { name: true, address: true },
         },
       },
     });
@@ -72,6 +118,11 @@ export class MedicationsService {
   async findByPharmacy(pharmacyId: string) {
     return this.prisma.medication.findMany({
       where: { pharmacyId },
+      include: {
+        branch: {
+          select: { name: true, address: true },
+        },
+      },
       orderBy: { name: 'asc' },
     });
   }
@@ -82,12 +133,29 @@ export class MedicationsService {
     return this.findByPharmacy(pharmacy.id);
   }
 
+  // Get medications by branch
+  async findByBranch(branchId: string) {
+    return this.prisma.medication.findMany({
+      where: { branchId },
+      include: {
+        pharmacy: {
+          select: { name: true },
+        },
+        branch: {
+          select: { name: true, address: true },
+        },
+      },
+      orderBy: { name: 'asc' },
+    });
+  }
+
   // Get medication by ID
   async findById(id: string) {
     const medication = await this.prisma.medication.findUnique({
       where: { id },
       include: {
         pharmacy: true,
+        branch: true,
       },
     });
 
@@ -107,10 +175,28 @@ export class MedicationsService {
       throw new ForbiddenException('You can only update your own medications');
     }
 
-    // If updating the name, check for duplicates
+    // If updating branchId, verify it belongs to pharmacy
+    if (dto.branchId && dto.branchId !== medication.branchId) {
+      const branch = await this.prisma.branch.findFirst({
+        where: {
+          id: dto.branchId,
+          pharmacyId: pharmacy.id,
+          isActive: true,
+        },
+      });
+
+      if (!branch) {
+        throw new BadRequestException('Invalid branch or branch does not belong to your pharmacy');
+      }
+    }
+
+    // If updating the name, check for duplicates in the same branch
     if (dto.name) {
+      const targetBranchId = dto.branchId || medication.branchId;
+
       const existingMedication = await this.prisma.medication.findFirst({
         where: {
+          branchId: targetBranchId,
           pharmacyId: pharmacy.id,
           name: {
             equals: dto.name,
@@ -124,7 +210,7 @@ export class MedicationsService {
 
       if (existingMedication) {
         throw new ConflictException(
-          `A medication with the name "${dto.name}" already exists in your pharmacy`,
+          `A medication with the name "${dto.name}" already exists in this branch`,
         );
       }
     }
@@ -135,6 +221,9 @@ export class MedicationsService {
       include: {
         pharmacy: {
           select: { name: true },
+        },
+        branch: {
+          select: { name: true, address: true },
         },
       },
     });
@@ -165,9 +254,15 @@ export class MedicationsService {
       where.pharmacyId = dto.pharmacyId;
     }
 
+    // FIX: Add branch filtering support
+    if (dto.branchId) {
+      where.branchId = dto.branchId;
+    }
+
     if (dto.query) {
       where.OR = [
         { name: { contains: dto.query, mode: 'insensitive' } },
+        { chemicalName: { contains: dto.query, mode: 'insensitive' } },
         { category: { contains: dto.query, mode: 'insensitive' } },
       ];
     }
@@ -180,9 +275,13 @@ export class MedicationsService {
       where.requiresPrescription = dto.requiresPrescription;
     }
 
-    // Only show medications from approved pharmacies
+    // Only show medications from approved pharmacies and active branches
     where.pharmacy = {
       status: 'APPROVED',
+    };
+
+    where.branch = {
+      isActive: true,
     };
 
     // Only show in-stock medications
@@ -203,6 +302,15 @@ export class MedicationsService {
             longitude: true,
           },
         },
+        branch: {
+          select: {
+            id: true,
+            name: true,
+            address: true,
+            latitude: true,
+            longitude: true,
+          },
+        },
       },
       orderBy: { name: 'asc' },
       take: dto.limit || 100,
@@ -215,12 +323,23 @@ export class MedicationsService {
   async getLowStock(userId: string) {
     const pharmacy = await this.pharmaciesService.findByUserId(userId);
 
+    // Use raw query to compare quantity against lowStockThreshold column
+    const lowStockIds = await this.prisma.$queryRaw<{ id: string }[]>`
+      SELECT id FROM medications
+      WHERE "pharmacyId" = ${pharmacy.id}
+        AND quantity <= "lowStockThreshold"
+        AND quantity > 0
+    `;
+
+    if (lowStockIds.length === 0) return [];
+
     return this.prisma.medication.findMany({
       where: {
-        pharmacyId: pharmacy.id,
-        quantity: {
-          lte: 10, // Default threshold
-          gt: 0,
+        id: { in: lowStockIds.map((m) => m.id) },
+      },
+      include: {
+        branch: {
+          select: { name: true, address: true },
         },
       },
       orderBy: { quantity: 'asc' },
@@ -236,25 +355,90 @@ export class MedicationsService {
         pharmacyId: pharmacy.id,
         quantity: 0,
       },
+      include: {
+        branch: {
+          select: { name: true, address: true },
+        },
+      },
       orderBy: { name: 'asc' },
     });
   }
 
-  // Reduce stock (called when order is placed)
+  // Reduce stock with atomic operation + low-stock alerts
   async reduceStock(medicationId: string, quantity: number) {
-    const medication = await this.findById(medicationId);
+    // Check stock BEFORE decrementing
+    const medication = await this.prisma.medication.findUnique({
+      where: { id: medicationId },
+      include: {
+        branch: { select: { name: true } },
+        pharmacy: { select: { id: true, userId: true, name: true } },
+      },
+    });
+
+    if (!medication) {
+      throw new NotFoundException('Medication not found');
+    }
 
     if (medication.quantity < quantity) {
       throw new ForbiddenException('Insufficient stock');
     }
 
-    return this.prisma.medication.update({
+    // Atomically decrement stock
+    const updated = await this.prisma.medication.update({
       where: { id: medicationId },
       data: {
         quantity: {
           decrement: quantity,
         },
       },
+    });
+
+    // Send low-stock notification to pharmacy owner
+    if (updated.quantity <= medication.lowStockThreshold && updated.quantity > 0) {
+      try {
+        await this.notificationsService.create({
+          pharmacyId: medication.pharmacy.id,
+          type: 'LOW_STOCK',
+          title: 'Low Stock Alert',
+          message: `Warning: ${medication.name}${medication.chemicalName ? ` (${medication.chemicalName})` : ''} is running low. Only ${updated.quantity} left in ${medication.branch.name}.`,
+        });
+      } catch (error) {
+        console.error('Failed to send low stock notification:', error);
+      }
+    }
+
+    // Send out-of-stock notification
+    if (updated.quantity === 0) {
+      try {
+        await this.notificationsService.create({
+          pharmacyId: medication.pharmacy.id,
+          type: 'LOW_STOCK',
+          title: 'Out of Stock Alert',
+          message: `${medication.name}${medication.chemicalName ? ` (${medication.chemicalName})` : ''} is now OUT OF STOCK in ${medication.branch.name}. Please restock immediately.`,
+        });
+      } catch (error) {
+        console.error('Failed to send out-of-stock notification:', error);
+      }
+    }
+
+    return updated;
+  }
+
+  // Search official FDA registry
+  async searchRegistry(query: string) {
+    if (!query || query.length < 2) {
+      return [];
+    }
+
+    return this.prisma.medicationRegistry.findMany({
+      where: {
+        OR: [
+          { brandName: { contains: query, mode: 'insensitive' } },
+          { genericName: { contains: query, mode: 'insensitive' } },
+          { registrationNumber: { contains: query, mode: 'insensitive' } },
+        ],
+      },
+      take: 20,
     });
   }
 

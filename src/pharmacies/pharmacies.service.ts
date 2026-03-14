@@ -1,5 +1,5 @@
 // backend/src/pharmacies/pharmacies.service.ts
-// FIXED VERSION - Added resubmission method for rejected pharmacies
+// COMPLETE VERSION - With Stats, Analytics, and Patients Viewing
 
 import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
@@ -12,6 +12,179 @@ export class PharmaciesService {
     private prisma: PrismaService,
     private emailService: EmailService,
   ) {}
+
+  // ========================================
+  // DASHBOARD STATISTICS
+  // ========================================
+
+  async getStats(userId: string) {
+    const pharmacy = await this.findByUserId(userId);
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    
+    const orders = await this.prisma.order.findMany({
+      where: { pharmacyId: pharmacy.id },
+    });
+    
+    const todayOrders = orders.filter(o => new Date(o.createdAt) >= today).length;
+    const pendingOrders = orders.filter(o => o.status === 'PENDING').length;
+    const todayRevenue = orders
+      .filter(o => new Date(o.createdAt) >= today)
+      .reduce((sum, o) => sum + o.total, 0);
+    
+    const lowStockItems = await this.prisma.medication.count({
+      where: {
+        pharmacyId: pharmacy.id,
+        quantity: { lte: 10, gt: 0 },
+      },
+    });
+    
+    return {
+      todayOrders,
+      pendingOrders,
+      todayRevenue,
+      lowStockItems,
+    };
+  }
+
+  // ========================================
+  // ANALYTICS DATA
+  // ========================================
+
+  async getAnalytics(userId: string) {
+    const pharmacy = await this.findByUserId(userId);
+    
+    const now = new Date();
+    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
+    const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate());
+    
+    // Fetch all orders
+    const allOrders = await this.prisma.order.findMany({
+      where: { 
+        pharmacyId: pharmacy.id,
+        createdAt: { gte: twoMonthsAgo },
+      },
+      include: {
+        orderItems: true,
+      },
+    });
+    
+    // Current month orders
+    const thisMonthOrders = allOrders.filter(o => new Date(o.createdAt) >= lastMonth);
+    const previousMonthOrders = allOrders.filter(o => 
+      new Date(o.createdAt) >= twoMonthsAgo && 
+      new Date(o.createdAt) < lastMonth
+    );
+    
+    // Calculate revenue
+    const totalRevenue = thisMonthOrders.reduce((sum, o) => sum + o.total, 0);
+    const prevRevenue = previousMonthOrders.reduce((sum, o) => sum + o.total, 0);
+    const revenueChange = prevRevenue > 0 
+      ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100) 
+      : 0;
+    
+    // Calculate orders
+    const totalOrders = thisMonthOrders.length;
+    const prevOrders = previousMonthOrders.length;
+    const ordersChange = prevOrders > 0 
+      ? Math.round(((totalOrders - prevOrders) / prevOrders) * 100) 
+      : 0;
+    
+    // Calculate average order value
+    const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+    const prevAvgOrderValue = prevOrders > 0 ? Math.round(prevRevenue / prevOrders) : 0;
+    const avgValueChange = prevAvgOrderValue > 0 
+      ? Math.round(((avgOrderValue - prevAvgOrderValue) / prevAvgOrderValue) * 100) 
+      : 0;
+    
+    // Calculate items sold
+    const itemsSold = thisMonthOrders.reduce((sum, o) => 
+      sum + o.orderItems.reduce((s, i) => s + i.quantity, 0), 0
+    );
+    const prevItemsSold = previousMonthOrders.reduce((sum, o) => 
+      sum + o.orderItems.reduce((s, i) => s + i.quantity, 0), 0
+    );
+    const itemsChange = prevItemsSold > 0 
+      ? Math.round(((itemsSold - prevItemsSold) / prevItemsSold) * 100) 
+      : 0;
+    
+    return {
+      totalRevenue,
+      totalOrders,
+      avgOrderValue,
+      itemsSold,
+      revenueChange,
+      ordersChange,
+      avgValueChange,
+      itemsChange,
+    };
+  }
+
+  // ========================================
+  // VIEW ALL PAST PATIENTS
+  // ========================================
+
+  async getPatients(userId: string) {
+    const pharmacy = await this.findByUserId(userId);
+    
+    // Get all unique patients who have ordered from this pharmacy
+    const orders = await this.prisma.order.findMany({
+      where: { pharmacyId: pharmacy.id },
+      include: {
+        patient: {
+          include: {
+            user: {
+              select: { email: true },
+            },
+          },
+        },
+        orderItems: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    
+    // Group by patient
+    const patientMap = new Map();
+    
+    for (const order of orders) {
+      const patientId = order.patientId;
+      
+      if (!patientMap.has(patientId)) {
+        patientMap.set(patientId, {
+          id: order.patient.id,
+          firstName: order.patient.firstName,
+          lastName: order.patient.lastName,
+          email: order.patient.user.email,
+          phone: order.patient.phone,
+          totalOrders: 0,
+          totalSpent: 0,
+          lastOrderDate: order.createdAt,
+          orders: [],
+        });
+      }
+      
+      const patientData = patientMap.get(patientId);
+      patientData.totalOrders++;
+      patientData.totalSpent += order.total;
+      patientData.orders.push({
+        id: order.id,
+        orderNumber: order.orderNumber,
+        status: order.status,
+        total: order.total,
+        createdAt: order.createdAt,
+        itemCount: order.orderItems.length,
+      });
+    }
+    
+    // Convert map to array and sort by last order date
+    const patients = Array.from(patientMap.values())
+      .sort((a, b) => new Date(b.lastOrderDate).getTime() - new Date(a.lastOrderDate).getTime());
+    
+    return {
+      totalPatients: patients.length,
+      patients,
+    };
+  }
 
   // ========================================
   // FIND ALL PHARMACIES
@@ -135,7 +308,6 @@ export class PharmaciesService {
     const hasCriticalChanges = criticalFields.some(field => dto[field] !== undefined);
 
     if (hasCriticalChanges) {
-      // Store pending changes and set status to PENDING for admin review
       const updatedPharmacy = await this.prisma.pharmacy.update({
         where: { id: pharmacy.id },
         data: {
@@ -143,12 +315,11 @@ export class PharmaciesService {
           dateOfIncorporation: dto.dateOfIncorporation 
             ? new Date(dto.dateOfIncorporation) 
             : undefined,
-          status: 'PENDING', // Requires admin re-approval
-          rejectionReason: null, // Clear previous rejection reason
+          status: 'PENDING',
+          rejectionReason: null,
         },
       });
 
-      // Notify super admins about the update
       await this.notifySuperAdminsPharmacyUpdate(pharmacy.id, pharmacy.name);
 
       return {
@@ -157,7 +328,6 @@ export class PharmaciesService {
         requiresApproval: true,
       };
     } else {
-      // Non-critical fields can be updated directly
       const updatedPharmacy = await this.prisma.pharmacy.update({
         where: { id: pharmacy.id },
         data: {
@@ -177,7 +347,7 @@ export class PharmaciesService {
   }
 
   // ========================================
-  // RESUBMIT APPLICATION (FOR REJECTED PHARMACIES) - NEW
+  // RESUBMIT APPLICATION (FOR REJECTED PHARMACIES)
   // ========================================
 
   async resubmitApplication(userId: string, dto: UpdatePharmacyDto) {
@@ -190,12 +360,10 @@ export class PharmaciesService {
       throw new NotFoundException('Pharmacy not found');
     }
 
-    // Only rejected pharmacies can resubmit
     if (pharmacy.status !== 'REJECTED') {
       throw new ForbiddenException('Only rejected pharmacies can resubmit their application');
     }
 
-    // Update pharmacy with new information and set to PENDING
     const updatedPharmacy = await this.prisma.pharmacy.update({
       where: { id: pharmacy.id },
       data: {
@@ -209,7 +377,6 @@ export class PharmaciesService {
       },
     });
 
-    // Notify super admins about resubmission
     await this.notifySuperAdminsPharmacyResubmission(pharmacy.id, pharmacy.name);
 
     return {
@@ -257,7 +424,6 @@ export class PharmaciesService {
       },
     });
 
-    // Send email notification
     await this.emailService.sendPharmacyApproval(
       pharmacy.user.email,
       pharmacy.name,
@@ -265,7 +431,6 @@ export class PharmaciesService {
       rejectionReason,
     );
 
-    // Create in-app notification
     await this.prisma.notification.create({
       data: {
         pharmacyId: pharmacy.id,
@@ -328,7 +493,7 @@ export class PharmaciesService {
   }
 
   // ========================================
-  // NOTIFY SUPER ADMINS ABOUT PHARMACY UPDATE
+  // HELPER METHODS
   // ========================================
 
   private async notifySuperAdminsPharmacyUpdate(pharmacyId: string, pharmacyName: string) {
@@ -347,10 +512,6 @@ export class PharmaciesService {
     }
   }
 
-  // ========================================
-  // NOTIFY SUPER ADMINS ABOUT PHARMACY RESUBMISSION - NEW
-  // ========================================
-
   private async notifySuperAdminsPharmacyResubmission(pharmacyId: string, pharmacyName: string) {
     const superAdmins = await this.prisma.user.findMany({
       where: { role: 'SUPER_ADMIN' },
@@ -367,17 +528,8 @@ export class PharmaciesService {
     }
   }
 
-  // ========================================
-  // CALCULATE DISTANCE (Haversine formula)
-  // ========================================
-
-  calculateDistance(
-    lat1: number,
-    lon1: number,
-    lat2: number,
-    lon2: number,
-  ): number {
-    const R = 6371; // Earth's radius in km
+  calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+    const R = 6371;
     const dLat = this.deg2rad(lat2 - lat1);
     const dLon = this.deg2rad(lon2 - lon1);
     const a =
@@ -393,10 +545,6 @@ export class PharmaciesService {
   private deg2rad(deg: number): number {
     return deg * (Math.PI / 180);
   }
-
-  // ========================================
-  // GET DELIVERY FEE BASED ON DISTANCE
-  // ========================================
 
   getDeliveryFee(pharmacyId: string, distance: number): number {
     const defaultZones = [

@@ -18,9 +18,12 @@
     "test:cov": "jest --coverage",
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json",
-    "seed": "ts-node src/prisma/seed.ts"
+    "seed": "ts-node src/prisma/seed.ts",
+    "seed:registry": "ts-node src/prisma/seed-registry.ts"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.72.1",
+    "@google/generative-ai": "^0.24.1",
     "@nestjs/axios": "^4.0.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.2",
@@ -31,6 +34,7 @@
     "@nestjs/swagger": "^11.2.4",
     "@prisma/client": "^6.19.2",
     "@sendgrid/mail": "^8.1.6",
+    "anthropic-ai": "^0.0.10",
     "aws-sdk": "^2.1693.0",
     "bcrypt": "^6.0.0",
     "class-transformer": "^0.5.1",

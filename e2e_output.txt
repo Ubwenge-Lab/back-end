@@ -1,0 +1,94 @@
+[0;36m╔══════════════════════════════════════════════════════════════════╗[0m
+[0;36m║         BRANCH FEATURE E2E TEST SCRIPT                           ║[0m
+[0;36m╚══════════════════════════════════════════════════════════════════╝[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1;33m[STEP 0][0m Logging in as Super Admin...
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m✓ Super Admin logged in successfully[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1;33m[STEP 1][0m Registering new Pharmacy HQ...
+          Email: testhq_1770488292@pharmacy.com
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+Response: {"message":"Registration successful! Please verify your email, then wait for admin approval.","userId":"411709ba-4b82-4c85-a09c-9c95fe7f47ff","pharmacyId":"92b6f462-f686-44f1-a0e5-19546d58e0c2","status":"PENDING","verificationCode":"26296"}
+[0;32m✓ Pharmacy registered successfully[0m
+Verification code: 26296
+
+[1;33m[STEP 1b][0m Verifying email...
+Verify response: {"message":"Email verified! Your pharmacy will be reviewed by our admin team.","verified":true}
+[0;32m✓ Email verified[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1;33m[STEP 2][0m Getting pending pharmacies and approving...
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+Pending pharmacies: [{"id":"92b6f462-f686-44f1-a0e5-19546d58e0c2","userId":"411709ba-4b82-4c85-a09c-9c95fe7f47ff","name":"Test Pharmacy HQ 1770488292","representativeName":"John Doe","phone":"+250788123456","address":"123 Main Street, Kigali","latitude":-1.9403,"longitude":29.8739,"dateOfIncorporation":"2020-01-15T00:00:00.000Z","rdbCertificate":"https://example.com/rdb-cert.pdf","pharmacyLicense":"https://example.com/license.pdf","businessRegistration":"https://example.com/business-reg.pdf","deliveryZones":null,"operatingHours":null,"status":"PENDING","rejectionReason":null,"approvedAt":null,"createdAt":"2026-02-07T18:18:13.207Z","updatedAt":"2026-02-07T18:18:13.207Z","user":{"email":"testhq_1770488292@pharmacy.com","createdAt":"2026-02-07T18:18:13.207Z"}},{"id":"368c580f-a8ea-4248-ac92-d2509ccc11ef","userId":"4ea049d4-953a-42c4-842a-8ed3c616720a","name":"Test Pharmacy HQ 1770487055","representativeName":"John Doe","phone":"+250788123456","address":"123 Main Street, Kigali","latitude":-1.9403,"longitude":29.8739,"dateOfIncorporation":"2020-01-15T00:00:00.000Z","rdbCertificate":"https://example.com/rdb-cert.pdf","pharmacyLicense":"https://example.com/license.pdf","businessRegistration":"https://example.com/business-reg.pdf","deliveryZones":null,"operatingHours":null,"status":"PENDING","rejectionReason":null,"approvedAt":null,"createdAt":"2026-02-07T17:57:35.552Z","updatedAt":"2026-02-07T17:57:35.552Z","user":{"email":"testhq_1770487054@pharmacy.com","createdAt":"2026-02-07T17:57:35.552Z"}}]
+Approve response: {"id":"92b6f462-f686-44f1-a0e5-19546d58e0c2","userId":"411709ba-4b82-4c85-a09c-9c95fe7f47ff","name":"Test Pharmacy HQ 1770488292","representativeName":"John Doe","phone":"+250788123456","address":"123 Main Street, Kigali","latitude":-1.9403,"longitude":29.8739,"dateOfIncorporation":"2020-01-15T00:00:00.000Z","rdbCertificate":"https://example.com/rdb-cert.pdf","pharmacyLicense":"https://example.com/license.pdf","businessRegistration":"https://example.com/business-reg.pdf","deliveryZones":null,"operatingHours":null,"status":"APPROVED","rejectionReason":null,"approvedAt":"2026-02-07T18:18:20.307Z","createdAt":"2026-02-07T18:18:13.207Z","updatedAt":"2026-02-07T18:18:20.308Z"}
+[0;32m✓ Pharmacy approved[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1;33m[STEP 3][0m Logging in as Pharmacy HQ...
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;32m✓ Pharmacy HQ logged in successfully[0m
+Token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiI0M...
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1;33m[STEP 4][0m Creating a new branch...
+          Branch Manager Email: branch_manager_1770488292@pharmacy.com
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+Response: {"id":"666dca3f-5e5e-4099-ad0a-17f5161f3651","name":"Test Branch - Remera","address":"KG 123 St, Remera, Kigali","branchManagerEmail":"branch_manager_1770488292@pharmacy.com","branchStatus":"INVITED","createdAt":"2026-02-07T18:18:21.420Z"}
+[0;32m✓ Branch created successfully[0m
+Branch ID: 666dca3f-5e5e-4099-ad0a-17f5161f3651
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1;33m[STEP 5][0m Sending credentials to branch manager...
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+Response: {"message":"Credentials sent successfully"}
+[0;32m✓ Credentials sent successfully[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1;33m[STEP 6][0m Simulating: Branch Manager receives email with credentials
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[0;36m📧 EMAIL RECEIVED BY BRANCH MANAGER:[0m
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+To: branch_manager_1770488292@pharmacy.com
+Subject: Your Branch Manager Credentials
+
+Login URL: http://localhost:4000/login
+Email: branch_manager_1770488292@pharmacy.com
+Temporary Password: [Stored in database - check email.service.ts logs]
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+[1;33mNOTE: In production, the branch manager would receive this via email.[0m
+[1;33mFor testing, we need to retrieve the temp password from DB or logs.[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1;33m[STEP 7][0m Listing all branches for this pharmacy...
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+Branches: [{"id":"666dca3f-5e5e-4099-ad0a-17f5161f3651","name":"Test Branch - Remera","address":"KG 123 St, Remera, Kigali","phone":"+250788999888","branchManagerEmail":"branch_manager_1770488292@pharmacy.com","branchStatus":"INVITED","isActive":true,"createdAt":"2026-02-07T18:18:21.420Z","manager":{"id":"b1eb1087-4fc7-4fb1-8655-004cceeeac84","email":"branch_manager_1770488292@pharmacy.com"}}]
+[0;32m✓ Branch listing works[0m
+
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+[1;33m[STEP 8][0m Super Admin checking pending branches...
+[0;34m━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[0m
+Pending branches: []
+
+[0;36m╔══════════════════════════════════════════════════════════════════╗[0m
+[0;36m║                        TEST SUMMARY                              ║[0m
+[0;36m╚══════════════════════════════════════════════════════════════════╝[0m
+
+[0;32m✓ Super Admin login[0m
+[0;32m✓ Pharmacy registration[0m
+[0;32m✓ Pharmacy HQ login[0m
+[0;32m✓ Branch creation[0m
+[0;32m✓ Credentials sending[0m
+[0;32m✓ Branch listing[0m
+[0;32m✓ Pending branches endpoint[0m
+
+[1;33mCREATED RESOURCES:[0m
+  Branch ID: 666dca3f-5e5e-4099-ad0a-17f5161f3651
+  Branch Manager Email: branch_manager_1770488292@pharmacy.com
+
+[0;36mTo continue testing branch manager flow, run:[0m
+  ./test-branch-manager-flow.sh <temp_password>
+

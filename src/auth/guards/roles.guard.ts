@@ -23,7 +23,10 @@ export class RolesGuard implements CanActivate {
     const user = request.user;
 
     if (!user) {
-      return false; // Or throw an UnauthorizedException
+      return false;
     }
+
+    // FIX: Added missing return statement to check if user has required role
+    return requiredRoles.some((role) => user.role === role);
   }
 }

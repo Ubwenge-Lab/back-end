@@ -1,70 +1,69 @@
 // backend/src/auth/dto/register-pharmacy.dto.ts
 
-import { IsEmail, IsNotEmpty, IsString, IsOptional, IsNumber, MinLength, Matches } from 'class-validator';
+import { IsString, IsEmail, IsNotEmpty, IsNumber, IsOptional, IsDateString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterPharmacyDto {
-  @ApiProperty({ description: 'Pharmacy business name' })
-  @IsString()
-  @IsNotEmpty()
-  pharmacyName: string;
-
-  @ApiProperty({ description: 'Representative name (must match RDB certificate)' })
-  @IsString()
-  @IsNotEmpty()
-  representativeName: string;
-
-  @ApiProperty({ description: 'Pharmacy email address' })
+  @ApiProperty()
   @IsEmail()
-  @IsNotEmpty()
   email: string;
 
-  @ApiProperty({ description: 'Password (min 8 characters, uppercase, lowercase, number or symbol)' })
+  @ApiProperty()
   @IsString()
   @IsNotEmpty()
-  @MinLength(8)
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d|.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/, {
-    message: 'Password must contain uppercase, lowercase, and number or symbol',
-  })
   password: string;
 
-  @ApiProperty({ description: 'Confirm password' })
+  @ApiProperty()
   @IsString()
   @IsNotEmpty()
   confirmPassword: string;
 
-  @ApiProperty({ description: 'Contact phone number' })
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  pharmacyName: string;
+
+  @ApiProperty()
+  @IsString()
+  @IsNotEmpty()
+  representativeName: string;
+
+  @ApiProperty()
   @IsString()
   @IsNotEmpty()
   phone: string;
 
-  @ApiProperty({ description: 'Pharmacy physical address' })
+  @ApiProperty()
   @IsString()
   @IsNotEmpty()
   address: string;
 
-  @ApiProperty({ required: false, description: 'Latitude coordinate' })
+  @ApiProperty({ required: false })
   @IsNumber()
   @IsOptional()
   latitude?: number;
 
-  @ApiProperty({ required: false, description: 'Longitude coordinate' })
+  @ApiProperty({ required: false })
   @IsNumber()
   @IsOptional()
   longitude?: number;
 
-  @ApiProperty({ description: 'Date of incorporation (YYYY-MM-DD)' })
-  @IsString()
-  @IsNotEmpty()
+  @ApiProperty({ description: 'Date of pharmacy incorporation/establishment' })
+  @IsDateString()
   dateOfIncorporation: string;
 
-  @ApiProperty({ description: 'RDB Certificate document (S3 URL or base64)' })
+  @ApiProperty({ description: 'RDB (Rwanda Development Board) certificate' })
   @IsString()
   @IsNotEmpty()
   rdbCertificate: string;
 
-  @ApiProperty({ description: 'Pharmacy License document (S3 URL or base64)' })
+  @ApiProperty({ description: 'Pharmacy license number/certificate' })
   @IsString()
   @IsNotEmpty()
   pharmacyLicense: string;
+
+  @ApiProperty({ description: 'Business registration certificate/number' })
+  @IsString()
+  @IsNotEmpty()
+  businessRegistration: string;
 }

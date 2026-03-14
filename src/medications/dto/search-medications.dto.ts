@@ -20,6 +20,11 @@ export class SearchMedicationsDto {
   @IsOptional()
   pharmacyId?: string;
 
+  @ApiProperty({ required: false, description: 'Filter by specific branch' })
+  @IsString()
+  @IsOptional()
+  branchId?: string;
+
   @ApiProperty({ required: false })
   @IsBoolean()
   @IsOptional()

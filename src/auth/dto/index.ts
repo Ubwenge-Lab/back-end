@@ -8,3 +8,5 @@ export * from './resend-verification.dto';
 export * from './forgot-password.dto';
 export * from './reset-password.dto';
 export * from './change-password.dto';
+export * from './change-branch-password.dto';
+export * from './upload-branch-license.dto';

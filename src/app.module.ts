@@ -1,4 +1,5 @@
 // backend/src/app.module.ts
+// UPDATED VERSION - Added StaffModule
 
 import { Module } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
@@ -15,6 +16,8 @@ import { InsuranceModule } from './insurance/insurance.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { SuperAdminModule } from './super-admin/super-admin.module';
 import { UploadModule } from './upload/upload.module';
+import { BranchesModule } from './branches/branches.module';
+import { StaffModule } from './staff/staff.module'; // NEW
 
 @Module({
   imports: [
@@ -35,6 +38,8 @@ import { UploadModule } from './upload/upload.module';
     NotificationsModule,
     SuperAdminModule,
     UploadModule,
+    BranchesModule,
+    StaffModule, // NEW
   ],
 })
-export class AppModule {}
+export class AppModule { }

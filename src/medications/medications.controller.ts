@@ -32,6 +32,13 @@ export class MedicationsController {
     return this.medicationsService.search(dto);
   }
 
+  // Registry - Search official FDA database (Public)
+  @Get('registry/search')
+  @ApiOperation({ summary: 'Search FDA medication registry' })
+  searchRegistry(@Query('query') query: string) {
+    return this.medicationsService.searchRegistry(query);
+  }
+
   // Pharmacy - Get low stock (MUST be before :id route)
   @Get('pharmacy/low-stock')
   @UseGuards(JwtAuthGuard, RolesGuard)
