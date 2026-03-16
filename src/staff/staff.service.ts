@@ -70,49 +70,54 @@ export class StaffService {
     const userRole = dto.role.toUpperCase() as UserRole;
 
     // Create user and staff in transaction
-    const result = await this.prisma.$transaction(async (tx) => {
-      // Create user account
-      const user = await tx.user.create({
-        data: {
-          email: dto.email,
-          password: hashedPassword,
-          role: userRole,
-          isVerified: true, // Staff accounts are auto-verified
-        },
-      });
+    const result = await this.prisma.$transaction(
+      async (tx) => {
+        // Create user account
+        const user = await tx.user.create({
+          data: {
+            email: dto.email,
+            password: hashedPassword,
+            role: userRole,
+            isVerified: true, // Staff accounts are auto-verified
+          },
+        });
 
-      // Create staff profile
-      const staff = await tx.staff.create({
-        data: {
-          userId: user.id,
-          branchId: branch.id,
-          firstName: dto.firstName,
-          lastName: dto.lastName,
-          phone: dto.phone,
-          nationalId: dto.nationalId,
-          gender: dto.gender,
-          dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
-          status: 'ACTIVE',
-          workingHours: dto.workingHours || null,
-          tempPasswordHash: hashedPassword,
-          tempPasswordExpiry,
-        },
-        include: {
-          user: { select: { email: true, role: true } },
-          branch: { select: { name: true } },
-        },
-      });
+        // Create staff profile
+        const staff = await tx.staff.create({
+          data: {
+            userId: user.id,
+            branchId: branch.id,
+            firstName: dto.firstName,
+            lastName: dto.lastName,
+            phone: dto.phone,
+            nationalId: dto.nationalId,
+            gender: dto.gender,
+            dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
+            status: 'ACTIVE',
+            workingHours: dto.workingHours || null,
+            tempPasswordHash: hashedPassword,
+            tempPasswordExpiry,
+          },
+          include: {
+            user: { select: { email: true, role: true } },
+            branch: { select: { name: true } },
+          },
+        });
 
-      // Store permissions in a separate table
-      await tx.staffPermissions.create({
-        data: {
-          staffId: staff.id,
-          permissions: dto.permissions,
-        },
-      });
+        // Store permissions in a separate table
+        await tx.staffPermissions.create({
+          data: {
+            staffId: staff.id,
+            permissions: dto.permissions,
+          },
+        });
 
-      return staff;
-    });
+        return staff;
+      },
+      {
+        timeout: 10000, // 10 seconds to handle network latency
+      },
+    );
 
     // Send credentials email
     let emailSent = false;
@@ -468,5 +473,26 @@ export class StaffService {
       password += chars[bytes[i] % chars.length];
     }
     return password;
+  }
+
+  // ========================================
+  // HELPER: Find by User ID
+  // ========================================
+
+  async findByUserId(userId: string) {
+    const staff = await this.prisma.staff.findUnique({
+      where: { userId },
+      include: {
+        branch: {
+          select: { id: true, name: true, pharmacyId: true },
+        },
+      },
+    });
+
+    if (!staff) {
+      throw new NotFoundException('Staff member not found');
+    }
+
+    return staff;
   }
 }
