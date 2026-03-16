@@ -19,33 +19,150 @@ export class PharmaciesService {
 
   async getStats(userId: string) {
     const pharmacy = await this.findByUserId(userId);
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    
-    const orders = await this.prisma.order.findMany({
-      where: { pharmacyId: pharmacy.id },
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+
+  // total branches adn total employees
+    const [totalBranches, totalEmployees] = await Promise.all([
+        this.prisma.branch.count({
+            where: { pharmacyId: pharmacy.id },
+        }),
+        this.prisma.staff.count({
+            where: {
+                branch: { pharmacyId: pharmacy.id },
+                status: 'ACTIVE',
+            },
+        }),
+    ]);
+
+    // Revenue total
+    const [monthlyRevenueResult, totalRevenueResult] = await Promise.all([
+        this.prisma.order.aggregate({
+            where: {
+                pharmacyId: pharmacy.id,
+                status: 'COMPLETED',
+                createdAt: { gte: startOfMonth, lte: endOfMonth },
+            },
+            _sum: { total: true },
+        }),
+        this.prisma.order.aggregate({
+            where: {
+                pharmacyId: pharmacy.id,
+                status: 'COMPLETED',
+            },
+            _sum: { total: true },
+        }),
+    ]);
+
+    const monthlyRevenue = monthlyRevenueResult._sum.total ?? 0;
+    const totalRevenue = totalRevenueResult._sum.total ?? 0;
+
+    // Revenue overtime (last 6 months)
+    const revenueOverTime = await Promise.all(
+        Array.from({ length: 6 }, (_, i) => {
+            const date = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+            const start = new Date(date.getFullYear(), date.getMonth(), 1);
+            const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
+            return this.prisma.order
+                .aggregate({
+                    where: {
+                        pharmacyId: pharmacy.id,
+                        status: 'COMPLETED',
+                        createdAt: { gte: start, lte: end },
+                    },
+                    _sum: { total: true },
+                })
+                .then((result) => ({
+                    month: date.toLocaleString('default', { month: 'short' }),
+                    revenue: result._sum.total ?? 0,
+                }));
+        }),
+    );
+
+    // Revenue by branch
+    const branches = await this.prisma.branch.findMany({
+        where: { pharmacyId: pharmacy.id },
+        select: { id: true, name: true },
     });
-    
-    const todayOrders = orders.filter(o => new Date(o.createdAt) >= today).length;
-    const pendingOrders = orders.filter(o => o.status === 'PENDING').length;
-    const todayRevenue = orders
-      .filter(o => new Date(o.createdAt) >= today)
-      .reduce((sum, o) => sum + o.total, 0);
-    
-    const lowStockItems = await this.prisma.medication.count({
-      where: {
-        pharmacyId: pharmacy.id,
-        quantity: { lte: 10, gt: 0 },
-      },
+
+    const revenueByBranch = await Promise.all(
+        branches.map(async (branch) => {
+            const result = await this.prisma.order.aggregate({
+                where: {
+                    branchId: branch.id,
+                    status: 'COMPLETED',
+                    createdAt: { gte: startOfMonth, lte: endOfMonth },
+                },
+                _sum: { total: true },
+            });
+            return { name: branch.name, revenue: result._sum.total ?? 0 };
+        }),
+    );
+
+    // medication count per branch
+    const inventoryDistribution = await Promise.all(
+        branches.map(async (branch) => {
+            const value = await this.prisma.medication.count({
+                where: { branchId: branch.id },
+            });
+            return { name: branch.name, value };
+        }),
+    );
+
+    // low stock alerts
+    const lowStockMeds = await this.prisma.medication.findMany({
+        where: {
+            pharmacyId: pharmacy.id,
+            quantity: { lte: 10, gt: 0 },
+        },
+        select: { name: true, quantity: true, branch: { select: { name: true } } },
     });
-    
+
+    const pendingBranches = await this.prisma.branch.count({
+        where: {
+            pharmacyId: pharmacy.id,
+            branchStatus: 'PENDING',
+        },
+    });
+
+    const alerts: { branch: string; msg: string; level: 'warning' | 'info' }[] = [];
+
+    // group low stock by branch
+    const lowStockByBranch = lowStockMeds.reduce((acc, med) => {
+        const branchName = med.branch.name;
+        acc[branchName] = (acc[branchName] ?? 0) + 1;
+        return acc;
+    }, {} as Record<string, number>);
+
+    for (const [branchName, count] of Object.entries(lowStockByBranch)) {
+        alerts.push({
+            branch: branchName,
+            msg: `Low stock: ${count} medication${count > 1 ? 's' : ''} below threshold`,
+            level: 'warning',
+        });
+    }
+
+    if (pendingBranches > 0) {
+        alerts.push({
+            branch: 'Branch Management',
+            msg: `${pendingBranches} branch${pendingBranches > 1 ? 'es' : ''} pending approval`,
+            level: 'info',
+        });
+    }
+
     return {
-      todayOrders,
-      pendingOrders,
-      todayRevenue,
-      lowStockItems,
+        totalBranches,
+        totalEmployees,
+        monthlyRevenue,
+        totalRevenue,
+        revenueOverTime,
+        revenueByBranch,
+        inventoryDistribution,
+        alerts,
     };
-  }
+}
 
   // ========================================
   // ANALYTICS DATA
@@ -53,14 +170,14 @@ export class PharmaciesService {
 
   async getAnalytics(userId: string) {
     const pharmacy = await this.findByUserId(userId);
-    
+
     const now = new Date();
     const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
     const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate());
-    
+
     // Fetch all orders
     const allOrders = await this.prisma.order.findMany({
-      where: { 
+      where: {
         pharmacyId: pharmacy.id,
         createdAt: { gte: twoMonthsAgo },
       },
@@ -68,46 +185,46 @@ export class PharmaciesService {
         orderItems: true,
       },
     });
-    
+
     // Current month orders
     const thisMonthOrders = allOrders.filter(o => new Date(o.createdAt) >= lastMonth);
-    const previousMonthOrders = allOrders.filter(o => 
-      new Date(o.createdAt) >= twoMonthsAgo && 
+    const previousMonthOrders = allOrders.filter(o =>
+      new Date(o.createdAt) >= twoMonthsAgo &&
       new Date(o.createdAt) < lastMonth
     );
-    
+
     // Calculate revenue
     const totalRevenue = thisMonthOrders.reduce((sum, o) => sum + o.total, 0);
     const prevRevenue = previousMonthOrders.reduce((sum, o) => sum + o.total, 0);
-    const revenueChange = prevRevenue > 0 
-      ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100) 
+    const revenueChange = prevRevenue > 0
+      ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100)
       : 0;
-    
+
     // Calculate orders
     const totalOrders = thisMonthOrders.length;
     const prevOrders = previousMonthOrders.length;
-    const ordersChange = prevOrders > 0 
-      ? Math.round(((totalOrders - prevOrders) / prevOrders) * 100) 
+    const ordersChange = prevOrders > 0
+      ? Math.round(((totalOrders - prevOrders) / prevOrders) * 100)
       : 0;
-    
+
     // Calculate average order value
     const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
     const prevAvgOrderValue = prevOrders > 0 ? Math.round(prevRevenue / prevOrders) : 0;
-    const avgValueChange = prevAvgOrderValue > 0 
-      ? Math.round(((avgOrderValue - prevAvgOrderValue) / prevAvgOrderValue) * 100) 
+    const avgValueChange = prevAvgOrderValue > 0
+      ? Math.round(((avgOrderValue - prevAvgOrderValue) / prevAvgOrderValue) * 100)
       : 0;
-    
+
     // Calculate items sold
-    const itemsSold = thisMonthOrders.reduce((sum, o) => 
+    const itemsSold = thisMonthOrders.reduce((sum, o) =>
       sum + o.orderItems.reduce((s, i) => s + i.quantity, 0), 0
     );
-    const prevItemsSold = previousMonthOrders.reduce((sum, o) => 
+    const prevItemsSold = previousMonthOrders.reduce((sum, o) =>
       sum + o.orderItems.reduce((s, i) => s + i.quantity, 0), 0
     );
-    const itemsChange = prevItemsSold > 0 
-      ? Math.round(((itemsSold - prevItemsSold) / prevItemsSold) * 100) 
+    const itemsChange = prevItemsSold > 0
+      ? Math.round(((itemsSold - prevItemsSold) / prevItemsSold) * 100)
       : 0;
-    
+
     return {
       totalRevenue,
       totalOrders,
@@ -126,7 +243,7 @@ export class PharmaciesService {
 
   async getPatients(userId: string) {
     const pharmacy = await this.findByUserId(userId);
-    
+
     // Get all unique patients who have ordered from this pharmacy
     const orders = await this.prisma.order.findMany({
       where: { pharmacyId: pharmacy.id },
@@ -142,13 +259,13 @@ export class PharmaciesService {
       },
       orderBy: { createdAt: 'desc' },
     });
-    
+
     // Group by patient
     const patientMap = new Map();
-    
+
     for (const order of orders) {
       const patientId = order.patientId;
-      
+
       if (!patientMap.has(patientId)) {
         patientMap.set(patientId, {
           id: order.patient.id,
@@ -162,7 +279,7 @@ export class PharmaciesService {
           orders: [],
         });
       }
-      
+
       const patientData = patientMap.get(patientId);
       patientData.totalOrders++;
       patientData.totalSpent += order.total;
@@ -175,11 +292,11 @@ export class PharmaciesService {
         itemCount: order.orderItems.length,
       });
     }
-    
+
     // Convert map to array and sort by last order date
     const patients = Array.from(patientMap.values())
       .sort((a, b) => new Date(b.lastOrderDate).getTime() - new Date(a.lastOrderDate).getTime());
-    
+
     return {
       totalPatients: patients.length,
       patients,
@@ -262,8 +379,8 @@ export class PharmaciesService {
       where: { id },
       data: {
         ...dto,
-        dateOfIncorporation: dto.dateOfIncorporation 
-          ? new Date(dto.dateOfIncorporation) 
+        dateOfIncorporation: dto.dateOfIncorporation
+          ? new Date(dto.dateOfIncorporation)
           : undefined,
       },
     });
@@ -312,8 +429,8 @@ export class PharmaciesService {
         where: { id: pharmacy.id },
         data: {
           ...dto,
-          dateOfIncorporation: dto.dateOfIncorporation 
-            ? new Date(dto.dateOfIncorporation) 
+          dateOfIncorporation: dto.dateOfIncorporation
+            ? new Date(dto.dateOfIncorporation)
             : undefined,
           status: 'PENDING',
           rejectionReason: null,
@@ -332,8 +449,8 @@ export class PharmaciesService {
         where: { id: pharmacy.id },
         data: {
           ...dto,
-          dateOfIncorporation: dto.dateOfIncorporation 
-            ? new Date(dto.dateOfIncorporation) 
+          dateOfIncorporation: dto.dateOfIncorporation
+            ? new Date(dto.dateOfIncorporation)
             : undefined,
         },
       });
@@ -368,8 +485,8 @@ export class PharmaciesService {
       where: { id: pharmacy.id },
       data: {
         ...dto,
-        dateOfIncorporation: dto.dateOfIncorporation 
-          ? new Date(dto.dateOfIncorporation) 
+        dateOfIncorporation: dto.dateOfIncorporation
+          ? new Date(dto.dateOfIncorporation)
           : undefined,
         status: 'PENDING',
         rejectionReason: null,
@@ -443,8 +560,8 @@ export class PharmaciesService {
     });
 
     return {
-      message: approved 
-        ? 'Pharmacy approved successfully' 
+      message: approved
+        ? 'Pharmacy approved successfully'
         : 'Pharmacy rejected',
       pharmacy: updatedPharmacy,
     };
