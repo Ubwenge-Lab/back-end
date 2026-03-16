@@ -10,14 +10,14 @@ async function main() {
   console.log('🌱 Starting seed...');
 
   // Check if super admin already exists
-  const existingSuperAdmin = await prisma.user.findFirst({
-    where: { role: 'SUPER_ADMIN' },
-  });
+  // const existingSuperAdmin = await prisma.user.findFirst({
+  //   where: { role: 'SUPER_ADMIN' },
+  // });
 
-  if (existingSuperAdmin) {
-    console.log('✅ Super Admin already exists. Skipping seed.');
-    return;
-  }
+  // if (existingSuperAdmin) {
+  //   console.log('✅ Super Admin already exists. Skipping seed.');
+  //   return;
+  // }
 
   // Get super admin credentials from environment
   const superAdminEmail = process.env.SUPER_ADMIN_EMAIL || 'danielntwali9@gmail.com';

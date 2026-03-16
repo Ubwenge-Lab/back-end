@@ -469,4 +469,24 @@ export class StaffService {
     }
     return password;
   }
+  // ========================================
+  // HELPER: Find by User ID
+  // ========================================
+
+  async findByUserId(userId: string) {
+    const staff = await this.prisma.staff.findUnique({
+      where: { userId },
+      include: {
+        branch: {
+          select: { id: true, name: true, pharmacyId: true },
+        },
+      },
+    });
+
+    if (!staff) {
+      throw new NotFoundException('Staff member not found');
+    }
+
+    return staff;
+  }
 }
