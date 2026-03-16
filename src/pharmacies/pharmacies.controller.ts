@@ -15,13 +15,14 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiOkResponse } from '@nestjs/swagger';
 import { PharmaciesService } from './pharmacies.service';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
+import { PharmacyStatsResponseDto } from './dto/stats-response.dto';
 
 @ApiTags('Pharmacies')
 @Controller('pharmacies')
@@ -54,6 +55,7 @@ export class PharmaciesController {
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get pharmacy dashboard statistics' })
+  @ApiOkResponse({ type: PharmacyStatsResponseDto, description: 'Dashboard stats for the authenticated pharmacy' })
   getStats(@Req() req: any) {
     return this.pharmaciesService.getStats(req.user.sub);
   }

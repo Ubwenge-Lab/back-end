@@ -127,20 +127,22 @@ export class PharmaciesService {
         },
     });
 
-    const alerts: { branch: string; msg: string; level: 'warning' | 'info' }[] = [];
+    const alerts: { branch: string; msg: string; level: 'warning' | 'info'; meds?: { name: string; quantity: number }[] }[] = [];
 
-    // group low stock by branch
+    // group low stock meds by branch
     const lowStockByBranch = lowStockMeds.reduce((acc, med) => {
         const branchName = med.branch.name;
-        acc[branchName] = (acc[branchName] ?? 0) + 1;
+        if (!acc[branchName]) acc[branchName] = [];
+        acc[branchName].push({ name: med.name, quantity: med.quantity });
         return acc;
-    }, {} as Record<string, number>);
+    }, {} as Record<string, { name: string; quantity: number }[]>);
 
-    for (const [branchName, count] of Object.entries(lowStockByBranch)) {
+    for (const [branchName, meds] of Object.entries(lowStockByBranch)) {
         alerts.push({
             branch: branchName,
-            msg: `Low stock: ${count} medication${count > 1 ? 's' : ''} below threshold`,
+            msg: `Low stock: ${meds.length} medication${meds.length > 1 ? 's' : ''} below threshold`,
             level: 'warning',
+            meds,
         });
     }
 
