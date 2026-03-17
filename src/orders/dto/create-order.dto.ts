@@ -1,6 +1,6 @@
 // backend/src/orders/dto/create-order.dto.ts
 
-import { IsString, IsArray, IsNumber, IsEnum, IsOptional, ValidateNested } from 'class-validator';
+import { IsString, IsArray, IsNumber, IsEnum, IsOptional, ValidateNested, Min } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty } from '@nestjs/swagger';
 
@@ -11,6 +11,7 @@ class OrderItemDto {
 
   @ApiProperty()
   @IsNumber()
+  @Min(1, { message: 'Quantity must be at least 1' })
   quantity: number;
 }
 

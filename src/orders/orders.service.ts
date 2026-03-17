@@ -80,7 +80,6 @@ export class OrdersService {
           quantity: item.quantity,
           price: medication.price,
         });
-
         // FIX: Use atomic update with condition to prevent race conditions
         // This prevents overselling by ensuring quantity doesn't go negative
         const updateResult = await tx.medication.updateMany({
@@ -168,8 +167,9 @@ export class OrdersService {
           prescription: true,
         },
       });
-
       return createdOrder;
+    }, {
+      timeout: 20000, // Increased for remote Supabase latency
     });
 
     // FIX: Send notifications AFTER transaction commits to avoid foreign key issues
@@ -395,7 +395,8 @@ export class OrdersService {
     }
 
     // Check if cancellation is allowed (only until PREPARING)
-    if (['PREPARING', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'DELIVERED', 'COMPLETED'].includes(order.status)) {
+    if (['PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'DELIVERED', 'COMPLETED'].includes(order.status)
+) {
       throw new BadRequestException(
         'Cannot cancel order at this stage. Please contact the pharmacy.',
       );
@@ -411,10 +412,15 @@ export class OrdersService {
       },
     });
 
-    // Restore medication stock
-    for (const item of order.orderItems) {
-      await this.medicationsService.restoreStock(item.medicationId, item.quantity);
-    }
+    // Restore stock only if payment completed
+if (order.paymentStatus === 'COMPLETED') {
+  for (const item of order.orderItems) {
+    await this.medicationsService.restoreStock(
+      item.medicationId,
+      item.quantity,
+    );
+  }
+}
 
     // Notify pharmacy
     await this.notificationsService.create({
@@ -454,21 +460,23 @@ export class OrdersService {
   }
 
   private validateStatusTransition(currentStatus: string, newStatus: string) {
-    const validTransitions: Record<string, string[]> = {
-      PENDING: ['ACCEPTED', 'CANCELLED'],
-      ACCEPTED: ['PREPARING', 'CANCELLED'],
-      PREPARING: ['OUT_FOR_DELIVERY', 'READY_FOR_PICKUP'],
-      OUT_FOR_DELIVERY: ['DELIVERED'],
-      READY_FOR_PICKUP: ['COMPLETED'],
-      DELIVERED: ['COMPLETED'],
-    };
+  const validTransitions: Record<string, string[]> = {
 
-    if (!validTransitions[currentStatus]?.includes(newStatus)) {
-      throw new BadRequestException(
-        `Cannot transition from ${currentStatus} to ${newStatus}`,
-      );
-    }
+    PENDING: ['PREPARING', 'CANCELLED'],
+    PREPARING: ['READY', 'READY_FOR_PICKUP'],
+    READY: ['OUT_FOR_DELIVERY'],
+    OUT_FOR_DELIVERY: ['DELIVERED'],
+    READY_FOR_PICKUP: ['COMPLETED'],
+    DELIVERED: ['COMPLETED'],
+  };
+
+  if (!validTransitions[currentStatus]?.includes(newStatus)) {
+    throw new BadRequestException(
+      `Cannot transition from ${currentStatus} to ${newStatus}`,
+    );
   }
+}
+
 
   private async sendStatusNotification(order: any) {
     const notificationMap: Record<string, { title: string; message: string; type: any }> = {
@@ -513,4 +521,63 @@ export class OrdersService {
       });
     }
   }
+
+  async confirmDelivery(orderId: string, userId: string) {
+  const order = await this.findById(orderId);
+  const patient = await this.patientsService.findByUserId(userId);
+
+  if (order.patientId !== patient.id) {
+    throw new ForbiddenException();
+  }
+
+  if (order.status !== 'OUT_FOR_DELIVERY') {
+    throw new BadRequestException('Invalid state');
+  }
+
+  const updated = await this.prisma.order.update({
+    where: { id: orderId },
+    data: { status: 'DELIVERED' },
+  });
+
+  await this.sendStatusNotification(updated);
+
+  return updated;
+}
+
+async handlePaymentSuccess(orderId: string) {
+  return await this.prisma.$transaction(async (tx) => {
+    const order = await tx.order.findUnique({
+      where: { id: orderId },
+      include: { orderItems: true },
+    });
+
+    if (!order) throw new NotFoundException('Order not found');
+
+    // Prevent double processing
+    if (order.paymentStatus === 'COMPLETED') {
+      return order; // Already processed
+    }
+
+    // NOW reduce stock (this is the ONLY place stock should be reduced)
+    for (const item of order.orderItems) {
+      await tx.medication.update({
+        where: { id: item.medicationId },
+        data: { quantity: { decrement: item.quantity } },
+      });
+    }
+
+    // Update order status to PENDING (ready for pharmacy to prepare)
+    const updated = await tx.order.update({
+      where: { id: orderId },
+      data: {
+        status: 'PENDING',
+        paymentStatus: 'COMPLETED'
+      },
+    });
+
+    return updated;
+  }, {
+    timeout: 20000, // Increased for remote Supabase latency
+  });
+}
 }
