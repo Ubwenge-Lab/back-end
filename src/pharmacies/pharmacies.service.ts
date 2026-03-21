@@ -167,6 +167,153 @@ export class PharmaciesService {
 }
 
   // ========================================
+  // DAILY REVENUE — last 30 days, per branch
+  // ========================================
+
+  async getDailyRevenue(userId: string) {
+    const pharmacy = await this.findByUserId(userId);
+
+    const now = new Date();
+    const thirtyDaysAgo = new Date(now);
+    thirtyDaysAgo.setDate(now.getDate() - 29);
+    thirtyDaysAgo.setHours(0, 0, 0, 0);
+
+    // Fetch all branches for this pharmacy
+    const branches = await this.prisma.branch.findMany({
+      where: { pharmacyId: pharmacy.id },
+      select: { id: true, name: true },
+    });
+
+    // Build a day-by-day array for the last 30 days
+    const days: { date: string; label: string }[] = [];
+    for (let i = 0; i < 30; i++) {
+      const d = new Date(thirtyDaysAgo);
+      d.setDate(thirtyDaysAgo.getDate() + i);
+      days.push({
+        date: d.toISOString().split('T')[0],
+        label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+      });
+    }
+
+    // For each day fetch total revenue across all branches (pharmacy-wide)
+    const dailyTotal = await Promise.all(
+      days.map(async ({ date, label }) => {
+        const start = new Date(date + 'T00:00:00.000Z');
+        const end   = new Date(date + 'T23:59:59.999Z');
+        const result = await this.prisma.order.aggregate({
+          where: {
+            pharmacyId: pharmacy.id,
+            status: 'COMPLETED',
+            createdAt: { gte: start, lte: end },
+          },
+          _sum: { total: true },
+        });
+        return { date, label, revenue: result._sum.total ?? 0 };
+      }),
+    );
+
+    // Per-branch daily breakdown
+    const branchDaily = await Promise.all(
+      branches.map(async (branch) => {
+        const data = await Promise.all(
+          days.map(async ({ date, label }) => {
+            const start = new Date(date + 'T00:00:00.000Z');
+            const end   = new Date(date + 'T23:59:59.999Z');
+            const result = await this.prisma.order.aggregate({
+              where: {
+                branchId: branch.id,
+                status: 'COMPLETED',
+                createdAt: { gte: start, lte: end },
+              },
+              _sum: { total: true },
+            });
+            return { date, label, revenue: result._sum.total ?? 0 };
+          }),
+        );
+        return { branchId: branch.id, branchName: branch.name, data };
+      }),
+    );
+
+    return {
+      days: days.map(d => d.label),
+      dailyTotal,
+      branchDaily,
+    };
+  }
+
+  // ========================================
+  // WEEKLY REVENUE — last 30 days, per branch
+  // ========================================
+
+  async getWeeklyRevenue(userId: string) {
+    const pharmacy = await this.findByUserId(userId);
+
+    const now = new Date();
+
+    // Build 4 complete weeks going backwards from today
+    const weeks: { label: string; start: Date; end: Date }[] = [];
+    for (let w = 3; w >= 0; w--) {
+      const end = new Date(now);
+      end.setDate(now.getDate() - w * 7);
+      end.setHours(23, 59, 59, 999);
+
+      const start = new Date(end);
+      start.setDate(end.getDate() - 6);
+      start.setHours(0, 0, 0, 0);
+
+      const label = `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+      weeks.push({ label, start, end });
+    }
+
+    // Fetch all branches
+    const branches = await this.prisma.branch.findMany({
+      where: { pharmacyId: pharmacy.id },
+      select: { id: true, name: true },
+    });
+
+    // Pharmacy-wide weekly totals
+    const weeklyTotal = await Promise.all(
+      weeks.map(async ({ label, start, end }) => {
+        const result = await this.prisma.order.aggregate({
+          where: {
+            pharmacyId: pharmacy.id,
+            status: 'COMPLETED',
+            createdAt: { gte: start, lte: end },
+          },
+          _sum: { total: true },
+        });
+        return { label, revenue: result._sum.total ?? 0 };
+      }),
+    );
+
+    // Per-branch weekly breakdown
+    const branchWeekly = await Promise.all(
+      branches.map(async (branch) => {
+        const data = await Promise.all(
+          weeks.map(async ({ label, start, end }) => {
+            const result = await this.prisma.order.aggregate({
+              where: {
+                branchId: branch.id,
+                status: 'COMPLETED',
+                createdAt: { gte: start, lte: end },
+              },
+              _sum: { total: true },
+            });
+            return { label, revenue: result._sum.total ?? 0 };
+          }),
+        );
+        return { branchId: branch.id, branchName: branch.name, data };
+      }),
+    );
+
+    return {
+      weeks: weeks.map(w => w.label),
+      weeklyTotal,
+      branchWeekly,
+    };
+  }
+
+  // ========================================
   // ANALYTICS DATA
   // ========================================
 
