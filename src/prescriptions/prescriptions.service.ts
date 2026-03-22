@@ -78,24 +78,6 @@ export class PrescriptionsService {
     };
   }
 
-  //=========================================
-  // Prescription Verification
-  //=========================================
-
-  async verifyPrescriptionManually(prescriptionId: string,staffUserId: string, isApproved:boolean, notes?: string){
-    const staff = await this.prisma.staff.findUnique({where: {userId: staffUserId}});
-    if(!staff) throw new ForbiddenException('Only pharmacy staff can verify prescriptions');
-
-    return this.prisma.prescription.update({
-      where: {id: prescriptionId},
-      data: {
-        status: isApproved ? 'APPROVED' : 'REJECTED',
-        rejectionReason: isApproved ? null : notes,
-        reviewedAt: new Date(),
-      }
-    })
-
-  }
 
   // ========================================
   // AI PRESCRIPTION PROCESSING

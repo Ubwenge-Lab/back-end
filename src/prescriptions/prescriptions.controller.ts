@@ -46,7 +46,7 @@ export class PrescriptionsController {
     return this.prescriptionsService.findById(id);
   }
 
-  @Get('branch/my-prescriptions')
+  @Get('branch')
   @Roles(Role.PHARMACIST, Role.BRANCH_MANAGER)
   @ApiOperation({ summary: 'Get prescriptions linked to branch (Pharmacist)' })
   getBranchPrescriptions(@Req() req: any, @Query('status') status?: string) {
@@ -58,12 +58,5 @@ export class PrescriptionsController {
   @ApiOperation({ summary: 'Update prescription status (Pharmacy)' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdatePrescriptionStatusDto) {
     return this.prescriptionsService.updateStatus(id, dto);
-  }
-
-  @Put(':id/verify')
-  @Roles(Role.PHARMACIST, Role.BRANCH_MANAGER)
-  @ApiOperation({ summary: 'Verify prescription manually (Staff)' })
-  verifyPrescriptionManually(@Param('id') id: string, @Req() req: any, @Body() dto: { isApproved: boolean; notes?: string }) {
-    return this.prescriptionsService.verifyPrescriptionManually(id, req.user.sub, dto.isApproved, dto.notes);
   }
 }
