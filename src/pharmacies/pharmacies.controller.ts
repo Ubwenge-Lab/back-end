@@ -70,6 +70,26 @@ export class PharmaciesController {
     return this.pharmaciesService.getAnalytics(req.user.sub);
   }
 
+  // Daily Revenue — last 30 days, total + per branch
+  @Get('dashboard/daily-revenue')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get daily revenue for the past 30 days (total + per branch)' })
+  getDailyRevenue(@Req() req: any) {
+    return this.pharmaciesService.getDailyRevenue(req.user.sub);
+  }
+
+  // Weekly Revenue — last 30 days (4 weeks), total + per branch
+  @Get('dashboard/weekly-revenue')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get weekly revenue for the past 30 days (total + per branch)' })
+  getWeeklyRevenue(@Req() req: any) {
+    return this.pharmaciesService.getWeeklyRevenue(req.user.sub);
+  }
+
   // View All Past Patients
   @Get('dashboard/patients')
   @UseGuards(JwtAuthGuard, RolesGuard)
