@@ -19,6 +19,7 @@ import { UploadModule } from './upload/upload.module';
 import { BranchesModule } from './branches/branches.module';
 import { StaffModule } from './staff/staff.module'; // NEW
 import { AttendanceModule } from './attendance/attendance.module';
+import { StockTransfersModule } from './stock-transfers/stock-transfers.module';
 
 @Module({
   imports: [
@@ -41,7 +42,7 @@ import { AttendanceModule } from './attendance/attendance.module';
     UploadModule,
     BranchesModule,
     StaffModule, // NEW
-    AttendanceModule,
+    AttendanceModule, StockTransfersModule,
   ],
 })
 export class AppModule { }

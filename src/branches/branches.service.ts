@@ -1,4 +1,4 @@
-﻿import {
+import {
   Injectable,
   ForbiddenException,
   NotFoundException,
@@ -158,6 +158,32 @@ export class BranchesService {
         manager: { select: { id: true, email: true } },
       },
       orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  async getPharmacyBranches(managerUserId: string) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { managerId: managerUserId },
+      select: { id: true, pharmacyId: true },
+    });
+
+    if (!branch) {
+      throw new ForbiddenException('Only branch managers can access sibling branches');
+    }
+
+    return this.prisma.branch.findMany({
+      where: {
+        pharmacyId: branch.pharmacyId,
+        id: { not: branch.id },
+        branchStatus: BranchStatus.APPROVED,
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        address: true,
+      },
+      orderBy: { name: 'asc' },
     });
   }
 

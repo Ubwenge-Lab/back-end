@@ -16,24 +16,29 @@ export class MedicationsService {
     private staffService: StaffService,
   ) {}
 
-  // Create medication (Pharmacy and Staff)
-  async create(userId: string, dto: CreateMedicationDto) {
-    let pharmacyId: string;
-    let isStaff = false;
-    let staffBranchId: string | null = null;
-    
+  // Helper to resolve Pharmacy and Branch for Owners, Managers, and Staff
+  async resolvePharmacyAndBranch(userId: string): Promise<{ pharmacyId: string; branchId: string | null; isStaffOrManager: boolean }> {
     try {
       const pharmacy = await this.pharmaciesService.findByUserId(userId);
-      pharmacyId = pharmacy.id;
-      if (pharmacy.status !== 'APPROVED') {
-        throw new ForbiddenException('Pharmacy not approved yet');
-      }
-    } catch (e) {
-      const staff = await this.staffService.findByUserId(userId);
-      pharmacyId = staff.branch.pharmacyId;
-      isStaff = true;
-      staffBranchId = staff.branch.id;
+      return { pharmacyId: pharmacy.id, branchId: null, isStaffOrManager: false };
+    } catch {}
+
+    const managerBranch = await this.prisma.branch.findUnique({ where: { managerId: userId } });
+    if (managerBranch) {
+      return { pharmacyId: managerBranch.pharmacyId, branchId: managerBranch.id, isStaffOrManager: true };
     }
+
+    try {
+      const staff = await this.staffService.findByUserId(userId);
+      return { pharmacyId: staff.branch.pharmacyId, branchId: staff.branch.id, isStaffOrManager: true };
+    } catch {
+      throw new ForbiddenException('User is not authorized to access medications');
+    }
+  }
+
+  // Create medication (Pharmacy, Manager, and Staff)
+  async create(userId: string, dto: CreateMedicationDto) {
+    const { pharmacyId, branchId: staffBranchId, isStaffOrManager } = await this.resolvePharmacyAndBranch(userId);
 
     // FIX: Verify branch belongs to pharmacy
     const branch = await this.prisma.branch.findFirst({
@@ -48,7 +53,7 @@ export class MedicationsService {
       throw new BadRequestException('Invalid branch or branch does not belong to your pharmacy');
     }
 
-    if (isStaff && staffBranchId !== branch.id) {
+    if (isStaffOrManager && staffBranchId !== branch.id) {
       throw new ForbiddenException('You can only create medications for your own branch');
     }
 
@@ -146,13 +151,11 @@ export class MedicationsService {
 
   // Get all medications for a pharmacy by user ID
   async findByPharmacyUserId(userId: string) {
-    try {
-      const pharmacy = await this.pharmaciesService.findByUserId(userId);
-      return this.findByPharmacy(pharmacy.id);
-    } catch (e) {
-      const staff = await this.staffService.findByUserId(userId);
-      return this.findByBranch(staff.branch.id);
+    const { pharmacyId, branchId } = await this.resolvePharmacyAndBranch(userId);
+    if (branchId) {
+      return this.findByBranch(branchId);
     }
+    return this.findByPharmacy(pharmacyId);
   }
 
   // Get medications by branch
@@ -191,32 +194,19 @@ export class MedicationsService {
   // Update medication
   async update(id: string, userId: string, dto: UpdateMedicationDto) {
     const medication = await this.findById(id);
-    
-    let pharmacyId: string;
-    let isStaff = false;
-    let staffBranchId: string | null = null;
-    
-    try {
-      const pharmacy = await this.pharmaciesService.findByUserId(userId);
-      pharmacyId = pharmacy.id;
-    } catch (e) {
-      const staff = await this.staffService.findByUserId(userId);
-      pharmacyId = staff.branch.pharmacyId;
-      isStaff = true;
-      staffBranchId = staff.branch.id;
-    }
+    const { pharmacyId, branchId: staffBranchId, isStaffOrManager } = await this.resolvePharmacyAndBranch(userId);
 
     if (medication.pharmacyId !== pharmacyId) {
       throw new ForbiddenException('You can only update your own medications');
     }
     
-    if (isStaff && medication.branchId !== staffBranchId) {
+    if (isStaffOrManager && medication.branchId !== staffBranchId) {
       throw new ForbiddenException('You can only update medications in your own branch');
     }
 
     // If updating branchId, verify it belongs to pharmacy
     if (dto.branchId && dto.branchId !== medication.branchId) {
-      if (isStaff) {
+      if (isStaffOrManager) {
         throw new ForbiddenException('Staff members cannot move medications between branches');
       }
     
@@ -275,26 +265,13 @@ export class MedicationsService {
   // Delete medication
   async delete(id: string, userId: string) {
     const medication = await this.findById(id);
-
-    let pharmacyId: string;
-    let isStaff = false;
-    let staffBranchId: string | null = null;
-    
-    try {
-      const pharmacy = await this.pharmaciesService.findByUserId(userId);
-      pharmacyId = pharmacy.id;
-    } catch (e) {
-      const staff = await this.staffService.findByUserId(userId);
-      pharmacyId = staff.branch.pharmacyId;
-      isStaff = true;
-      staffBranchId = staff.branch.id;
-    }
+    const { pharmacyId, branchId: staffBranchId, isStaffOrManager } = await this.resolvePharmacyAndBranch(userId);
 
     if (medication.pharmacyId !== pharmacyId) {
       throw new ForbiddenException('You can only delete your own medications');
     }
 
-    if (isStaff && medication.branchId !== staffBranchId) {
+    if (isStaffOrManager && medication.branchId !== staffBranchId) {
       throw new ForbiddenException('You can only delete medications in your own branch');
     }
 
@@ -381,15 +358,25 @@ export class MedicationsService {
 
   // Get low stock medications for a pharmacy
   async getLowStock(userId: string) {
-    const pharmacy = await this.pharmaciesService.findByUserId(userId);
+    const { pharmacyId, branchId } = await this.resolvePharmacyAndBranch(userId);
 
     // Use raw query to compare quantity against lowStockThreshold column
-    const lowStockIds = await this.prisma.$queryRaw<{ id: string }[]>`
-      SELECT id FROM medications
-      WHERE "pharmacyId" = ${pharmacy.id}
-        AND quantity <= "lowStockThreshold"
-        AND quantity > 0
-    `;
+    let lowStockIds;
+    if (branchId) {
+      lowStockIds = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM medications
+        WHERE "pharmacyId" = ${pharmacyId} AND "branchId" = ${branchId}
+          AND quantity <= "lowStockThreshold"
+          AND quantity > 0
+      `;
+    } else {
+      lowStockIds = await this.prisma.$queryRaw<{ id: string }[]>`
+        SELECT id FROM medications
+        WHERE "pharmacyId" = ${pharmacyId}
+          AND quantity <= "lowStockThreshold"
+          AND quantity > 0
+      `;
+    }
 
     if (lowStockIds.length === 0) return [];
 
@@ -408,17 +395,7 @@ export class MedicationsService {
 
   // Get out of stock medications
   async getOutOfStock(userId: string) {
-    let pharmacyId: string;
-    let branchId: string | null = null;
-
-    try {
-      const pharmacy = await this.pharmaciesService.findByUserId(userId);
-      pharmacyId = pharmacy.id;
-    } catch (e) {
-      const staff = await this.staffService.findByUserId(userId);
-      pharmacyId = staff.branch.pharmacyId;
-      branchId = staff.branch.id;
-    }
+    const { pharmacyId, branchId } = await this.resolvePharmacyAndBranch(userId);
 
     const where: any = {
       pharmacyId,

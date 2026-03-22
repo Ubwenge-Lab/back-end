@@ -60,6 +60,16 @@ export class PharmaciesController {
     return this.pharmaciesService.getStats(req.user.sub);
   }
 
+  // Branch Manager Dashboard Statistics
+  @Get('dashboard/branch-stats')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.BRANCH_MANAGER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get branch dashboard statistics (Branch Manager)' })
+  getBranchStats(@Req() req: any) {
+    return this.pharmaciesService.getBranchStats(req.user.sub);
+  }
+
   // Analytics
   @Get('dashboard/analytics')
   @UseGuards(JwtAuthGuard, RolesGuard)

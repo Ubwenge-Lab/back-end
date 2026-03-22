@@ -51,6 +51,12 @@ export class BranchesController {
     return this.branchesService.getMyBranches(userId);
   }
 
+  @Get('pharmacy-branches')
+  @Roles(Role.BRANCH_MANAGER)
+  getPharmacyBranches(@CurrentUser('sub') userId: string) {
+    return this.branchesService.getPharmacyBranches(userId);
+  }
+
   @Get(':id')
   @Roles(Role.PHARMACY)
   getBranchDetails(
