@@ -40,17 +40,17 @@ export class PrescriptionsController {
     return this.prescriptionsService.findByPatient(req.user.sub);
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get prescription by ID' })
-  getPrescriptionById(@Param('id') id: string) {
-    return this.prescriptionsService.findById(id);
-  }
-
   @Get('branch')
   @Roles(Role.PHARMACIST, Role.BRANCH_MANAGER)
   @ApiOperation({ summary: 'Get prescriptions linked to branch (Pharmacist)' })
   getBranchPrescriptions(@Req() req: any, @Query('status') status?: string) {
     return this.prescriptionsService.findByBranch(req.user.sub, status);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get prescription by ID' })
+  getPrescriptionById(@Param('id') id: string) {
+    return this.prescriptionsService.findById(id);
   }
 
   @Put(':id/status')
