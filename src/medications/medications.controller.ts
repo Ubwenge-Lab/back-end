@@ -52,7 +52,7 @@ export class MedicationsController {
   // Pharmacy - Get out of stock (MUST be before :id route)
   @Get('pharmacy/out-of-stock')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY)
+  @Roles(Role.PHARMACY, Role.PHARMACIST)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get out of stock medications' })
   getOutOfStock(@Req() req: any) {
@@ -62,7 +62,7 @@ export class MedicationsController {
   // Pharmacy - Get their medications (MUST be before :id route)
   @Get('pharmacy/my-medications')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY)
+  @Roles(Role.PHARMACY, Role.PHARMACIST)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get pharmacy medications' })
   async getMyMedications(@Req() req: any) {
@@ -79,7 +79,7 @@ export class MedicationsController {
   // Pharmacy - Create medication
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY)
+  @Roles(Role.PHARMACY, Role.PHARMACIST)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create medication' })
   create(@Req() req: any, @Body() dto: CreateMedicationDto) {
@@ -89,7 +89,7 @@ export class MedicationsController {
   // Pharmacy - Update medication
   @Put(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY)
+  @Roles(Role.PHARMACY, Role.PHARMACIST)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update medication' })
   update(@Param('id') id: string, @Req() req: any, @Body() dto: UpdateMedicationDto) {
@@ -99,7 +99,7 @@ export class MedicationsController {
   // Pharmacy - Delete medication
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY)
+  @Roles(Role.PHARMACY, Role.PHARMACIST)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete medication' })
   delete(@Param('id') id: string, @Req() req: any) {
