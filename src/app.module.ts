@@ -2,6 +2,8 @@
 // UPDATED VERSION - Added StaffModule
 
 import { Module } from '@nestjs/common';
+import { AppController } from './app.controller';
+import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
@@ -19,6 +21,7 @@ import { UploadModule } from './upload/upload.module';
 import { BranchesModule } from './branches/branches.module';
 import { StaffModule } from './staff/staff.module'; // NEW
 import { AttendanceModule } from './attendance/attendance.module';
+import { StockTransfersModule } from './stock-transfers/stock-transfers.module';
 
 @Module({
   imports: [
@@ -41,7 +44,9 @@ import { AttendanceModule } from './attendance/attendance.module';
     UploadModule,
     BranchesModule,
     StaffModule, // NEW
-    AttendanceModule,
+    AttendanceModule, StockTransfersModule,
   ],
+  controllers: [AppController],
+  providers: [AppService],
 })
 export class AppModule { }

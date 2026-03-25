@@ -236,10 +236,12 @@ export class OrdersService {
       const patient = await this.patientsService.findByUserId(userId).catch(() => null);
       const pharmacy = await this.pharmaciesService.findByUserId(userId).catch(() => null);
       const staff = await this.staffService.findByUserId(userId).catch(() => null);
+      const branchManager = await this.prisma.branch.findFirst({ where: { managerId: userId } });
 
       const isOwner = (patient && order.patientId === patient.id) ||
                       (pharmacy && order.pharmacyId === pharmacy.id) ||
-                      (staff && staff.branch.id === order.branchId); // Allow staff to view branch orders
+                      (staff && staff.branch.id === order.branchId) ||
+                      (branchManager && branchManager.id === order.branchId);
 
       if (!isOwner) {
         throw new ForbiddenException('You are not authorized to access this order');
@@ -291,10 +293,17 @@ export class OrdersService {
       const pharmacy = await this.pharmaciesService.findByUserId(userId);
       pharmacyId = pharmacy.id;
     } catch (e) {
-      // Try finding as Staff
-      const staff = await this.staffService.findByUserId(userId);
-      pharmacyId = staff.branch.pharmacyId;
-      branchId = staff.branch.id;
+      // Check if Branch Manager
+      const branchManager = await this.prisma.branch.findFirst({ where: { managerId: userId } });
+      if (branchManager) {
+        pharmacyId = branchManager.pharmacyId;
+        branchId = branchManager.id;
+      } else {
+        // Try finding as Staff
+        const staff = await this.staffService.findByUserId(userId);
+        pharmacyId = staff.branch.pharmacyId;
+        branchId = staff.branch.id;
+      }
     }
 
     const where: any = { pharmacyId };
@@ -340,12 +349,18 @@ export class OrdersService {
       const pharmacy = await this.pharmaciesService.findByUserId(userId);
       if (order.pharmacyId === pharmacy.id) isAuthorized = true;
     } catch (e) {
-      // Check if Staff
-      try {
-        const staff = await this.staffService.findByUserId(userId);
-        if (staff.branch.id === order.branchId) isAuthorized = true;
-      } catch (err) {
-        // Not staff either
+      // Check if Branch Manager
+      const branchManager = await this.prisma.branch.findFirst({ where: { managerId: userId } });
+      if (branchManager && branchManager.id === order.branchId) {
+        isAuthorized = true;
+      } else {
+        // Check if Staff
+        try {
+          const staff = await this.staffService.findByUserId(userId);
+          if (staff.branch.id === order.branchId) isAuthorized = true;
+        } catch (err) {
+          // Not staff either
+        }
       }
     }
 

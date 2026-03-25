@@ -166,6 +166,72 @@ export class PharmaciesService {
     };
 }
 
+  async getBranchStats(managerUserId: string) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { managerId: managerUserId }
+    });
+
+    if (!branch) {
+      throw new ForbiddenException('Only branch managers can access branch stats');
+    }
+
+    const now = new Date();
+    const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    
+    // For attendance (today)
+    const startOfDay = new Date();
+    startOfDay.setHours(0, 0, 0, 0);
+    const endOfDay = new Date();
+    endOfDay.setHours(23, 59, 59, 999);
+
+    const [orderCount, revenueResult, lowStockCount, staffCount, attendanceCount] = await Promise.all([
+      // 1. Order Count this month
+      this.prisma.order.count({
+        where: {
+          branchId: branch.id,
+          createdAt: { gte: startOfMonth, lte: endOfMonth }
+        }
+      }),
+      // 2. Revenue this month
+      this.prisma.order.aggregate({
+        where: {
+          branchId: branch.id,
+          status: 'COMPLETED',
+          createdAt: { gte: startOfMonth, lte: endOfMonth }
+        },
+        _sum: { total: true }
+      }),
+      // 3. Low stock medications
+      this.prisma.medication.count({
+        where: {
+          branchId: branch.id,
+          quantity: { lte: 10, gt: 0 }
+        }
+      }),
+      // 4. Staff count
+      this.prisma.staff.count({
+        where: { branchId: branch.id, status: 'ACTIVE' }
+      }),
+      // 5. Attendance Summary (Present today)
+      this.prisma.attendance.count({
+        where: {
+          staff: { branchId: branch.id },
+          clockInTime: { gte: startOfDay, lte: endOfDay },
+          status: 'APPROVED'
+        }
+      })
+    ]);
+
+    return {
+      orderCount,
+      revenue: revenueResult._sum.total ?? 0,
+      lowStockCount,
+      staffCount,
+      attendanceCount
+    };
+  }
+
   // ========================================
   // DAILY REVENUE — last 30 days, per branch
   // ========================================
