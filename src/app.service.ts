@@ -168,6 +168,69 @@ export class AppService {
                   z-index: 1;
                   opacity: 0.2;
               }
+
+              /* TABLET (768px) */
+              @media (max-width: 768px) {
+                  .container {
+                      padding: 2.5rem 2rem;
+                      max-width: 500px;
+                  }
+                  h1 {
+                      font-size: 2.75rem;
+                  }
+              }
+
+              /* MOBILE L (425px) */
+              @media (max-width: 425px) {
+                  .container {
+                      padding: 2rem 1.5rem;
+                      border-radius: 1.5rem;
+                      width: 85%;
+                  }
+                  h1 {
+                      font-size: 2.25rem;
+                  }
+                  p {
+                      font-size: 1rem;
+                      margin-bottom: 2rem;
+                  }
+                  .buttons {
+                      flex-direction: column;
+                  }
+                  .btn {
+                      width: 100%;
+                  }
+              }
+
+              /* MOBILE M/S (375px and below) */
+              @media (max-width: 375px) {
+                  .container {
+                      padding: 1.5rem 1rem;
+                      width: 90%;
+                  }
+                  h1 {
+                      font-size: 1.85rem;
+                  }
+                  .status-badge {
+                      font-size: 0.7rem;
+                      margin-bottom: 1.5rem;
+                  }
+                  p {
+                      font-size: 0.9rem;
+                      margin-bottom: 1.5rem;
+                  }
+              }
+
+              @media (max-height: 600px) {
+                  body {
+                      height: auto;
+                      padding: 2rem 0;
+                      overflow: auto;
+                  }
+                  .container {
+                      margin: 2rem auto;
+                  }
+              }
           </style>
       </head>
       <body>
