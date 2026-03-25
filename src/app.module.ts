@@ -18,6 +18,7 @@ import { SuperAdminModule } from './super-admin/super-admin.module';
 import { UploadModule } from './upload/upload.module';
 import { BranchesModule } from './branches/branches.module';
 import { StaffModule } from './staff/staff.module'; // NEW
+import { AttendanceModule } from './attendance/attendance.module';
 
 @Module({
   imports: [
@@ -40,6 +41,7 @@ import { StaffModule } from './staff/staff.module'; // NEW
     UploadModule,
     BranchesModule,
     StaffModule, // NEW
+    AttendanceModule,
   ],
 })
 export class AppModule { }

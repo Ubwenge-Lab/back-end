@@ -5,9 +5,10 @@ import { MedicationsService } from './medications.service';
 import { MedicationsController } from './medications.controller';
 import { PharmaciesModule } from '../pharmacies/pharmacies.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { StaffModule } from '../staff/staff.module';
 
 @Module({
-  imports: [PharmaciesModule, NotificationsModule],
+  imports: [PharmaciesModule, NotificationsModule, StaffModule],
   controllers: [MedicationsController],
   providers: [MedicationsService],
   exports: [MedicationsService],

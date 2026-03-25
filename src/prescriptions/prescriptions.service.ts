@@ -7,6 +7,7 @@ import { PatientsService } from '../patients/patients.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MedicationsService } from '../medications/medications.service';
 import { CreatePrescriptionDto, UpdatePrescriptionStatusDto } from './dto';
+import { StaffService } from '../staff/staff.service';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -32,6 +33,7 @@ export class PrescriptionsService {
     private notificationsService: NotificationsService,
     private medicationsService: MedicationsService,
     private configService: ConfigService,
+    private staffService: StaffService,
   ) {
     // Initialize Google Gemini AI
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
@@ -76,24 +78,6 @@ export class PrescriptionsService {
     };
   }
 
-  //=========================================
-  // Prescription Verification
-  //=========================================
-
-  async verifyPrescriptionManually(prescriptionId: string,staffUserId: string, isApproved:boolean, notes?: string){
-    const staff = await this.prisma.staff.findUnique({where: {userId: staffUserId}});
-    if(!staff) throw new ForbiddenException('Only pharmacy staff can verify prescriptions');
-
-    return this.prisma.prescription.update({
-      where: {id: prescriptionId},
-      data: {
-        status: isApproved ? 'APPROVED' : 'REJECTED',
-        rejectionReason: isApproved ? null : notes,
-        reviewedAt: new Date(),
-      }
-    })
-
-  }
 
   // ========================================
   // AI PRESCRIPTION PROCESSING
@@ -433,6 +417,53 @@ Do not include any explanation, only the JSON array.`,
           select: { prescriptionMedications: true },
         },
       },
+    });
+  }
+
+  async findByBranch(userId: string, statusStr?: string) {
+    let branchId: string;
+
+    try {
+      const staff = await this.staffService.findByUserId(userId);
+      branchId = staff.branch.id;
+    } catch (e) {
+      throw new ForbiddenException('Only pharmacy staff can view branch prescriptions');
+    }
+
+    const where: any = {
+      prescriptionMedications: {
+        some: {
+          matchedMedication: {
+            branchId: branchId,
+          }
+        }
+      }
+    };
+
+    if (statusStr) {
+      where.status = statusStr; // Assuming statusStr maps correctly to PrescriptionStatus Enum 
+    }
+
+    return this.prisma.prescription.findMany({
+      where,
+      orderBy: { createdAt: 'desc' },
+      include: {
+        patient: {
+          select: { firstName: true, lastName: true, phone: true }
+        },
+        prescriptionMedications: {
+          where: {
+            matchedMedication: {
+              branchId: branchId
+            }
+          },
+          include: {
+            matchedMedication: {
+              select: { name: true, price: true, quantity: true, imageUrl: true }
+            }
+          }
+        }
+      }
     });
   }
 

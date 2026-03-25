@@ -9,6 +9,7 @@ import {
   Param,
   UseGuards,
   Req,
+  Query,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PrescriptionsService } from './prescriptions.service';
@@ -39,6 +40,13 @@ export class PrescriptionsController {
     return this.prescriptionsService.findByPatient(req.user.sub);
   }
 
+  @Get('branch')
+  @Roles(Role.PHARMACIST, Role.BRANCH_MANAGER)
+  @ApiOperation({ summary: 'Get prescriptions linked to branch (Pharmacist)' })
+  getBranchPrescriptions(@Req() req: any, @Query('status') status?: string) {
+    return this.prescriptionsService.findByBranch(req.user.sub, status);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get prescription by ID' })
   getPrescriptionById(@Param('id') id: string) {
@@ -46,7 +54,7 @@ export class PrescriptionsController {
   }
 
   @Put(':id/status')
-  @Roles(Role.PHARMACY)
+  @Roles(Role.PHARMACY, Role.PHARMACIST)
   @ApiOperation({ summary: 'Update prescription status (Pharmacy)' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdatePrescriptionStatusDto) {
     return this.prescriptionsService.updateStatus(id, dto);
