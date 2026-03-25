@@ -21,13 +21,51 @@ export class EmailService {
   }
 
   private getFrom(): string {
-    const name = this.configService.get('RESEND_FROM_NAME') || 'Evuze';
-    const email = this.configService.get('RESEND_FROM_EMAIL') || 'noreply@evuze.rw';
+    const name = this.configService.get('RESEND_FROM_NAME') || 'Evuze Healthcare';
+    const email = this.configService.get('RESEND_FROM_EMAIL') || 'noreply@ubwengelab.rw';
     return `${name} <${email}>`;
   }
 
+  private baseTemplate(content: string): string {
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Evuze Healthcare</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f0f4ff;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4ff;padding:40px 0;">
+    <tr>
+      <td align="center">
+        <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
+          <tr>
+            <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
+              <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:1px;">🏥 Evuze Healthcare</h1>
+              <p style="margin:6px 0 0;color:rgba(255,255,255,0.8);font-size:13px;">Powered by Ubwenge Lab</p>
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#ffffff;padding:40px;border-left:1px solid #e8ecf4;border-right:1px solid #e8ecf4;">
+              ${content}
+            </td>
+          </tr>
+          <tr>
+            <td style="background:#f8f9ff;border:1px solid #e8ecf4;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px;text-align:center;">
+              <p style="margin:0 0 6px;color:#999;font-size:12px;">© 2026 Evuze Healthcare · Ubwenge Lab · Kigali, Rwanda</p>
+              <p style="margin:0;color:#bbb;font-size:11px;">This is an automated email. Please do not reply directly to this message.</p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+</body>
+</html>`;
+  }
+
   // ========================================
-  // SEND EMAIL VERIFICATION WITH 5-DIGIT CODE
+  // 1. EMAIL VERIFICATION
   // ========================================
 
   async sendVerificationEmail(email: string, code: string) {
@@ -36,25 +74,27 @@ export class EmailService {
       return;
     }
 
+    const html = this.baseTemplate(`
+      <h2 style="margin:0 0 8px;color:#1a1a2e;font-size:22px;">Verify Your Email Address</h2>
+      <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
+        Welcome to <strong>Evuze Healthcare</strong>! Use the verification code below to confirm your email and activate your account.
+      </p>
+      <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:12px;padding:32px;text-align:center;margin:0 0 28px;">
+        <p style="margin:0 0 8px;color:rgba(255,255,255,0.8);font-size:13px;text-transform:uppercase;letter-spacing:2px;">Your Verification Code</p>
+        <h1 style="margin:0;color:#ffffff;font-size:48px;font-weight:800;letter-spacing:12px;">${code}</h1>
+      </div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+        <tr>
+          <td style="background:#f0f4ff;border-radius:8px;padding:16px 20px;">
+            <p style="margin:0;color:#667eea;font-size:13px;">⏱️ <strong>This code expires in 24 hours.</strong> Enter it on the verification page to complete your registration.</p>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0;color:#999;font-size:13px;">If you didn't create an Evuze account, you can safely ignore this email.</p>
+    `);
+
     try {
-      await this.resend.emails.send({
-        to: email,
-        from: this.getFrom(),
-        subject: 'Verify Your Evuze Account',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #667eea;">Welcome to Evuze Healthcare! 🏥</h2>
-            <p>Thank you for registering with Evuze. Please verify your email address using the code below:</p>
-            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
-              <h1 style="color: #667eea; font-size: 36px; letter-spacing: 8px; margin: 0;">${code}</h1>
-            </div>
-            <p>Enter this code in the verification page to complete your registration.</p>
-            <p>This code will expire in 24 hours.</p>
-            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-            <p style="color: #999; font-size: 12px;">If you didn't create an account, you can safely ignore this email.</p>
-          </div>
-        `,
-      });
+      await this.resend.emails.send({ to: email, from: this.getFrom(), subject: '🔐 Verify Your Evuze Account', html });
       console.log(`✅ Verification email sent to ${email}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
@@ -65,7 +105,7 @@ export class EmailService {
   }
 
   // ========================================
-  // SEND PASSWORD RESET EMAIL
+  // 2. PASSWORD RESET
   // ========================================
 
   async sendPasswordResetEmail(email: string, resetCode: string) {
@@ -74,25 +114,27 @@ export class EmailService {
       return;
     }
 
+    const html = this.baseTemplate(`
+      <h2 style="margin:0 0 8px;color:#1a1a2e;font-size:22px;">Reset Your Password</h2>
+      <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
+        We received a request to reset the password for your Evuze account. Use the code below to proceed.
+      </p>
+      <div style="background:#1a1a2e;border-radius:12px;padding:32px;text-align:center;margin:0 0 28px;">
+        <p style="margin:0 0 8px;color:rgba(255,255,255,0.6);font-size:13px;text-transform:uppercase;letter-spacing:2px;">Password Reset Code</p>
+        <h1 style="margin:0;color:#ffffff;font-size:48px;font-weight:800;letter-spacing:12px;">${resetCode}</h1>
+      </div>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+        <tr>
+          <td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
+            <p style="margin:0;color:#dc2626;font-size:13px;">⏱️ <strong>This code expires in 1 hour.</strong> If you didn't request a reset, please secure your account immediately.</p>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:0;color:#999;font-size:13px;">If you didn't request a password reset, your password will remain unchanged.</p>
+    `);
+
     try {
-      await this.resend.emails.send({
-        to: email,
-        from: this.getFrom(),
-        subject: 'Reset Your Evuze Password',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #667eea;">Password Reset Request 🔐</h2>
-            <p>We received a request to reset your password. Use the code below to reset it:</p>
-            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; text-align: center; margin: 30px 0;">
-              <h1 style="color: #667eea; font-size: 36px; letter-spacing: 8px; margin: 0;">${resetCode}</h1>
-            </div>
-            <p>Enter this code along with your new password in the password reset page.</p>
-            <p>This code will expire in 1 hour.</p>
-            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-            <p style="color: #999; font-size: 12px;">If you didn't request a password reset, you can safely ignore this email. Your password will remain unchanged.</p>
-          </div>
-        `,
-      });
+      await this.resend.emails.send({ to: email, from: this.getFrom(), subject: '🔑 Reset Your Evuze Password', html });
       console.log(`✅ Password reset email sent to ${email}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
@@ -103,7 +145,7 @@ export class EmailService {
   }
 
   // ========================================
-  // SEND ORDER NOTIFICATION
+  // 3. ORDER NOTIFICATION
   // ========================================
 
   async sendOrderNotification(data: {
@@ -118,29 +160,41 @@ export class EmailService {
       return;
     }
 
+    const statusColors: Record<string, string> = {
+      PENDING: '#f59e0b', ACCEPTED: '#3b82f6', PREPARING: '#8b5cf6',
+      READY: '#10b981', DELIVERED: '#10b981', COMPLETED: '#10b981', CANCELLED: '#ef4444',
+    };
+    const color = statusColors[data.status.toUpperCase()] || '#667eea';
+
+    const html = this.baseTemplate(`
+      <h2 style="margin:0 0 8px;color:#1a1a2e;font-size:22px;">Order Update 📦</h2>
+      <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">Hello <strong>${data.name}</strong>, here's the latest update on your order.</p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;margin:0 0 24px;border:1px solid #e8ecf4;">
+        <tr>
+          <td style="padding:20px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Order Number</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:18px;font-weight:700;">#${data.orderNumber}</p>
+          </td>
+          <td style="padding:20px 24px;border-bottom:1px solid #e8ecf4;text-align:right;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Status</p>
+            <span style="display:inline-block;margin-top:4px;padding:4px 14px;background:${color};color:#fff;border-radius:20px;font-size:13px;font-weight:600;">${data.status}</span>
+          </td>
+        </tr>
+        <tr>
+          <td colspan="2" style="padding:20px 24px;">
+            <p style="margin:0;color:#555;font-size:14px;line-height:1.6;">${data.message}</p>
+          </td>
+        </tr>
+      </table>
+      <a href="${this.configService.get('FRONTEND_URL')}/patient/orders/${data.orderNumber}"
+         style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
+        View Order Details →
+      </a>
+      <p style="margin:0;color:#999;font-size:13px;">Thank you for using Evuze Healthcare.</p>
+    `);
+
     try {
-      await this.resend.emails.send({
-        to: data.email,
-        from: this.getFrom(),
-        subject: `Order ${data.orderNumber} - ${data.status}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #667eea;">Order Update 📦</h2>
-            <p>Hello ${data.name},</p>
-            <p>${data.message}</p>
-            <div style="background-color: #f5f5f5; padding: 15px; border-radius: 6px; margin: 20px 0;">
-              <strong>Order Number:</strong> ${data.orderNumber}<br>
-              <strong>Status:</strong> <span style="color: #667eea;">${data.status}</span>
-            </div>
-            <a href="${this.configService.get('FRONTEND_URL')}/patient/orders/${data.orderNumber}" 
-               style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px;">
-              View Order Details
-            </a>
-            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-            <p style="color: #999; font-size: 12px;">Thank you for using Evuze Healthcare.</p>
-          </div>
-        `,
-      });
+      await this.resend.emails.send({ to: data.email, from: this.getFrom(), subject: `📦 Order #${data.orderNumber} — ${data.status}`, html });
       console.log(`✅ Order notification sent to ${data.email}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
@@ -148,41 +202,47 @@ export class EmailService {
   }
 
   // ========================================
-  // SEND PHARMACY APPROVAL
+  // 4. PHARMACY APPROVAL / REJECTION
   // ========================================
 
   async sendPharmacyApproval(email: string, pharmacyName: string, approved: boolean, reason?: string) {
     if (!this.resend) return;
 
+    const html = this.baseTemplate(approved
+      ? `<div style="text-align:center;margin:0 0 28px;">
+           <div style="display:inline-block;background:#d1fae5;border-radius:50%;width:72px;height:72px;line-height:72px;font-size:36px;">✅</div>
+         </div>
+         <h2 style="margin:0 0 8px;color:#065f46;font-size:22px;text-align:center;">Pharmacy Approved!</h2>
+         <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;text-align:center;">
+           Congratulations! <strong>${pharmacyName}</strong> has been approved on Evuze Healthcare.
+         </p>
+         <a href="${this.configService.get('FRONTEND_URL')}/login"
+            style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
+           Go to Dashboard →
+         </a>`
+      : `<div style="text-align:center;margin:0 0 28px;">
+           <div style="display:inline-block;background:#fee2e2;border-radius:50%;width:72px;height:72px;line-height:72px;font-size:36px;">⚠️</div>
+         </div>
+         <h2 style="margin:0 0 8px;color:#991b1b;font-size:22px;text-align:center;">Application Needs Attention</h2>
+         <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;text-align:center;">
+           Your pharmacy application for <strong>${pharmacyName}</strong> could not be approved at this time.
+         </p>
+         ${reason ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+           <tr><td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
+             <p style="margin:0 0 4px;color:#dc2626;font-size:12px;font-weight:700;text-transform:uppercase;">Reason</p>
+             <p style="margin:0;color:#555;font-size:14px;">${reason}</p>
+           </td></tr></table>` : ''}
+         <a href="${this.configService.get('FRONTEND_URL')}/login"
+            style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
+           Update Application →
+         </a>`
+    );
+
     try {
       await this.resend.emails.send({
-        to: email,
-        from: this.getFrom(),
-        subject: approved ? 'Pharmacy Application Approved ✅' : 'Pharmacy Application Status',
-        html: approved
-          ? `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #10b981;">Congratulations! 🎉</h2>
-              <p>Your pharmacy <strong>${pharmacyName}</strong> has been approved!</p>
-              <p>You can now log in to your dashboard and start managing your inventory.</p>
-              <a href="${this.configService.get('FRONTEND_URL')}/login" 
-                 style="display: inline-block; padding: 12px 24px; background-color: #10b981; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
-                Log In to Dashboard
-              </a>
-            </div>
-          `
-          : `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #ef4444;">Application Update</h2>
-              <p>Your pharmacy application for <strong>${pharmacyName}</strong> requires attention.</p>
-              ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
-              <p>Please review and resubmit your application with the necessary corrections.</p>
-              <a href="${this.configService.get('FRONTEND_URL')}/login" 
-                 style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
-                Update Application
-              </a>
-            </div>
-          `,
+        to: email, from: this.getFrom(),
+        subject: approved ? '✅ Pharmacy Application Approved — Evuze' : '⚠️ Pharmacy Application Update — Evuze',
+        html,
       });
       console.log(`✅ Pharmacy approval email sent to ${email}`);
     } catch (error) {
@@ -191,47 +251,51 @@ export class EmailService {
   }
 
   // ========================================
-  // SEND PHARMACY UPDATE NOTIFICATION
+  // 5. PHARMACY PROFILE UPDATE NOTIFICATION
   // ========================================
 
   async sendPharmacyUpdateNotification(email: string, pharmacyName: string, approved: boolean, reason?: string) {
     if (!this.resend) return;
 
+    const html = this.baseTemplate(approved
+      ? `<h2 style="margin:0 0 8px;color:#065f46;font-size:22px;">Profile Update Approved ✅</h2>
+         <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
+           The profile update for <strong>${pharmacyName}</strong> has been approved. Your changes are now live.
+         </p>
+         <a href="${this.configService.get('FRONTEND_URL')}/pharmacy/profile"
+            style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
+           View Your Profile →
+         </a>`
+      : `<h2 style="margin:0 0 8px;color:#991b1b;font-size:22px;">Profile Update Needs Revision</h2>
+         <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
+           Your profile update for <strong>${pharmacyName}</strong> requires changes before it can go live.
+         </p>
+         ${reason ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+           <tr><td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
+             <p style="margin:0 0 4px;color:#dc2626;font-size:12px;font-weight:700;text-transform:uppercase;">Reason</p>
+             <p style="margin:0;color:#555;font-size:14px;">${reason}</p>
+           </td></tr></table>` : ''}
+         <a href="${this.configService.get('FRONTEND_URL')}/pharmacy/profile"
+            style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
+           Update Your Profile →
+         </a>`
+    );
+
     try {
       await this.resend.emails.send({
-        to: email,
-        from: this.getFrom(),
-        subject: approved ? 'Profile Update Approved ✅' : 'Profile Update Status',
-        html: approved
-          ? `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #10b981;">Profile Update Approved 🎉</h2>
-              <p>Your profile updates for <strong>${pharmacyName}</strong> have been approved!</p>
-              <p>The changes are now live on your pharmacy profile.</p>
-              <a href="${this.configService.get('FRONTEND_URL')}/pharmacy/profile" 
-                 style="display: inline-block; padding: 12px 24px; background-color: #10b981; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
-                View Profile
-              </a>
-            </div>
-          `
-          : `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #ef4444;">Profile Update Needs Revision</h2>
-              <p>Your profile update for <strong>${pharmacyName}</strong> requires attention.</p>
-              ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
-              <p>Please review the feedback and make the necessary corrections.</p>
-              <a href="${this.configService.get('FRONTEND_URL')}/pharmacy/profile" 
-                 style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
-                Update Profile
-              </a>
-            </div>
-          `,
+        to: email, from: this.getFrom(),
+        subject: approved ? '✅ Profile Update Approved — Evuze' : '⚠️ Profile Update Needs Revision — Evuze',
+        html,
       });
       console.log(`✅ Pharmacy update notification sent to ${email}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
     }
   }
+
+  // ========================================
+  // 6. BRANCH MANAGER CREDENTIALS
+  // ========================================
 
   async sendBranchCredentials(email: string, tempPassword: string, pharmacyName: string) {
     if (!this.resend) {
@@ -240,60 +304,85 @@ export class EmailService {
     }
 
     const loginUrl = `${this.configService.get('FRONTEND_URL')}/login`;
-
     console.log('==========================================');
     console.log(`📧 EMAILING BRANCH MANAGER: ${email}`);
     console.log(`🔑 TEMP PASSWORD: ${tempPassword}`);
     console.log('==========================================');
 
+    const html = this.baseTemplate(`
+      <h2 style="margin:0 0 8px;color:#1a1a2e;font-size:22px;">Branch Manager Account Created 🏪</h2>
+      <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
+        You have been assigned as a <strong>Branch Manager</strong> for <strong>${pharmacyName}</strong> on Evuze Healthcare.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;margin:0 0 20px;border:1px solid #e8ecf4;">
+        <tr>
+          <td style="padding:16px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Email</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${email}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 24px;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Temporary Password</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:20px;font-weight:700;font-family:monospace;letter-spacing:2px;">${tempPassword}</p>
+          </td>
+        </tr>
+      </table>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+        <tr>
+          <td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
+            <p style="margin:0;color:#dc2626;font-size:13px;">🔒 <strong>This temporary password expires in 5 days.</strong> Log in and change it immediately.</p>
+          </td>
+        </tr>
+      </table>
+      <a href="${loginUrl}"
+         style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
+        Log In to Your Account →
+      </a>
+      <p style="margin:0;color:#999;font-size:13px;">If you did not expect this email, please contact your pharmacy headquarters immediately.</p>
+    `);
+
     try {
-      await this.resend.emails.send({
-        to: email,
-        from: this.getFrom(),
-        subject: `Branch Manager Account - ${pharmacyName}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #667eea;">Branch Manager Account Created</h2>
-            <p>You have been assigned as a branch manager for <strong>${pharmacyName}</strong>.</p>
-            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0 0 10px 0;"><strong>Email:</strong> ${email}</p>
-              <p style="margin: 0;"><strong>Temporary Password:</strong> ${tempPassword}</p>
-            </div>
-            <p style="color: #ef4444;"><strong>Important:</strong> This password expires in 5 days. Please log in and change it immediately.</p>
-            <a href="${loginUrl}" style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
-              Log In Now
-            </a>
-            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-            <p style="color: #999; font-size: 12px;">If you did not expect this email, please contact your pharmacy headquarters.</p>
-          </div>
-        `,
-      });
+      await this.resend.emails.send({ to: email, from: this.getFrom(), subject: `🏪 Branch Manager Account — ${pharmacyName}`, html });
       console.log(`Branch credentials email sent to ${email}`);
     } catch (error) {
       console.error('Resend error:', error.message);
     }
   }
 
+  // ========================================
+  // 7A. BRANCH APPROVAL / REJECTION
+  // ========================================
+
   async sendBranchApproval(email: string, branchName: string, approved: boolean, reason?: string) {
     if (!this.resend) return;
 
+    const html = this.baseTemplate(approved
+      ? `<h2 style="margin:0 0 8px;color:#065f46;font-size:22px;">Branch Approved ✅</h2>
+         <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
+           Great news! <strong>${branchName}</strong> has been approved and is now active on Evuze Healthcare.
+         </p>
+         <a href="${this.configService.get('FRONTEND_URL')}/login"
+            style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
+           Go to Dashboard →
+         </a>`
+      : `<h2 style="margin:0 0 8px;color:#991b1b;font-size:22px;">Branch Application Update</h2>
+         <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
+           The branch application for <strong>${branchName}</strong> requires attention.
+         </p>
+         ${reason ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+           <tr><td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
+             <p style="margin:0 0 4px;color:#dc2626;font-size:12px;font-weight:700;text-transform:uppercase;">Reason</p>
+             <p style="margin:0;color:#555;font-size:14px;">${reason}</p>
+           </td></tr></table>` : ''}
+         <p style="margin:0;color:#999;font-size:13px;">Please review and address the issues above.</p>`
+    );
+
     try {
       await this.resend.emails.send({
-        to: email,
-        from: this.getFrom(),
-        subject: approved ? `Branch Approved - ${branchName}` : `Branch Application Status - ${branchName}`,
-        html: approved
-          ? `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #10b981;">Branch Approved</h2>
-              <p>The branch <strong>${branchName}</strong> has been approved and is now active.</p>
-              <a href="${this.configService.get('FRONTEND_URL')}/login" style="display: inline-block; padding: 12px 24px; background-color: #10b981; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">Log In</a>
-            </div>`
-          : `<div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #ef4444;">Branch Application Update</h2>
-              <p>The branch application for <strong>${branchName}</strong> requires attention.</p>
-              ${reason ? `<p><strong>Reason:</strong> ${reason}</p>` : ''}
-              <p>Please review and address the issues.</p>
-            </div>`,
+        to: email, from: this.getFrom(),
+        subject: approved ? `✅ Branch Approved — ${branchName}` : `⚠️ Branch Application Update — ${branchName}`,
+        html,
       });
     } catch (error) {
       console.error('Resend error:', error.message);
@@ -301,7 +390,7 @@ export class EmailService {
   }
 
   // ========================================
-  // SEND STAFF CREDENTIALS
+  // 7B. STAFF CREDENTIALS
   // ========================================
 
   async sendStaffCredentials(
@@ -317,6 +406,8 @@ export class EmailService {
     }
 
     const loginUrl = `${this.configService.get('FRONTEND_URL')}/login`;
+    const roleEmojis: Record<string, string> = { PHARMACIST: '💊', CASHIER: '💳', BRANCH_MANAGER: '🏪' };
+    const emoji = roleEmojis[role.toUpperCase()] || '👤';
 
     console.log('==========================================');
     console.log(`📧 EMAILING STAFF MEMBER: ${email}`);
@@ -324,44 +415,60 @@ export class EmailService {
     console.log(`🔑 TEMP PASSWORD: ${tempPassword}`);
     console.log('==========================================');
 
-    try {
-      await this.resend.emails.send({
-        to: email,
-        from: this.getFrom(),
-        subject: `Staff Account Created - ${pharmacyName}`,
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #667eea;">Welcome to ${pharmacyName}! 👋</h2>
-            <p>You have been added as a <strong>${role}</strong> at <strong>${branchName}</strong>.</p>
-            
-            <div style="background-color: #f5f5f5; padding: 20px; border-radius: 8px; margin: 20px 0;">
-              <p style="margin: 0 0 10px 0;"><strong>Email:</strong> ${email}</p>
-              <p style="margin: 0 0 10px 0;"><strong>Role:</strong> ${role}</p>
-              <p style="margin: 0;"><strong>Temporary Password:</strong> <code style="background: #fff; padding: 4px 8px; border-radius: 4px;">${tempPassword}</code></p>
-            </div>
-
-            <div style="background-color: #fef3c7; border-left: 4px solid #f59e0b; padding: 15px; margin: 20px 0;">
-              <p style="margin: 0; color: #92400e;"><strong>⚠️ Important:</strong> This temporary password expires in 7 days. Please log in and change it immediately for security purposes.</p>
-            </div>
-
-            <a href="${loginUrl}" 
-               style="display: inline-block; padding: 12px 24px; background-color: #667eea; color: white; text-decoration: none; border-radius: 6px; margin: 20px 0;">
-              Log In Now
-            </a>
-
-            <h3 style="color: #667eea; margin-top: 30px;">First Login Steps:</h3>
-            <ol style="line-height: 1.8;">
-              <li>Click the "Log In Now" button above</li>
+    const html = this.baseTemplate(`
+      <h2 style="margin:0 0 8px;color:#1a1a2e;font-size:22px;">Welcome to ${pharmacyName}! ${emoji}</h2>
+      <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
+        You have been added as a <strong>${role}</strong> at <strong>${branchName}</strong> on Evuze Healthcare.
+      </p>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;margin:0 0 20px;border:1px solid #e8ecf4;">
+        <tr>
+          <td style="padding:16px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Email</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${email}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Role</p>
+            <p style="margin:4px 0 0;color:#667eea;font-size:15px;font-weight:600;">${role}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 24px;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Temporary Password</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:20px;font-weight:700;font-family:monospace;letter-spacing:2px;">${tempPassword}</p>
+          </td>
+        </tr>
+      </table>
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+        <tr>
+          <td style="background:#fffbeb;border-left:4px solid #f59e0b;border-radius:0 8px 8px 0;padding:16px 20px;">
+            <p style="margin:0;color:#92400e;font-size:13px;">⚠️ <strong>This temporary password expires in 7 days.</strong> Log in and change it immediately.</p>
+          </td>
+        </tr>
+      </table>
+      <a href="${loginUrl}"
+         style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 28px;">
+        Log In Now →
+      </a>
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;border:1px solid #e8ecf4;">
+        <tr>
+          <td style="padding:20px 24px;">
+            <p style="margin:0 0 12px;color:#1a1a2e;font-size:14px;font-weight:700;">First Login Steps:</p>
+            <ol style="margin:0;padding:0 0 0 18px;color:#555;font-size:14px;line-height:2;">
+              <li>Click "Log In Now" above</li>
               <li>Enter your email and temporary password</li>
-              <li>You'll be prompted to create a new permanent password</li>
-              <li>Start managing orders and inventory!</li>
+              <li>Create a new permanent password when prompted</li>
+              <li>Start managing your work on Evuze!</li>
             </ol>
+          </td>
+        </tr>
+      </table>
+      <p style="margin:24px 0 0;color:#999;font-size:13px;">If you did not expect this email, please contact your branch manager immediately.</p>
+    `);
 
-            <hr style="margin: 30px 0; border: none; border-top: 1px solid #eee;">
-            <p style="color: #999; font-size: 12px;">If you did not expect this email, please contact your branch manager immediately.</p>
-          </div>
-        `,
-      });
+    try {
+      await this.resend.emails.send({ to: email, from: this.getFrom(), subject: `${emoji} Your Staff Account — ${pharmacyName}`, html });
       console.log(`✅ Staff credentials email sent to ${email}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
