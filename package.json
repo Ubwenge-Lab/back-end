@@ -33,7 +33,7 @@
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/swagger": "^11.2.4",
     "@prisma/client": "^6.19.2",
-    "@sendgrid/mail": "^8.1.6",
+    "resend": "^4.0.0",
     "anthropic-ai": "^0.0.10",
     "aws-sdk": "^2.1693.0",
     "bcrypt": "^6.0.0",
