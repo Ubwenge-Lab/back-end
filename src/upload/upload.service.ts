@@ -1,122 +1,120 @@
 // backend/src/upload/upload.service.ts
 
+
 import { Injectable, BadRequestException } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
-import * as AWS from 'aws-sdk';
-import { v4 as uuidv4 } from 'uuid';
+
+type MulterFile = {
+  fieldname: string;
+  originalname: string;
+  encoding: string;
+  mimetype: string;
+  size: number;
+  buffer: Buffer;
+};
+
+export interface UploadResult {
+  url: string;       // data URI — store directly in DB
+  fileName: string;  // original file name
+  fileType: string;  // MIME type
+  sizeKb: number;    // file size in KB for logging
+}
 
 @Injectable()
 export class UploadService {
-  private s3: AWS.S3;
-  private bucketName: string;
 
-  constructor(private configService: ConfigService) {
-    this.s3 = new AWS.S3({
-      accessKeyId: this.configService.get<string>('AWS_ACCESS_KEY_ID'),
-      secretAccessKey: this.configService.get<string>('AWS_SECRET_ACCESS_KEY'),
-      region: this.configService.get<string>('AWS_REGION'),
-    });
-  
-    const bucket = this.configService.get<string>('AWS_S3_BUCKET');
-    if (!bucket) {
-      throw new Error('AWS_S3_BUCKET is not defined in environment variables');
-    }
-    this.bucketName = bucket;
+  // ========================================
+  // CORE: FILE → BASE64 DATA URI
+  // ========================================
+
+  private toDataUri(file: MulterFile): string {
+    const base64 = file.buffer.toString('base64');
+    return `data:${file.mimetype};base64,${base64}`;
   }
-  
+
   // ========================================
-  // UPLOAD FILE TO S3
+  // SHARED VALIDATION
   // ========================================
 
-  async uploadFile(
-    file: Express.Multer.File,
-    folder: 'prescriptions' | 'licenses' | 'certificates' | 'medications',
-  ): Promise<string> {
+  private validate(
+    file: MulterFile,
+    allowedTypes: string[],
+    maxSizeMb: number,
+  ): void {
     if (!file) {
       throw new BadRequestException('No file provided');
     }
-
-    // Validate file type
-    const allowedMimeTypes = [
-      'image/jpeg',
-      'image/png',
-      'image/jpg',
-      'application/pdf',
-    ];
-
-    if (!allowedMimeTypes.includes(file.mimetype)) {
+    if (!allowedTypes.includes(file.mimetype)) {
       throw new BadRequestException(
-        'Invalid file type. Only JPG, PNG, and PDF are allowed.',
+        `Invalid file type "${file.mimetype}". Allowed: ${allowedTypes.join(', ')}`,
       );
     }
-
-    // Validate file size (max 10MB)
-    const maxSize = 10 * 1024 * 1024; // 10MB
-    if (file.size > maxSize) {
-      throw new BadRequestException('File size exceeds 10MB limit');
+    const maxBytes = maxSizeMb * 1024 * 1024;
+    if (file.size > maxBytes) {
+      throw new BadRequestException(
+        `File size (${(file.size / 1024 / 1024).toFixed(1)}MB) exceeds ${maxSizeMb}MB limit`,
+      );
     }
+  }
 
-    // Generate unique filename
-    const fileExtension = file.originalname.split('.').pop();
-    const fileName = `${folder}/${uuidv4()}.${fileExtension}`;
+  // ========================================
+  // UPLOAD LICENSE (branch / pharmacy)
+  // PDF + images, up to 10MB
+  // ========================================
 
-    const params: AWS.S3.PutObjectRequest = {
-      Bucket: this.bucketName,
-      Key: fileName,
-      Body: file.buffer,
-      ContentType: file.mimetype,
-      ACL: 'public-read', // Make file publicly accessible
+  async uploadLicense(file: MulterFile): Promise<UploadResult> {
+    this.validate(
+      file,
+      ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'],
+      10,
+    );
+    return {
+      url: this.toDataUri(file),
+      fileName: file.originalname,
+      fileType: file.mimetype,
+      sizeKb: Math.round(file.size / 1024),
     };
-
-    try {
-      const result = await this.s3.upload(params).promise();
-      return result.Location; // Return S3 URL
-    } catch (error) {
-      throw new BadRequestException(`File upload failed: ${error.message}`);
-    }
   }
 
   // ========================================
-  // UPLOAD PRESCRIPTION
+  // UPLOAD PRESCRIPTION (patient checkout)
+  // PDF + images, up to 10MB
   // ========================================
 
-  async uploadPrescription(file: Express.Multer.File): Promise<string> {
-    return this.uploadFile(file, 'prescriptions');
-  }
-
-  // ========================================
-  // UPLOAD LICENSE
-  // ========================================
-
-  async uploadLicense(file: Express.Multer.File): Promise<string> {
-    return this.uploadFile(file, 'licenses');
-  }
-
-  // ========================================
-  // UPLOAD MEDICATION IMAGE
-  // ========================================
-
-  async uploadMedicationImage(file: Express.Multer.File): Promise<string> {
-    return this.uploadFile(file, 'medications');
-  }
-
-  // ========================================
-  // DELETE FILE FROM S3
-  // ========================================
-
-  async deleteFile(fileUrl: string): Promise<void> {
-    // Extract key from URL
-    const key = fileUrl.split('.com/')[1];
-
-    const params: AWS.S3.DeleteObjectRequest = {
-      Bucket: this.bucketName,
-      Key: key,
+  async uploadPrescription(file: MulterFile): Promise<UploadResult> {
+    this.validate(
+      file,
+      ['image/jpeg', 'image/jpg', 'image/png', 'application/pdf'],
+      10,
+    );
+    return {
+      url: this.toDataUri(file),
+      fileName: file.originalname,
+      fileType: file.mimetype,
+      sizeKb: Math.round(file.size / 1024),
     };
+  }
 
-    try {
-      await this.s3.deleteObject(params).promise();
-    } catch (error) {
-      throw new BadRequestException(`File deletion failed: ${error.message}`);
-    }
+  // ========================================
+  // UPLOAD MEDICATION IMAGE (inventory)
+  // Images only, up to 5MB
+  // ========================================
+
+  async uploadMedicationImage(file: MulterFile): Promise<UploadResult> {
+    this.validate(
+      file,
+      ['image/jpeg', 'image/jpg', 'image/png', 'image/webp'],
+      5,
+    );
+    return {
+      url: this.toDataUri(file),
+      fileName: file.originalname,
+      fileType: file.mimetype,
+      sizeKb: Math.round(file.size / 1024),
+    };
+  }
+
+
+  async deleteFile(_fileUrl: string): Promise<void> {
+    return;
   }
 }
