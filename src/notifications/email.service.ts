@@ -34,26 +34,26 @@ export class EmailService {
   <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
   <title>Evuze Healthcare</title>
 </head>
-<body style="margin:0;padding:0;background-color:#f0f4ff;font-family:'Segoe UI',Arial,sans-serif;">
-  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4ff;padding:40px 0;">
+<body style="margin:0;padding:0;background-color:#f0f4f8;font-family:'Segoe UI',Arial,sans-serif;">
+  <table width="100%" cellpadding="0" cellspacing="0" style="background-color:#f0f4f8;padding:40px 0;">
     <tr>
       <td align="center">
         <table width="600" cellpadding="0" cellspacing="0" style="max-width:600px;width:100%;">
           <tr>
-            <td style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
+            <td style="background:linear-gradient(135deg,#0a1628 0%,#0d9488 100%);border-radius:12px 12px 0 0;padding:32px 40px;text-align:center;">
               <h1 style="margin:0;color:#ffffff;font-size:26px;font-weight:700;letter-spacing:1px;">🏥 Evuze Healthcare</h1>
-              <p style="margin:6px 0 0;color:rgba(255,255,255,0.8);font-size:13px;">Powered by Ubwenge Lab</p>
+              <p style="margin:6px 0 0;color:rgba(255,255,255,0.75);font-size:13px;">Powered by Ubwenge Lab</p>
             </td>
           </tr>
           <tr>
-            <td style="background:#ffffff;padding:40px;border-left:1px solid #e8ecf4;border-right:1px solid #e8ecf4;">
+            <td style="background:#ffffff;padding:40px;border-left:1px solid #e2e8f0;border-right:1px solid #e2e8f0;">
               ${content}
             </td>
           </tr>
           <tr>
-            <td style="background:#f8f9ff;border:1px solid #e8ecf4;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px;text-align:center;">
-              <p style="margin:0 0 6px;color:#999;font-size:12px;">© 2026 Evuze Healthcare · Ubwenge Lab · Kigali, Rwanda</p>
-              <p style="margin:0;color:#bbb;font-size:11px;">This is an automated email. Please do not reply directly to this message.</p>
+            <td style="background:#f8fafc;border:1px solid #e2e8f0;border-top:none;border-radius:0 0 12px 12px;padding:24px 40px;text-align:center;">
+              <p style="margin:0 0 6px;color:#94a3b8;font-size:12px;">© 2026 Evuze Healthcare · Ubwenge Lab · Kigali, Rwanda</p>
+              <p style="margin:0;color:#cbd5e1;font-size:11px;">This is an automated email. Please do not reply directly to this message.</p>
             </td>
           </tr>
         </table>
@@ -79,14 +79,14 @@ export class EmailService {
       <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
         Welcome to <strong>Evuze Healthcare</strong>! Use the verification code below to confirm your email and activate your account.
       </p>
-      <div style="background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);border-radius:12px;padding:32px;text-align:center;margin:0 0 28px;">
-        <p style="margin:0 0 8px;color:rgba(255,255,255,0.8);font-size:13px;text-transform:uppercase;letter-spacing:2px;">Your Verification Code</p>
+      <div style="background:linear-gradient(135deg,#0a1628 0%,#0d9488 100%);border-radius:12px;padding:32px;text-align:center;margin:0 0 28px;">
+        <p style="margin:0 0 8px;color:rgba(255,255,255,0.75);font-size:13px;text-transform:uppercase;letter-spacing:2px;">Your Verification Code</p>
         <h1 style="margin:0;color:#ffffff;font-size:48px;font-weight:800;letter-spacing:12px;">${code}</h1>
       </div>
       <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
         <tr>
           <td style="background:#f0f4ff;border-radius:8px;padding:16px 20px;">
-            <p style="margin:0;color:#667eea;font-size:13px;">⏱️ <strong>This code expires in 24 hours.</strong> Enter it on the verification page to complete your registration.</p>
+            <p style="margin:0;color:#0d9488;font-size:13px;">⏱️ <strong>This code expires in 24 hours.</strong> Enter it on the verification page to complete your registration.</p>
           </td>
         </tr>
       </table>
@@ -187,7 +187,7 @@ export class EmailService {
         </tr>
       </table>
       <a href="${this.configService.get('FRONTEND_URL')}/patient/orders/${data.orderNumber}"
-         style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
+         style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#0a1628 0%,#0d9488 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
         View Order Details →
       </a>
       <p style="margin:0;color:#999;font-size:13px;">Thank you for using Evuze Healthcare.</p>
@@ -233,7 +233,7 @@ export class EmailService {
              <p style="margin:0;color:#555;font-size:14px;">${reason}</p>
            </td></tr></table>` : ''}
          <a href="${this.configService.get('FRONTEND_URL')}/login"
-            style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
+            style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#0a1628 0%,#0d9488 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
            Update Application →
          </a>`
     );
@@ -336,7 +336,7 @@ export class EmailService {
         </tr>
       </table>
       <a href="${loginUrl}"
-         style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
+         style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#0a1628 0%,#0d9488 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
         Log In to Your Account →
       </a>
       <p style="margin:0;color:#999;font-size:13px;">If you did not expect this email, please contact your pharmacy headquarters immediately.</p>
@@ -448,7 +448,7 @@ export class EmailService {
         </tr>
       </table>
       <a href="${loginUrl}"
-         style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 28px;">
+         style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#0a1628 0%,#0d9488 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 28px;">
         Log In Now →
       </a>
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;border:1px solid #e8ecf4;">
