@@ -529,11 +529,34 @@ if (order.paymentStatus === 'COMPLETED') {
 
     const notification = notificationMap[order.status];
     if (notification) {
+      // In-app notification
       await this.notificationsService.create({
         patientId: order.patientId,
         orderId: order.id,
         ...notification,
       });
+
+      // Email notification — send to patient if patient email is available
+      try {
+        const patientUser = order.patient?.user;
+        const patientName = order.patient
+          ? `${order.patient.firstName} ${order.patient.lastName}`
+          : 'Customer';
+        const emailTarget = patientUser?.email ?? order.patient?.email;
+
+        if (emailTarget) {
+          await this.notificationsService.sendOrderStatusEmail({
+            email: emailTarget,
+            name: patientName,
+            orderNumber: order.orderNumber,
+            status: order.status,
+            message: notification.message,
+          });
+        }
+      } catch (emailErr) {
+        // Never block the main flow due to email failure
+        console.error('❌ Failed to send order status email:', emailErr?.message);
+      }
     }
   }
 
