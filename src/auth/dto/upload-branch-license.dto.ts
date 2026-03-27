@@ -1,8 +1,7 @@
-import { IsNotEmpty, IsString, IsUrl } from 'class-validator';
+import { IsNotEmpty, IsString } from 'class-validator';
 
 export class UploadBranchLicenseDto {
     @IsNotEmpty()
     @IsString()
-    @IsUrl()
     pharmacyLicense: string;
 }

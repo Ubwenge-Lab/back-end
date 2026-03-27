@@ -138,13 +138,14 @@ export class PrescriptionsService {
           : `Found ${availableCount} of ${totalCount} medications available. Ready to add to cart!`,
       });
 
-    } catch (error) {
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
       console.error('AI processing error:', error);
       await this.prisma.prescription.update({
         where: { id: prescriptionId },
         data: {
           aiProcessingStatus: 'FAILED',
-          aiProcessingError: error.message,
+          aiProcessingError: message,
         },
       });
     }
@@ -216,7 +217,7 @@ Do not include any explanation, only the JSON array.`,
 
       return medications;
 
-    } catch (error) {
+    } catch (error: unknown) {
       console.error('Gemini AI extraction error:', error);
       throw new Error('Failed to extract medications from prescription');
     }
@@ -441,7 +442,7 @@ Do not include any explanation, only the JSON array.`,
     };
 
     if (statusStr) {
-      where.status = statusStr; // Assuming statusStr maps correctly to PrescriptionStatus Enum 
+      where.status = statusStr;
     }
 
     return this.prisma.prescription.findMany({
@@ -493,33 +494,46 @@ Do not include any explanation, only the JSON array.`,
 
   // ========================================
   // HELPER: DOWNLOAD IMAGE AS BASE64
+  // Works with both legacy HTTP URLs (S3) and new data URIs (DB storage)
   // ========================================
 
   private async downloadImageAsBase64(fileUrl: string): Promise<string> {
+    // Data URI format: "data:<mime>;base64,<data>"
+    if (fileUrl.startsWith('data:')) {
+      const commaIdx = fileUrl.indexOf(',');
+      if (commaIdx === -1) throw new Error('Invalid data URI format');
+      return fileUrl.slice(commaIdx + 1); // already base64
+    }
+
+    // Legacy: HTTP/HTTPS URL (S3 or other)
     try {
       const response = await axios.get(fileUrl, {
         responseType: 'arraybuffer',
       });
       return Buffer.from(response.data).toString('base64');
-    } catch (error) {
-      throw new Error(`Failed to download image: ${error.message}`);
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : 'Unknown error';
+      throw new Error(`Failed to download image: ${message}`);
     }
   }
 
   private getMediaType(fileUrl: string): string {
+    // Data URI carries MIME type directly: "data:image/png;base64,..."
+    if (fileUrl.startsWith('data:')) {
+      const mime = fileUrl.split(';')[0].replace('data:', '');
+      return mime || 'image/jpeg';
+    }
+
+    // Legacy: infer from file extension
     const extension = fileUrl.split('.').pop()?.toLowerCase();
     switch (extension) {
-      case 'png':
-        return 'image/png';
-      case 'gif':
-        return 'image/gif';
-      case 'webp':
-        return 'image/webp';
+      case 'png':  return 'image/png';
+      case 'gif':  return 'image/gif';
+      case 'webp': return 'image/webp';
+      case 'pdf':  return 'application/pdf';
       case 'jpg':
       case 'jpeg':
-        return 'image/jpeg';
-      default:
-        return 'image/jpeg';
+      default:     return 'image/jpeg';
     }
   }
 }
