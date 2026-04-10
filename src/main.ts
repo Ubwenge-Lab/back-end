@@ -8,7 +8,7 @@ import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create(AppModule, { bodyParser: false });
 
   // Increase payload size limit to 50MB for file uploads (RDB certificates, licenses)
   app.use(json({ limit: '50mb' }));
