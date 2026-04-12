@@ -36,7 +36,7 @@ export class OrdersController {
 
   // Pharmacy - Get pharmacy orders (MUST be before :id route)
   @Get('pharmacy-orders')
-  @Roles(Role.PHARMACY, Role.BRANCH_MANAGER, Role.PHARMACIST)
+  @Roles(Role.PHARMACY, Role.BRANCH_MANAGER, Role.PHARMACIST, Role.CASHIER, Role.NURSE)
   @ApiOperation({ summary: 'Get pharmacy orders' })
   getPharmacyOrders(@Req() req: any, @Query('status') status?: string) {
     return this.ordersService.findByPharmacy(req.user.sub, status);
@@ -59,7 +59,7 @@ export class OrdersController {
 
   // Pharmacy - Update order status
   @Patch(':id/status')
-  @Roles(Role.PHARMACY, Role.BRANCH_MANAGER, Role.PHARMACIST)
+  @Roles(Role.PHARMACY, Role.BRANCH_MANAGER, Role.PHARMACIST, Role.CASHIER, Role.NURSE)
   @ApiOperation({ summary: 'Update order status (Pharmacy)' })
   updateStatus(
     @Param('id') id: string,

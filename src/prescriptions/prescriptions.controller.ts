@@ -41,7 +41,7 @@ export class PrescriptionsController {
   }
 
   @Get('branch')
-  @Roles(Role.PHARMACIST, Role.BRANCH_MANAGER)
+  @Roles(Role.PHARMACIST, Role.BRANCH_MANAGER, Role.CASHIER, Role.NURSE)
   @ApiOperation({ summary: 'Get prescriptions linked to branch (Pharmacist)' })
   getBranchPrescriptions(@Req() req: any, @Query('status') status?: string) {
     return this.prescriptionsService.findByBranch(req.user.sub, status);
@@ -54,7 +54,7 @@ export class PrescriptionsController {
   }
 
   @Put(':id/status')
-  @Roles(Role.PHARMACY, Role.PHARMACIST)
+  @Roles(Role.PHARMACY, Role.PHARMACIST, Role.CASHIER, Role.NURSE)
   @ApiOperation({ summary: 'Update prescription status (Pharmacy)' })
   updateStatus(@Param('id') id: string, @Body() dto: UpdatePrescriptionStatusDto) {
     return this.prescriptionsService.updateStatus(id, dto);
