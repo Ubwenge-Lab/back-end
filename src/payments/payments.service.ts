@@ -14,6 +14,7 @@ import {
   MobileMoneyPaymentDto,
 } from './dto';
 import { OrdersService } from 'src/orders/orders.service';
+import { MtnCallbackDto } from './dto/mtn-callback.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -194,6 +195,62 @@ if (order.status === 'CANCELLED') {
       throw new BadRequestException('Payment verification failed');
     }
   }
+
+
+  // ========================================
+  // PROCESS MTN WEBHOOK (DIRECT)
+  // ========================================
+
+  async processMtnPayment(data: MtnCallbackDto) {
+    // 1. Find the order based on the externalId sent by MTN
+    const order = await this.prisma.order.findUnique({
+      where: { id: data.externalId },
+      include: { patient: true },
+    });
+
+    if (!order) {
+      console.error(`Webhook Error: Order ${data.externalId} not found`);
+      throw new NotFoundException('Order not found');
+    }
+
+    // 2. Logic: What happened with the payment?
+    if (data.status === 'SUCCESSFUL') {
+      // Update the Payment record
+      await this.prisma.payment.updateMany({
+        where: { orderId: order.id },
+        data: {
+          status: 'COMPLETED',
+          transactionId: data.financialTransactionId,
+        },
+      });
+
+      // Update Order status and handle stock (using existing project logic)
+      await this.ordersService.handlePaymentSuccess(order.id);
+
+      // Notify the patient
+      await this.notificationsService.create({
+        patientId: order.patientId,
+        orderId: order.id,
+        type: 'ORDER_PLACED',
+        title: 'Payment Received',
+        message: `Your payment of ${data.amount} ${data.currency} was successful!`,
+      });
+
+      return { status: 'success', message: 'Order marked as PAID' };
+    } else {
+      // Handle Failure (FAILED, REJECTED, or TIMEOUT)
+      await this.prisma.payment.updateMany({
+        where: { orderId: order.id },
+        data: { status: 'FAILED' },
+      });
+
+      console.warn(`Payment failed for Order ${order.id}. Reason: ${data.reason || 'Unknown'}`);
+      return { status: 'failed', message: 'Order marked as FAILED' };
+    }
+  }
+
+
+
 
   // ========================================
   // VALIDATE MOBILE MONEY OTP
