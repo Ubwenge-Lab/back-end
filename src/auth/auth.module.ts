@@ -12,6 +12,7 @@ import { UsersModule } from '../users/users.module';
 import { PatientsModule } from '../patients/patients.module';
 import { PharmaciesModule } from '../pharmacies/pharmacies.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { Reflector } from '@nestjs/core';
 
 @Module({
   imports: [
@@ -29,7 +30,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
     NotificationsModule,
   ],
   controllers: [AuthController],
-  providers: [AuthService, JwtStrategy, JwtRefreshStrategy],
+  providers: [AuthService, JwtStrategy, JwtRefreshStrategy, Reflector],
   exports: [AuthService],
 })
 export class AuthModule {}
