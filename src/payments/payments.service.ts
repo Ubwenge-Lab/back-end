@@ -213,6 +213,29 @@ if (order.status === 'CANCELLED') {
       throw new NotFoundException('Order not found');
     }
 
+
+    // --- NEW FINANCIAL INTEGRITY CHECK ---
+    // We convert everything to numbers to ensure we aren't comparing strings
+    const receivedAmount = Number(data.amount);
+    const expectedAmount = Number(order.total); 
+
+    if (receivedAmount < expectedAmount) {
+      console.error(`SECURITY ALERT: Underpayment detected for Order ${order.id}. Expected ${expectedAmount}, received ${receivedAmount}`);
+      
+      // Mark payment as failed because the amount is wrong
+      await this.prisma.payment.updateMany({
+        where: { orderId: order.id },
+        data: { status: 'FAILED' },
+      });
+      
+      return { status: 'failed', message: 'Amount mismatch' };
+    }
+
+    if (data.currency !== 'RWF') {
+       return { status: 'failed', message: 'Invalid currency' };
+    }
+    // -------------------------------------
+
     // 2. Logic: What happened with the payment?
     if (data.status === 'SUCCESSFUL') {
       // Update the Payment record
