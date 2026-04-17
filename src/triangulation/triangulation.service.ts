@@ -3,80 +3,58 @@ import { PrismaService } from '../prisma/prisma.service';
 
 @Injectable()
 export class TriangulationService {
-    constructor(private prisma: PrismaService) { }
-
-    async getGlobalCoordinates() {
-        // 1. Fetch main pharmacy coordinates
-        const pharmacies = await this.prisma.pharmacy.findMany({
-            select: {
-                id: true,
-                name: true,
-                latitude: true,
-                longitude: true,
-                status: true,
-                address: true,
-            },
-        });
-
-        // 2. Fetch all branch coordinates
-        const branches = await this.prisma.branch.findMany({
-            select: {
-                id: true,
-                pharmacyId: true,
-                name: true,
-                latitude: true,
-                longitude: true,
-                branchStatus: true,
-                address: true,
-            },
-        });
-
-        return {
-            pharmacies,
-            branches,
-        };
-    }
-}
-
-// logic for patient_view triangulation and using of the haversine calculation for Lat and Lng
-
-@Injectable()
-export class TriangulationService {
   constructor(private prisma: PrismaService) {}
 
+  // Fetches all active physical locations where a patient can go.
+ // This unifies Branches and Pharmacies into a single searchable list.
+ 
   async getNearbyBranches(patientLat: number, patientLng: number) {
-    const branches = await this.prisma.branch.findMany({
+    // 1. Fetch Branches belonging to APPROVED pharmacies
+    // We prioritize branches because they represent specific active outlets.
+    const allLocations = await this.prisma.branch.findMany({
       where: {
         pharmacy: {
-          status: 'APPROVED',
+          status: 'APPROVED', // Ensure the business is licensed
         },
+        // Only fetch branches that actually have coordinates set
+        latitude: { not: null },
+        longitude: { not: null },
       },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        latitude: true,
+        longitude: true,
+        address: true,
         pharmacy: {
-          select: { name: true, phone: true },
+          select: {
+            name: true,
+            status: true,
+          },
         },
       },
     });
 
-    return branches
-      .map((branch) => {
-        const distance = this.calculateHaversine(
+    // 2. Map and Calculate Distance in one pass
+    return allLocations
+      .map((location) => ({
+        id: location.id,
+        displayName: `${location.pharmacy.name} - ${location.name}`,
+        address: location.address,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        distance: this.calculateHaversine(
           patientLat,
           patientLng,
-          branch.latitude,
-          branch.longitude,
-        );
-
-        return {
-          ...branch,
-          distance: parseFloat(distance.toFixed(2)),
-        };
-      })
+          location.latitude,
+          location.longitude,
+        ),
+      }))
       .sort((a, b) => a.distance - b.distance);
   }
 
   private calculateHaversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
-    const R = 6371;
+    const R = 6371; // km
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
     const a =
