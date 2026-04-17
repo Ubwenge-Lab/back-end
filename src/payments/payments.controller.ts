@@ -7,6 +7,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
+import { MtnCallbackDto } from './dto/mtn-callback.dto';
+import { Public } from '../auth/decorators/public.decorator';
 import {
   InitiatePaymentDto,
   VerifyPaymentDto,
@@ -42,12 +44,20 @@ export class PaymentsController {
     return this.paymentsService.validateOTP(dto.paymentId, dto.otp);
   }
 
-  @Post('checkout')
-  @Roles(Role.PATIENT)
-  @ApiOperation({
-    summary: 'Checkout — create order and initiate payment in one step',
-  })
-  checkout(@Req() req: any, @Body() dto: CheckoutDto) {
-    return this.paymentsService.checkout(req.user.sub, dto);
+
+    @Public() // This tells NestJS: "Don't require a login for this specific URL"
+    @Post('webhook/mtn')
+    async handleMtnWebhook(@Body() data: MtnCallbackDto) {
+      console.log('Received MTN Webhook:', data);
+      return this.paymentsService.processMtnPayment(data);
+    }
+  
+    @Post('checkout')
+    @Roles(Role.PATIENT)
+    @ApiOperation({
+      summary: 'Checkout — create order and initiate payment in one step',
+    })
+    checkout(@Req() req: any, @Body() dto: CheckoutDto) {
+      return this.paymentsService.checkout(req.user.sub, dto);
+    }
   }
-}
