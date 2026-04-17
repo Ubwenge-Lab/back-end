@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Query, ParseFloatPipe, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TriangulationService } from './triangulation.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -8,15 +8,31 @@ import { Role } from '../common/constants/role.enum';
 
 @ApiTags('Triangulation')
 @Controller('triangulation')
-@UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.SUPER_ADMIN)
+@UseGuards(JwtAuthGuard, RolesGuard) // General security for all routes
 @ApiBearerAuth()
 export class TriangulationController {
-    constructor(private readonly triangulationService: TriangulationService) { }
+  constructor(private readonly triangulationService: TriangulationService) {}
 
-    @Get('global')
-    @ApiOperation({ summary: 'Get all pharmacy and branch coordinates globally' })
-    getGlobalCoordinates() {
-        return this.triangulationService.getGlobalCoordinates();
-    }
+  /**
+   * Access: PATIENTS and ADMINS
+   */
+  @Get('nearby')
+  @ApiOperation({ summary: 'Find nearest branches based on patient coordinates' })
+  async findNearby(
+    @Query('lat', ParseFloatPipe) lat: number,
+    @Query('lng', ParseFloatPipe) lng: number,
+  ) {
+    return this.triangulationService.getNearbyBranches(lat, lng);
+  }
+
+  /**
+   * ADMIN ONLY: Global overview
+   * Access: SUPER_ADMIN
+   */
+  @Get('global')
+  @Roles(Role.SUPER_ADMIN) // Specific restriction for this endpoint only
+  @ApiOperation({ summary: 'Get all pharmacy and branch coordinates globally' })
+  getGlobalCoordinates() {
+    return this.triangulationService.getGlobalCoordinates();
+  }
 }
