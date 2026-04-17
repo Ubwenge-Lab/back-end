@@ -8,13 +8,15 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { FlutterwaveService } from './flutterwave.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { OrdersService } from '../orders/orders.service';
 import {
   InitiatePaymentDto,
   VerifyPaymentDto,
   MobileMoneyPaymentDto,
+  CheckoutDto,
 } from './dto';
-import { OrdersService } from 'src/orders/orders.service';
 import { MtnCallbackDto } from './dto/mtn-callback.dto';
+import { CreateOrderDto } from '../orders/dto';
 
 @Injectable()
 export class PaymentsService {
@@ -50,10 +52,9 @@ export class PaymentsService {
     }
 
     // After finding the order, add:
-if (order.status === 'CANCELLED') {
-  throw new BadRequestException('Cannot pay for cancelled order');
-}
-
+    if (order.status === 'CANCELLED') {
+      throw new BadRequestException('Cannot pay for cancelled order');
+    }
 
     // Create payment record
     const payment = await this.prisma.payment.create({
@@ -115,7 +116,7 @@ if (order.status === 'CANCELLED') {
       where: { id: payment.id },
       data: {
         flutterwaveRef: paymentResponse.data?.flw_ref,
-        paymentResponse: paymentResponse as any,
+        paymentResponse: paymentResponse,
       },
     });
 
@@ -158,7 +159,7 @@ if (order.status === 'CANCELLED') {
         data: {
           status: 'COMPLETED',
           transactionId: dto.transactionId,
-          paymentResponse: verification as any,
+          paymentResponse: verification,
         },
       });
       // Trigger stock reduction & order status update
@@ -188,7 +189,7 @@ if (order.status === 'CANCELLED') {
         where: { id: payment.id },
         data: {
           status: 'FAILED',
-          paymentResponse: verification as any,
+          paymentResponse: verification,
         },
       });
 
@@ -277,19 +278,18 @@ if (order.status === 'CANCELLED') {
 
   // ========================================
   // VALIDATE MOBILE MONEY OTP
-  // ========================================
 
   async validateOTP(paymentId: string, otp: string) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
-       include: { 
-      order: {
-        include: {
-          patient: true,
-          pharmacy: true,
+      include: {
+        order: {
+          include: {
+            patient: true,
+            pharmacy: true,
+          },
         },
       },
-    },
     });
 
     if (!payment || !payment.flutterwaveRef) {
@@ -309,7 +309,7 @@ if (order.status === 'CANCELLED') {
           transactionId: validation.data.tx_ref,
         },
       });
-       // Trigger stock reduction & order status update
+      // stock reduction & order status update
       await this.ordersService.handlePaymentSuccess(payment.orderId);
 
       // Send notifications
@@ -335,9 +335,7 @@ if (order.status === 'CANCELLED') {
     }
   }
 
-  // ========================================
   // PROCESS REFUND
-  // ========================================
 
   async processRefund(orderId: string) {
     const payment = await this.prisma.payment.findFirst({
@@ -377,5 +375,52 @@ if (order.status === 'CANCELLED') {
     } else {
       throw new BadRequestException('Refund failed');
     }
+  }
+
+  // CHECKOUT (Create order + initiate payment in one step)
+
+  async checkout(userId: string, dto: CheckoutDto) {
+    if (
+      (dto.paymentMethod === 'MTN_MOMO' ||
+        dto.paymentMethod === 'AIRTEL_MONEY') &&
+      !dto.phoneNumber
+    ) {
+      throw new BadRequestException(
+        'Phone number is required for mobile money payments',
+      );
+    }
+
+    const createOrderDto: CreateOrderDto = {
+      pharmacyId: dto.pharmacyId,
+      branchId: dto.branchId,
+      type: dto.type,
+      items: dto.items,
+      deliveryAddress: dto.deliveryAddress,
+      prescriptionId: dto.prescriptionId,
+      paymentMethod: dto.paymentMethod,
+      insuranceProvider: dto.insuranceProvider,
+      insurancePolicyNumber: dto.insurancePolicyNumber,
+    };
+
+    const order = await this.ordersService.create(userId, createOrderDto);
+
+    const initiatePaymentDto: InitiatePaymentDto = {
+      orderId: order.id,
+      phoneNumber: dto.phoneNumber,
+      insuranceProvider: dto.insuranceProvider,
+      insurancePolicyNumber: dto.insurancePolicyNumber,
+    };
+
+    const paymentResult = await this.initiatePayment(initiatePaymentDto);
+
+    return {
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        total: order.total,
+        patientPayment: order.patientPayment,
+      },
+      payment: paymentResult,
+    };
   }
 }
