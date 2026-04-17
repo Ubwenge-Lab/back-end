@@ -203,75 +203,79 @@ export class PaymentsService {
   // ========================================
 
   async processMtnPayment(data: MtnCallbackDto) {
-    // 1. Find the order based on the externalId sent by MTN
-    const order = await this.prisma.order.findUnique({
-      where: { id: data.externalId },
-      include: { patient: true },
+  // 1. Find the order based on the externalId sent by MTN
+  const order = await this.prisma.order.findUnique({
+    where: { id: data.externalId },
+    include: { patient: true },
+  });
+
+  if (!order) {
+    console.error(`Webhook Error: Order ${data.externalId} not found`);
+    throw new NotFoundException('Order not found');
+  }
+
+  // --- IDEMPOTENCY CHECK ---
+  // If the order is already marked as PAID, return success immediately 
+  // so we don't trigger handlePaymentSuccess() a second time.
+  if (order.paymentStatus === 'COMPLETED') {
+    console.log(`Webhook received for already completed Order ${order.id}. Skipping processing.`);
+    return { status: 'success', message: 'Order already processed' };
+  }
+
+  // --- FINANCIAL INTEGRITY CHECK ---
+  const receivedAmount = Number(data.amount);
+  const expectedAmount = Number(order.total); 
+
+  if (receivedAmount < expectedAmount) {
+    console.error(`SECURITY ALERT: Underpayment detected for Order ${order.id}. Expected ${expectedAmount}, received ${receivedAmount}`);
+    
+    await this.prisma.payment.updateMany({
+      where: { orderId: order.id },
+      data: { status: 'FAILED' },
+    });
+    
+    return { status: 'failed', message: 'Amount mismatch' };
+  }
+
+  if (data.currency !== 'RWF') {
+     return { status: 'failed', message: 'Invalid currency' };
+  }
+
+  // 2. Logic: What happened with the payment?
+  if (data.status === 'SUCCESSFUL') {
+    // Update the Payment record
+    await this.prisma.payment.updateMany({
+      where: { orderId: order.id },
+      data: {
+        status: 'COMPLETED',
+        transactionId: data.financialTransactionId,
+      },
     });
 
-    if (!order) {
-      console.error(`Webhook Error: Order ${data.externalId} not found`);
-      throw new NotFoundException('Order not found');
-    }
+    // Update Order status and handle stock
+    await this.ordersService.handlePaymentSuccess(order.id);
 
+    // Notify the patient
+    await this.notificationsService.create({
+      patientId: order.patientId,
+      orderId: order.id,
+      type: 'ORDER_PLACED',
+      title: 'Payment Received',
+      message: `Your payment of ${data.amount} ${data.currency} was successful!`,
+    });
 
-    // --- NEW FINANCIAL INTEGRITY CHECK ---
-    // We convert everything to numbers to ensure we aren't comparing strings
-    const receivedAmount = Number(data.amount);
-    const expectedAmount = Number(order.total); 
+    return { status: 'success', message: 'Order marked as PAID' };
+  } else {
+    // Handle Failure (FAILED, REJECTED, or TIMEOUT)
+    await this.prisma.payment.updateMany({
+      where: { orderId: order.id },
+      data: { status: 'FAILED' },
+    });
 
-    if (receivedAmount < expectedAmount) {
-      console.error(`SECURITY ALERT: Underpayment detected for Order ${order.id}. Expected ${expectedAmount}, received ${receivedAmount}`);
-      
-      // Mark payment as failed because the amount is wrong
-      await this.prisma.payment.updateMany({
-        where: { orderId: order.id },
-        data: { status: 'FAILED' },
-      });
-      
-      return { status: 'failed', message: 'Amount mismatch' };
-    }
-
-    if (data.currency !== 'RWF') {
-       return { status: 'failed', message: 'Invalid currency' };
-    }
-    // -------------------------------------
-
-    // 2. Logic: What happened with the payment?
-    if (data.status === 'SUCCESSFUL') {
-      // Update the Payment record
-      await this.prisma.payment.updateMany({
-        where: { orderId: order.id },
-        data: {
-          status: 'COMPLETED',
-          transactionId: data.financialTransactionId,
-        },
-      });
-
-      // Update Order status and handle stock (using existing project logic)
-      await this.ordersService.handlePaymentSuccess(order.id);
-
-      // Notify the patient
-      await this.notificationsService.create({
-        patientId: order.patientId,
-        orderId: order.id,
-        type: 'ORDER_PLACED',
-        title: 'Payment Received',
-        message: `Your payment of ${data.amount} ${data.currency} was successful!`,
-      });
-
-      return { status: 'success', message: 'Order marked as PAID' };
-    } else {
-      // Handle Failure (FAILED, REJECTED, or TIMEOUT)
-      await this.prisma.payment.updateMany({
-        where: { orderId: order.id },
-        data: { status: 'FAILED' },
-      });
-
-      console.warn(`Payment failed for Order ${order.id}. Reason: ${data.reason || 'Unknown'}`);
-      return { status: 'failed', message: 'Order marked as FAILED' };
-    }
+    console.warn(`Payment failed for Order ${order.id}. Reason: ${data.reason || 'Unknown'}`);
+    return { status: 'failed', message: 'Order marked as FAILED' };
   }
+}
 
 
 
