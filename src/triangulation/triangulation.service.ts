@@ -6,8 +6,40 @@ export class TriangulationService {
   constructor(private prisma: PrismaService) {}
 
   // Fetches all active physical locations where a patient can go.
- // This unifies Branches and Pharmacies into a single searchable list.
- 
+  // This unifies Branches and Pharmacies into a single searchable list.
+
+  async getGlobalCoordinates() {
+    // 1. Fetch main pharmacy coordinates
+    const pharmacies = await this.prisma.pharmacy.findMany({
+      select: {
+        id: true,
+        name: true,
+        latitude: true,
+        longitude: true,
+        status: true,
+        address: true,
+      },
+    });
+
+    // 2. Fetch all branch coordinates
+    const branches = await this.prisma.branch.findMany({
+      select: {
+        id: true,
+        pharmacyId: true,
+        name: true,
+        latitude: true,
+        longitude: true,
+        isActive: true,
+        address: true,
+        branchStatus: true,
+      },
+    });
+
+    return {
+      pharmacies,
+      branches,
+    };
+  }
   async getNearbyBranches(patientLat: number, patientLng: number) {
     // 1. Fetch Branches belonging to APPROVED pharmacies
     // We prioritize branches because they represent specific active outlets.
