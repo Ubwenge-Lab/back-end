@@ -8,12 +8,15 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { FlutterwaveService } from './flutterwave.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { OrdersService } from '../orders/orders.service';
 import {
   InitiatePaymentDto,
   VerifyPaymentDto,
   MobileMoneyPaymentDto,
+  CheckoutDto,
 } from './dto';
-import { OrdersService } from 'src/orders/orders.service';
+import { MtnCallbackDto } from './dto/mtn-callback.dto';
+import { CreateOrderDto } from '../orders/dto';
 
 @Injectable()
 export class PaymentsService {
@@ -49,10 +52,9 @@ export class PaymentsService {
     }
 
     // After finding the order, add:
-if (order.status === 'CANCELLED') {
-  throw new BadRequestException('Cannot pay for cancelled order');
-}
-
+    if (order.status === 'CANCELLED') {
+      throw new BadRequestException('Cannot pay for cancelled order');
+    }
 
     // Create payment record
     const payment = await this.prisma.payment.create({
@@ -114,7 +116,7 @@ if (order.status === 'CANCELLED') {
       where: { id: payment.id },
       data: {
         flutterwaveRef: paymentResponse.data?.flw_ref,
-        paymentResponse: paymentResponse as any,
+        paymentResponse: paymentResponse,
       },
     });
 
@@ -159,7 +161,7 @@ if (order.status === 'CANCELLED') {
         data: {
           status: 'COMPLETED',
           transactionId: dto.transactionId,
-          paymentResponse: verification as any,
+          paymentResponse: verification,
         },
       });
       // Trigger stock reduction & order status update
@@ -189,7 +191,7 @@ if (order.status === 'CANCELLED') {
         where: { id: payment.id },
         data: {
           status: 'FAILED',
-          paymentResponse: verification as any,
+          paymentResponse: verification,
         },
       });
 
@@ -197,9 +199,91 @@ if (order.status === 'CANCELLED') {
     }
   }
 
+
+  // ========================================
+  // PROCESS MTN WEBHOOK (DIRECT)
+  // ========================================
+
+  async processMtnPayment(data: MtnCallbackDto) {
+  // 1. Find the order based on the externalId sent by MTN
+  const order = await this.prisma.order.findUnique({
+    where: { id: data.externalId },
+    include: { patient: true },
+  });
+
+  if (!order) {
+    console.error(`Webhook Error: Order ${data.externalId} not found`);
+    throw new NotFoundException('Order not found');
+  }
+
+  // --- IDEMPOTENCY CHECK ---
+  // If the order is already marked as PAID, return success immediately 
+  // so we don't trigger handlePaymentSuccess() a second time.
+  if (order.paymentStatus === 'COMPLETED') {
+    console.log(`Webhook received for already completed Order ${order.id}. Skipping processing.`);
+    return { status: 'success', message: 'Order already processed' };
+  }
+
+  // --- FINANCIAL INTEGRITY CHECK ---
+  const receivedAmount = Number(data.amount);
+  const expectedAmount = Number(order.total); 
+
+  if (receivedAmount < expectedAmount) {
+    console.error(`SECURITY ALERT: Underpayment detected for Order ${order.id}. Expected ${expectedAmount}, received ${receivedAmount}`);
+    
+    await this.prisma.payment.updateMany({
+      where: { orderId: order.id },
+      data: { status: 'FAILED' },
+    });
+    
+    return { status: 'failed', message: 'Amount mismatch' };
+  }
+
+  if (data.currency !== 'RWF') {
+     return { status: 'failed', message: 'Invalid currency' };
+  }
+
+  // 2. Logic: What happened with the payment?
+  if (data.status === 'SUCCESSFUL') {
+    // Update the Payment record
+    await this.prisma.payment.updateMany({
+      where: { orderId: order.id },
+      data: {
+        status: 'COMPLETED',
+        transactionId: data.financialTransactionId,
+      },
+    });
+
+    // Update Order status and handle stock
+    await this.ordersService.handlePaymentSuccess(order.id);
+
+    // Notify the patient
+    await this.notificationsService.create({
+      patientId: order.patientId,
+      orderId: order.id,
+      type: 'ORDER_PLACED',
+      title: 'Payment Received',
+      message: `Your payment of ${data.amount} ${data.currency} was successful!`,
+    });
+
+    return { status: 'success', message: 'Order marked as PAID' };
+  } else {
+    // Handle Failure (FAILED, REJECTED, or TIMEOUT)
+    await this.prisma.payment.updateMany({
+      where: { orderId: order.id },
+      data: { status: 'FAILED' },
+    });
+
+    console.warn(`Payment failed for Order ${order.id}. Reason: ${data.reason || 'Unknown'}`);
+    return { status: 'failed', message: 'Order marked as FAILED' };
+  }
+}
+
+
+
+
   // ========================================
   // VALIDATE MOBILE MONEY OTP
-  // ========================================
 
     async manualVerifyByOrderId(orderId: string, user: any) {
     // 1. Find the payment associated with this order
@@ -266,14 +350,14 @@ if (order.status === 'CANCELLED') {
   async validateOTP(paymentId: string, otp: string) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
-       include: { 
-      order: {
-        include: {
-          patient: true,
-          pharmacy: true,
+      include: {
+        order: {
+          include: {
+            patient: true,
+            pharmacy: true,
+          },
         },
       },
-    },
     });
 
     if (!payment || !payment.flutterwaveRef) {
@@ -293,7 +377,7 @@ if (order.status === 'CANCELLED') {
           transactionId: validation.data.tx_ref,
         },
       });
-       // Trigger stock reduction & order status update
+      // stock reduction & order status update
       await this.ordersService.handlePaymentSuccess(payment.orderId);
 
       // Send notifications
@@ -319,9 +403,7 @@ if (order.status === 'CANCELLED') {
     }
   }
 
-  // ========================================
   // PROCESS REFUND
-  // ========================================
 
   async processRefund(orderId: string) {
     const payment = await this.prisma.payment.findFirst({
@@ -363,6 +445,7 @@ if (order.status === 'CANCELLED') {
     }
   }
 
+
   async getRecentSuccessfulPayments(){
       return this.prisma.payment.findMany({
         where: {
@@ -381,4 +464,52 @@ if (order.status === 'CANCELLED') {
         }
       })
     }
+
+  // CHECKOUT (Create order + initiate payment in one step)
+
+  async checkout(userId: string, dto: CheckoutDto) {
+    if (
+      (dto.paymentMethod === 'MTN_MOMO' ||
+        dto.paymentMethod === 'AIRTEL_MONEY') &&
+      !dto.phoneNumber
+    ) {
+      throw new BadRequestException(
+        'Phone number is required for mobile money payments',
+      );
+    }
+
+    const createOrderDto: CreateOrderDto = {
+      pharmacyId: dto.pharmacyId,
+      branchId: dto.branchId,
+      type: dto.type,
+      items: dto.items,
+      deliveryAddress: dto.deliveryAddress,
+      prescriptionId: dto.prescriptionId,
+      paymentMethod: dto.paymentMethod,
+      insuranceProvider: dto.insuranceProvider,
+      insurancePolicyNumber: dto.insurancePolicyNumber,
+    };
+
+    const order = await this.ordersService.create(userId, createOrderDto);
+
+    const initiatePaymentDto: InitiatePaymentDto = {
+      orderId: order.id,
+      phoneNumber: dto.phoneNumber,
+      insuranceProvider: dto.insuranceProvider,
+      insurancePolicyNumber: dto.insurancePolicyNumber,
+    };
+
+    const paymentResult = await this.initiatePayment(initiatePaymentDto);
+
+    return {
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        total: order.total,
+        patientPayment: order.patientPayment,
+      },
+      payment: paymentResult,
+    };
+  }
+
 }
