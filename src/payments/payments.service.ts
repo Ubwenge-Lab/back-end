@@ -69,7 +69,7 @@ export class PaymentsService {
         insuranceVerified: dto.insuranceVerified || false,
       },
     });
-
+    
     // Initialize payment based on method
     let paymentResponse;
 
@@ -124,7 +124,9 @@ export class PaymentsService {
       paymentId: payment.id,
       ...paymentResponse,
     };
+    
   }
+
 
   // ========================================
   // VERIFY PAYMENT
@@ -283,6 +285,68 @@ export class PaymentsService {
   // ========================================
   // VALIDATE MOBILE MONEY OTP
 
+    async manualVerifyByOrderId(orderId: string, user: any) {
+    // 1. Find the payment associated with this order
+    const payment = await this.prisma.payment.findUnique({
+      where: { orderId: orderId },
+      include: {
+        order: {
+          include: {
+            patient: true,
+            pharmacy: true,
+          },
+        },
+      },
+    });
+
+    // 2. Make sure the payment exists
+    if (!payment) {
+      throw new NotFoundException('Payment not found for this order');
+    }
+
+    // 3. Prevent verifying a payment that is already complete
+    if (payment.status === 'COMPLETED') {
+      return { success: true, message: 'Payment is already COMPLETED' };
+    }
+
+    // 4. Find the transaction ID. 
+    const txIdToVerify = payment.transactionId || (payment.paymentResponse as any)?.data?.id;
+
+    if (!txIdToVerify) {
+      throw new BadRequestException('No transaction ID found to verify against the Payment Provider');
+    }
+
+    try {
+      // 5. Ask Flutterwave for the real-world status
+      const verification = await this.flutterwaveService.verifyPayment(txIdToVerify.toString());
+
+      if (verification?.data?.status === 'successful') {
+        // 6. If Flutterwave says it was successful, update our database!
+        await this.prisma.payment.update({
+          where: { id: payment.id },
+          data: {
+            status: 'COMPLETED',
+            transactionId: txIdToVerify.toString(),
+            paymentResponse: verification as any,
+          },
+        });
+
+        // 7. Force Database Sync
+        await this.ordersService.handlePaymentSuccess(payment.orderId);
+
+        return { success: true, message: 'Payment manually verified and Order updated successfully!' };
+      } else {
+        return { 
+          success: false, 
+          message: `Payment is not successful yet. Current status from provider: ${verification?.data?.status || 'Unknown'}` 
+        };
+      }
+    } catch (error) {
+       throw new BadRequestException('Failed to reach payment provider. It may still be processing.');
+    }
+  }
+
+
   async validateOTP(paymentId: string, otp: string) {
     const payment = await this.prisma.payment.findUnique({
       where: { id: paymentId },
@@ -381,6 +445,26 @@ export class PaymentsService {
     }
   }
 
+
+  async getRecentSuccessfulPayments(){
+      return this.prisma.payment.findMany({
+        where: {
+          status: 'COMPLETED'
+        },
+        orderBy: {
+          createdAt: 'desc'
+        },
+        take: 50,
+        include: {
+          order: {
+            include: {
+              patient: true,
+            }
+          }
+        }
+      })
+    }
+
   // CHECKOUT (Create order + initiate payment in one step)
 
   async checkout(userId: string, dto: CheckoutDto) {
@@ -427,4 +511,5 @@ export class PaymentsService {
       payment: paymentResult,
     };
   }
+
 }

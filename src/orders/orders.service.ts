@@ -427,15 +427,13 @@ export class OrdersService {
       },
     });
 
-    // Restore stock only if payment completed
-if (order.paymentStatus === 'COMPLETED') {
-  for (const item of order.orderItems) {
-    await this.medicationsService.restoreStock(
-      item.medicationId,
-      item.quantity,
-    );
-  }
-}
+    // Restore stock since it was reserved during order creation
+    for (const item of order.orderItems) {
+      await this.medicationsService.restoreStock(
+        item.medicationId,
+        item.quantity,
+      );
+    }
 
     // Notify pharmacy
     await this.notificationsService.create({
@@ -596,13 +594,8 @@ async handlePaymentSuccess(orderId: string) {
       return order; // Already processed
     }
 
-    // NOW reduce stock (this is the ONLY place stock should be reduced)
-    for (const item of order.orderItems) {
-      await tx.medication.update({
-        where: { id: item.medicationId },
-        data: { quantity: { decrement: item.quantity } },
-      });
-    }
+    // Stock was already reserved during order creation (Line 85).
+    // No need to reduce it again here.
 
     // Update order status to PENDING (ready for pharmacy to prepare)
     const updated = await tx.order.update({
