@@ -1,6 +1,6 @@
 // backend/src/payments/payments.controller.ts
 
-import { Controller, Post, Body, UseGuards } from '@nestjs/common';
+import { Controller, Post, Body, UseGuards, Get, Param, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -35,5 +35,17 @@ export class PaymentsController {
   @ApiOperation({ summary: 'Validate mobile money OTP' })
   validateOTP(@Body() dto: MobileMoneyPaymentDto) {
     return this.paymentsService.validateOTP(dto.paymentId, dto.otp);
+  }
+
+  @Get('verify/:orderId')
+  @Roles(Role.PHARMACIST, Role.CASHIER, Role.SUPER_ADMIN)
+  manualVerify(@Param('orderId') orderId: string, @Req() req) {
+    return this.paymentsService.manualVerifyByOrderId(orderId, req.user);
+  }
+
+  @Get('cashier/recent')
+  @Roles(Role.CASHIER, Role.PHARMACIST, Role.SUPER_ADMIN)
+  getRecentPayments() {
+    return this.paymentsService.getRecentSuccessfulPayments();
   }
 }
