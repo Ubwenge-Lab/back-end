@@ -1,6 +1,6 @@
 // backend/src/auth/dto/register-patient.dto.ts
 
-import { IsEmail, IsNotEmpty, IsString, IsOptional, MinLength, Matches } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, IsOptional, IsNumber, MinLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterPatientDto {
@@ -62,4 +62,14 @@ export class RegisterPatientDto {
   @IsString()
   @IsOptional()
   insurancePolicy?: string;
+
+  @ApiProperty({ required: false, description: 'GPS latitude of patient home location' })
+  @IsNumber()
+  @IsOptional()
+  latitude?: number;
+
+  @ApiProperty({ required: false, description: 'GPS longitude of patient home location' })
+  @IsNumber()
+  @IsOptional()
+  longitude?: number;
 }
