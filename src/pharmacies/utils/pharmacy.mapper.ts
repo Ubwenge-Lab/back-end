@@ -1,5 +1,5 @@
-import { pharmacyLocationDto } from "../dto/pharmacy_location.dto";
-export function toPharmacyLocationDto(pharmacy: any, distanceKm?: number): pharmacyLocationDto {
+import { PharmacyLocationDto } from "../dto/pharmacy_location.dto";
+export function toPharmacyLocationDto(pharmacy: any, distanceKm?: number): PharmacyLocationDto {
   return {
     id: pharmacy.id,
     name: pharmacy.name,
@@ -17,30 +17,36 @@ export function toPharmacyLocationDto(pharmacy: any, distanceKm?: number): pharm
   };
 }
 function mapRegion(pharmacy: any): string {
-  return pharmacy.region ? String(pharmacy.region) : 'Kigali';
+  return pharmacy.region ? String(pharmacy.region) : 'Uknown';
 }
 function getPharmacyStatus(hours: string): 'OPEN' | 'CLOSED' {
   if (!hours) return 'CLOSED';
 
-  const [openTime, closedTime] = hours.split('-');
-  if (!openTime || !closedTime) return 'CLOSED'
+  const [openTimeStr, closedTimeStr] = hours.split('-');
+  if (!openTimeStr|| !closedTimeStr) return 'CLOSED'
 
-  const now = new Date();
-  const [openHour, openMin] = openTime.split(':').map(Number);
-  const openDate = new Date();
-  openDate.setHours(openHour, openMin, 0);
-  // Create Date objects for the closing time today
-  const closeDate = new Date();
-  const [closeHour, closeMin] = closedTime.split(':').map(Number);
-  closeDate.setHours(closeHour, closeMin, 0);
-  // Compare if the current time is inside the hours window
-  if (now >= openDate && now <= closeDate) {
+  const nowString = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali" });
+  const kigaliDate = new Date(nowString);
+  
+  const currentHour = kigaliDate.getHours();
+  const currentMin = kigaliDate.getMinutes(); 
+
+  const currentTotalMinutes = currentHour * 60 + currentMin;
+
+  const [openHour, openMin] = openTimeStr.split(':').map(Number);
+  const openTotalMinutes = openHour * 60 + openMin;
+
+  const [closeHour, closeMin] = closedTimeStr.split(':').map(Number);
+  const closeTotalMinutes = closeHour * 60 + closeMin;
+
+  if (openTotalMinutes < closeTotalMinutes) {
+    if (openTotalMinutes <= currentTotalMinutes && currentTotalMinutes <= closeTotalMinutes) {
+      return 'OPEN';
+    }
+  } else {
+    if (currentTotalMinutes >= openTotalMinutes || currentTotalMinutes <= closeTotalMinutes) {
     return 'OPEN';
-  }
+  }}
   return 'CLOSED';
+
 }
-
-
-
-
-
