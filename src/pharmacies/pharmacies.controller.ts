@@ -24,7 +24,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
 import { PharmacyStatsResponseDto } from './dto/stats-response.dto';
 import { TriangulationService } from '../triangulation/triangulation.service';
-import { ParseFloatPipe, ParseIntPipe } from '@nestjs/common';
+import { ParseFloatPipe } from '@nestjs/common';
 
 @ApiTags('Pharmacies')
 @Controller('pharmacies')
@@ -46,7 +46,7 @@ export class PharmaciesController {
   getNearby(
     @Query('lat', ParseFloatPipe) lat: number,
     @Query('lng', ParseFloatPipe) lng: number,
-    @Query('radius', ParseIntPipe) radius: number,
+    @Query('radius', ParseFloatPipe) radius: number,
     @Req() req: any,
   ) {
     return this.triangulationService.getNearbyPharmacies(lat, lng, radius, req.user.sub);
