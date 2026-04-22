@@ -272,6 +272,8 @@ export class AuthService {
             address: dto.address,
             insuranceProvider: dto.insuranceProvider,
             insurancePolicy: dto.insurancePolicy,
+            lastLat: dto.latitude,
+            lastLng: dto.longitude,
           },
         },
       },

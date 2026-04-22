@@ -6,6 +6,7 @@ import { PrismaModule } from '../prisma/prisma.module';
 @Module({
   imports: [PrismaModule],
   controllers: [TriangulationController],
-  providers: [TriangulationService]
+  providers: [TriangulationService],
+  exports: [TriangulationService],
 })
 export class TriangulationModule { }
