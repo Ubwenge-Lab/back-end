@@ -70,5 +70,6 @@ export class RegisterPatientDto {
 
   @ApiProperty({ required: false })
   @IsOptional()
+  @isNumber()
   longitude?: number;
 }
