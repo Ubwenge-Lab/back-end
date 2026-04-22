@@ -67,6 +67,22 @@ export class TriangulationService {
       },
     });
 
+    // 2. Map and Calculate Distance in one pass (Restoring Benjamin's original logic)
+    return allLocations
+      .map((location) => ({
+        id: location.id,
+        displayName: `${location.pharmacy.name} - ${location.name}`,
+        address: location.address,
+        latitude: location.latitude,
+        longitude: location.longitude,
+        distance: this.calculateHaversine(
+          patientLat,
+          patientLng,
+          location.latitude,
+          location.longitude,
+        ),
+      }))
+      .sort((a, b) => a.distance - b.distance);
   }
 
   async getNearbyPharmacies(lat: number, lng: number, radius: number, userId?: string) {
