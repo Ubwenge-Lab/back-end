@@ -23,11 +23,34 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
 import { PharmacyStatsResponseDto } from './dto/stats-response.dto';
+import { TriangulationService } from '../triangulation/triangulation.service';
+import { ParseFloatPipe, ParseIntPipe } from '@nestjs/common';
 
 @ApiTags('Pharmacies')
 @Controller('pharmacies')
 export class PharmaciesController {
-  constructor(private pharmaciesService: PharmaciesService) {}
+  constructor(
+    private pharmaciesService: PharmaciesService,
+    private triangulationService: TriangulationService,
+  ) { }
+
+  // ========================================
+  // PATIENT ENDPOINTS
+  // ========================================
+
+  @Get('nearby')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PATIENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Find pharmacies within a radius of the patient' })
+  getNearby(
+    @Query('lat', ParseFloatPipe) lat: number,
+    @Query('lng', ParseFloatPipe) lng: number,
+    @Query('radius', ParseIntPipe) radius: number,
+    @Req() req: any,
+  ) {
+    return this.triangulationService.getNearbyPharmacies(lat, lng, radius, req.user.sub);
+  }
 
   // ========================================
   // PUBLIC ENDPOINTS

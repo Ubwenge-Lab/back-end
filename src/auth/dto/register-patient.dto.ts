@@ -62,4 +62,12 @@ export class RegisterPatientDto {
   @IsString()
   @IsOptional()
   insurancePolicy?: string;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  latitude?: number;
+
+  @ApiProperty({ required: false })
+  @IsOptional()
+  longitude?: number;
 }
