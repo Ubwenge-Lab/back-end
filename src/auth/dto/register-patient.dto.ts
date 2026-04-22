@@ -63,13 +63,11 @@ export class RegisterPatientDto {
   @IsOptional()
   insurancePolicy?: string;
 
-  @ApiProperty({ required: false, description: 'GPS latitude of patient home location' })
+  @ApiProperty({ description: 'GPS latitude of patient home location' })
   @IsNumber()
-  @IsOptional()
-  latitude?: number;
+  latitude: number;
 
-  @ApiProperty({ required: false, description: 'GPS longitude of patient home location' })
+  @ApiProperty({ description: 'GPS longitude of patient home location' })
   @IsNumber()
-  @IsOptional()
-  longitude?: number;
+  longitude: number;
 }
