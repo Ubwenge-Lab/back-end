@@ -307,6 +307,7 @@ export class TriangulationService {
           id: branch.id,
           name: branch.name,
           address: branch.address,
+          district: branchDistrict,
           coordinates: { lat: branch.latitude, lng: branch.longitude },
           pharmacyName: pharmacy.name,
           pharmacyId: pharmacy.id,

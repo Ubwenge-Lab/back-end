@@ -14,3 +14,4 @@ export const DISTRICT_BOUNDS: Record<Exclude<DistrictName, 'Other'>, BoundingBox
 };
 
 export const PROXIMITY_RADIUS_KM = 3;
+

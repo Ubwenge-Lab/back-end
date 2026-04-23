@@ -11,6 +11,7 @@ export interface BranchMapPoint {
   id: string;
   name: string;
   address: string;
+  district: string;
   coordinates: { lat: number; lng: number };
   pharmacyName: string;
   pharmacyId: string;
