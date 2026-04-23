@@ -169,6 +169,8 @@ model Patient {
   prescriptions     Prescription[]
   notifications     Notification[]
   cartItems         CartItem[]
+  lastLat	    Float?
+  lastLng	    Float?
 
   @@index([userId])
   @@map("patients")
@@ -217,8 +219,8 @@ model Branch {
   name                String
   address             String
   phone               String?
-  latitude            Float?
-  longitude           Float?
+  latitude            Float
+  longitude           Float
   isActive            Boolean       @default(true)
   operatingHours      Json?
   branchStatus        BranchStatus  @default(INVITED)

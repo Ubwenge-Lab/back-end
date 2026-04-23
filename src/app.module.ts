@@ -23,6 +23,7 @@ import { StaffModule } from './staff/staff.module'; // NEW
 import { AttendanceModule } from './attendance/attendance.module';
 import { StockTransfersModule } from './stock-transfers/stock-transfers.module';
 import { TriangulationModule } from './triangulation/triangulation.module';
+import { LocationModule } from './location/location.module';
 
 @Module({
   imports: [
@@ -45,7 +46,7 @@ import { TriangulationModule } from './triangulation/triangulation.module';
     UploadModule,
     BranchesModule,
     StaffModule, // NEW
-    AttendanceModule, StockTransfersModule, TriangulationModule,
+    AttendanceModule, StockTransfersModule, TriangulationModule, LocationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
