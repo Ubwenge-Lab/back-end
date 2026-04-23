@@ -8,6 +8,7 @@ import { LocationModule } from '../location/location.module';
 @Module({
   imports: [PrismaModule, LocationModule],
   controllers: [TriangulationController],
-  providers: [TriangulationService]
+  providers: [TriangulationService],
+  exports: [TriangulationService],
 })
 export class TriangulationModule { }

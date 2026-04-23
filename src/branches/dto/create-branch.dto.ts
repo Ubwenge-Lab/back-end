@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsNumber, IsString, MinLength, MaxLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsNumber, IsString, MinLength, MaxLength, Min, Max } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class CreateBranchDto {
@@ -26,11 +26,15 @@ export class CreateBranchDto {
     @Transform(({ value }) => value?.toLowerCase().trim())
     branchManagerEmail: string;
 
-    @IsOptional()
+    @IsNotEmpty()
     @IsNumber()
-    latitude?: number;
+    @Min(-90)
+    @Max(90)
+    latitude: number;
 
-    @IsOptional()
+    @IsNotEmpty()
     @IsNumber()
-    longitude?: number;
+    @Min(-180)
+    @Max(180)
+    longitude: number;
 }
