@@ -1,6 +1,6 @@
 // backend/src/auth/dto/register-patient.dto.ts
 
-import { IsEmail, IsNotEmpty, IsString, IsOptional, MinLength, Matches } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsString, IsOptional, IsNumber, MinLength, Matches } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterPatientDto {

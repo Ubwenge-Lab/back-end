@@ -158,6 +158,9 @@ model Patient {
   insuranceMemberId String?
   insuranceCoverage Int?           @default(0)
 
+  lastLat           Float?
+  lastLng           Float?
+
   createdAt         DateTime       @default(now())
   updatedAt         DateTime       @updatedAt
 
@@ -191,6 +194,8 @@ model Pharmacy {
   status               PharmacyStatus @default(PENDING)
   rejectionReason      String?        @db.Text
   approvedAt           DateTime?
+  isLocationVerified   Boolean        @default(false)
+  locationVerifiedAt   DateTime?
 
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt

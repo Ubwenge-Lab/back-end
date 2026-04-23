@@ -1,6 +1,6 @@
 // backend/src/auth/dto/register-pharmacy.dto.ts
 
-import { IsString, IsEmail, IsNotEmpty, IsNumber, IsOptional, IsDateString } from 'class-validator';
+import { IsString, IsEmail, IsNotEmpty, IsNumber, IsDateString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterPharmacyDto {
@@ -38,15 +38,13 @@ export class RegisterPharmacyDto {
   @IsNotEmpty()
   address: string;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ description: 'GPS latitude of pharmacy location (required)' })
   @IsNumber()
-  @IsOptional()
-  latitude?: number;
+  latitude: number;
 
-  @ApiProperty({ required: false })
+  @ApiProperty({ description: 'GPS longitude of pharmacy location (required)' })
   @IsNumber()
-  @IsOptional()
-  longitude?: number;
+  longitude: number;
 
   @ApiProperty({ description: 'Date of pharmacy incorporation/establishment' })
   @IsDateString()
