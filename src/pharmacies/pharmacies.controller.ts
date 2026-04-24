@@ -62,12 +62,6 @@ export class PharmaciesController {
     return this.pharmaciesService.getApprovedPharmacies();
   }
 
-  @Get(':id')
-  @ApiOperation({ summary: 'Get pharmacy by ID (Public)' })
-  getPharmacyById(@Param('id') id: string) {
-    return this.pharmaciesService.findById(id);
-  }
-
   // ========================================
   // PHARMACY AUTHENTICATED ENDPOINTS
   // ========================================
@@ -228,6 +222,18 @@ export class PharmaciesController {
     return this.pharmaciesService.getAllPharmacies(status);
   }
 
+  @Get('locations')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Get all pharmacy locations for map triangulation (Super Admin only)',
+  })
+  getPharmacyLocations() {
+    return this.pharmaciesService.getPharmacyLocations();
+  }
+
   @Post('admin/:id/approve')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN)
@@ -239,5 +245,11 @@ export class PharmaciesController {
     @Body() body: { approved: boolean; rejectionReason?: string },
   ) {
     return this.pharmaciesService.approvePharmacy(id, body.approved, body.rejectionReason);
+  }
+
+  @Get(':id')
+  @ApiOperation({ summary: 'Get pharmacy by ID (Public)' })
+  getPharmacyById(@Param('id') id: string) {
+    return this.pharmaciesService.findById(id);
   }
 }
