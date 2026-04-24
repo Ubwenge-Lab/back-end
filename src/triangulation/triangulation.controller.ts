@@ -5,6 +5,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
+import { MapDataQueryDto } from './dto/map-data-query.dto';
 
 @ApiTags('Triangulation')
 @Controller('triangulation')
@@ -34,5 +35,12 @@ export class TriangulationController {
   @ApiOperation({ summary: 'Get all pharmacy and branch coordinates globally' })
   getGlobalCoordinates() {
     return this.triangulationService.getGlobalCoordinates();
+  }
+
+  @Get('map-data')
+  @Roles(Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Get grouped pharmacies, branches and nearby patients by district' })
+  getMapData(@Query() query: MapDataQueryDto) {
+    return this.triangulationService.getMapData(query);
   }
 }
