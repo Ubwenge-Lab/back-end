@@ -284,6 +284,7 @@ export class TriangulationService {
       });
 
       for (const branch of pharmacy.branches) {
+        if (!branch.latitude || !branch.longitude) continue;
         const branchDistrict = getDistrict(branch.latitude, branch.longitude, branch.address);
         const nearbyPatients: PatientMapPoint[] = [];
 
