@@ -125,6 +125,7 @@ model User {
   password   String
   role       UserRole
   isVerified Boolean  @default(false)
+  isActive   Boolean  @default(true)
 
   verificationCode       String?
   verificationCodeExpiry DateTime?
