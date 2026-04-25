@@ -5,7 +5,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService } from '../notifications/email.service';
-import { ApprovePharmacyDto, RejectPharmacyDto } from './dto';
+import { ApprovePharmacyDto, RejectPharmacyDto, VerifyLocationDto } from './dto';
 
 @Injectable()
 export class SuperAdminService {
@@ -361,6 +361,41 @@ export class SuperAdminService {
       transactionCount: payments.length,
       revenueByDate,
     };
+  }
+
+  // ========================================
+  // GET PHARMACIES WITH UNVERIFIED LOCATIONS
+  // ========================================
+
+  async getUnverifiedLocations() {
+    return this.prisma.pharmacy.findMany({
+      where: {
+        latitude: { not: null },
+        longitude: { not: null },
+        isLocationVerified: false,
+      },
+      include: {
+        user: { select: { email: true } },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ========================================
+  // VERIFY PHARMACY LOCATION
+  // ========================================
+
+  async verifyPharmacyLocation(id: string, dto: VerifyLocationDto) {
+    const pharmacy = await this.prisma.pharmacy.findUnique({ where: { id } });
+    if (!pharmacy) throw new NotFoundException('Pharmacy not found');
+
+    return this.prisma.pharmacy.update({
+      where: { id },
+      data: {
+        isLocationVerified: dto.verified,
+        locationVerifiedAt: dto.verified ? new Date() : null,
+      },
+    });
   }
 
   async getPendingBranches() {
