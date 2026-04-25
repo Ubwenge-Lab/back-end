@@ -17,7 +17,7 @@ export function toPharmacyLocationDto(pharmacy: any, distanceKm?: number): Pharm
   };
 }
 function mapRegion(pharmacy: any): string {
-  return pharmacy.region ? String(pharmacy.region) : 'Uknown';
+  return pharmacy.region ? String(pharmacy.region) : 'Unknown';
 }
 function getPharmacyStatus(hours: string): 'OPEN' | 'CLOSED' {
   if (!hours) return 'CLOSED';

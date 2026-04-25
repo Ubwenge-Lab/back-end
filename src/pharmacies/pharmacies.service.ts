@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
 import { EmailService } from '../notifications/email.service';
 import { toPharmacyLocationDto } from './utils/pharmacy.mapper';
+import { getDistrict } from '../triangulation/triangulation.helpers';
 
 @Injectable()
 export class PharmaciesService {
@@ -1020,19 +1021,20 @@ export class PharmaciesService {
       orderBy: { name: 'asc' },
     });
 
-    const mapped = pharmacies.map((pharmacy) =>
-      toPharmacyLocationDto({
+    const dayOfWeek = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali", weekday: 'long' }).toLowerCase();
+
+    const mapped = pharmacies.map((pharmacy) => {
+      const todayHours = pharmacy.operatingHours ? (pharmacy.operatingHours as any)[dayOfWeek] : null;
+      const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+
+      return toPharmacyLocationDto({
         ...pharmacy,
-
-        hours: pharmacy.operatingHours
-          ? ((pharmacy.operatingHours as any).hour ?? null)
-          : null,
-
-        region: null,
+        hours: hoursString,
+        region: pharmacy.latitude && pharmacy.longitude ? getDistrict(pharmacy.latitude, pharmacy.longitude, pharmacy.address) : 'Unknown',
         rating: null,
         isActive: pharmacy.status === 'APPROVED',
-      }),
-    );
+      });
+    });
 
     return {
       pharmacies: mapped,
