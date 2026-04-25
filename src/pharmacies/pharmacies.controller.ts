@@ -224,7 +224,7 @@ export class PharmaciesController {
 
   @Get('locations')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.SUPER_ADMIN)
+  @Roles(Role.SUPER_ADMIN, Role.PATIENT)
   @ApiBearerAuth()
   @ApiOperation({
     summary:

@@ -5,6 +5,7 @@ import { MapDataQueryDto } from './dto/map-data-query.dto';
 import { PROXIMITY_RADIUS_KM, DistrictName } from './triangulation.constants';
 import { getDistrict} from './triangulation.helpers';
 import { DistrictGroup, PatientMapPoint, ResolvedPatient } from './triangulation.types';
+import { toPharmacyLocationDto } from '../pharmacies/utils/pharmacy.mapper';
 
 
 @Injectable()
@@ -118,7 +119,10 @@ export class TriangulationService {
           name: true, 
           latitude: true, 
           longitude: true, 
-          address: true 
+          address: true,
+          phone: true,
+          operatingHours: true,
+          status: true,
         },
       }),
       this.prisma.branch.findMany({
@@ -135,6 +139,10 @@ export class TriangulationService {
           latitude: true,
           longitude: true,
           address: true,
+          phone: true,
+          operatingHours: true,
+          isActive: true,
+          branchStatus: true,
           pharmacy: { select: { name: true } },
         },
       }),
@@ -143,24 +151,20 @@ export class TriangulationService {
     // 3. Unify into a single list of locations
     const allLocations = [
       ...pharmacies.map((p) => ({
-        id: p.id,
-        name: p.name,
-        address: p.address,
-        latitude: p.latitude,
-        longitude: p.longitude,
+        ...p,
         type: 'MAIN',
       })),
       ...branches.map((b) => ({
-        id: b.id,
+        ...b,
         name: `${b.pharmacy.name} - ${b.name}`,
-        address: b.address,
-        latitude: b.latitude,
-        longitude: b.longitude,
         type: 'BRANCH',
+        status: b.branchStatus as any, // Cast for mapper compatibility
       })),
     ];
 
-    // 4. Calculate distance, filter by radius, and sort
+    const dayOfWeek = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali", weekday: 'long' }).toLowerCase();
+
+    // 4. Calculate distance, filter by radius, sort, and map to DTO
     return allLocations
       .map((loc) => {
         const distance = this.calculateHaversine(
@@ -175,7 +179,19 @@ export class TriangulationService {
         };
       })
       .filter((loc) => loc.distance <= radius)
-      .sort((a, b) => a.distance - b.distance);
+      .sort((a, b) => a.distance - b.distance)
+      .map(loc => {
+        const todayHours = loc.operatingHours ? (loc.operatingHours as any)[dayOfWeek] : null;
+        const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+        
+        return toPharmacyLocationDto({
+          ...loc,
+          hours: hoursString,
+          region: loc.latitude && loc.longitude ? getDistrict(loc.latitude, loc.longitude, loc.address) : 'Unknown',
+          rating: null,
+          isActive: loc.type === 'MAIN' ? loc.status === 'APPROVED' : (loc as any).isActive && loc.status === 'APPROVED',
+        }, loc.distance);
+      });
   }
 
   private calculateHaversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
