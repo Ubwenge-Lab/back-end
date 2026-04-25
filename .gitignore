@@ -3,6 +3,9 @@
 /node_modules
 /build
 
+# TypeScript build artifacts
+tsconfig.build.tsbuildinfo
+
 # Logs
 logs
 *.log
@@ -15,9 +18,11 @@ lerna-debug.log*
 # OS
 .DS_Store
 
-# Tests
+# Tests & test output
 /coverage
 /.nyc_output
+e2e_output.txt
+/tests/
 
 # IDEs and editors
 /.idea
@@ -41,6 +46,7 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 .env.local
+env
 
 # temp directory
 .temp
@@ -55,10 +61,19 @@ pids
 # Diagnostic reports (https://nodejs.org/api/report.html)
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
-# Test scripts
-scripts/
-
-# Beads / Dolt files (added by bd init)
+# Beads issue tracker (local dev tool, not project source)
+.beads/
 .dolt/
 *.db
 .beads-credential-key
+
+# AI assistant configs (local tool configs, not project source)
+.claude/
+CLAUDE.md
+
+# Security audit reports (sensitive, not project source)
+SECURITY_AUDIT.md
+/reports/
+
+# Seed data (large local data files - place manually before seeding)
+medication_registry.csv
