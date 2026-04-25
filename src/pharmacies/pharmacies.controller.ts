@@ -247,9 +247,15 @@ export class PharmaciesController {
     return this.pharmaciesService.approvePharmacy(id, body.approved, body.rejectionReason);
   }
 
+
   @Get(':id')
-  @ApiOperation({ summary: 'Get pharmacy by ID (Public)' })
-  getPharmacyById(@Param('id') id: string) {
-    return this.pharmaciesService.findById(id);
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PATIENT, Role.SUPER_ADMIN) // Accessible to Patient and Super Admin
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get pharmacy detail for map sidebar' })
+  async getPharmacyById(@Param('id') id: string) {
+    return this.pharmaciesService.getPharmacyDetails(id);
   }
+
+
 }

@@ -1039,4 +1039,37 @@ export class PharmaciesService {
       total: mapped.length,
     };
   }
+  // ========================================
+  // ADMIN&PATIENT: GET PHARMACY DETAILS (FOR MAP VIEW)
+  // ========================================
+  async getPharmacyDetails(id: string) {
+    const pharmacy = await this.prisma.pharmacy.findUnique({
+      where: { id },
+      include: {
+        user: {
+          select: {
+            isActive: true,
+          },
+        },
+      },
+    });
+
+    if (!pharmacy) {
+      throw new NotFoundException('Pharmacy not found');
+    }
+
+    const p = pharmacy as any;
+
+    const payload = {
+      ...p,
+      isActive: p.user?.isActive ?? false,
+      hours: p.operatingHours?.hour ?? null,
+      region: null,
+      rating: null,
+    };
+
+    return toPharmacyLocationDto(payload);
+  }
+
+
 }
