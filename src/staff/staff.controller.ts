@@ -56,7 +56,11 @@ export class StaffController {
   @Put(':id')
   @Roles(Role.BRANCH_MANAGER)
   @ApiOperation({ summary: 'Update staff member (Branch Manager only)' })
-  updateStaff(@Req() req: any, @Param('id') id: string, @Body() dto: UpdateStaffDto) {
+  updateStaff(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateStaffDto,
+  ) {
     return this.staffService.updateStaff(req.user.sub, id, dto);
   }
 
@@ -71,7 +75,9 @@ export class StaffController {
   @Post(':id/resend-credentials')
   @Roles(Role.BRANCH_MANAGER)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Resend credentials to staff member (Branch Manager only)' })
+  @ApiOperation({
+    summary: 'Resend credentials to staff member (Branch Manager only)',
+  })
   resendCredentials(@Req() req: any, @Param('id') id: string) {
     return this.staffService.resendCredentials(req.user.sub, id);
   }
@@ -90,7 +96,9 @@ export class StaffController {
   @Put('profile/change-password')
   @Roles(Role.PHARMACIST, Role.CASHIER, Role.NURSE)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Change password from temp to permanent (Staff first login)' })
+  @ApiOperation({
+    summary: 'Change password from temp to permanent (Staff first login)',
+  })
   changePassword(@Req() req: any, @Body() dto: ChangeStaffPasswordDto) {
     return this.staffService.changeStaffPassword(req.user.sub, dto);
   }

@@ -3,8 +3,12 @@ import { PrismaService } from '../prisma/prisma.service';
 import { LocationService } from '../location/location.service';
 import { MapDataQueryDto } from './dto/map-data-query.dto';
 import { PROXIMITY_RADIUS_KM, DistrictName } from './triangulation.constants';
-import { getDistrict} from './triangulation.helpers';
-import { DistrictGroup, PatientMapPoint, ResolvedPatient } from './triangulation.types';
+import { getDistrict } from './triangulation.helpers';
+import {
+  DistrictGroup,
+  PatientMapPoint,
+  ResolvedPatient,
+} from './triangulation.types';
 import { toPharmacyLocationDto } from '../pharmacies/utils/pharmacy.mapper';
 
 
@@ -97,28 +101,37 @@ export class TriangulationService {
       .sort((a, b) => a.distance - b.distance);
   }
 
-  async getNearbyPharmacies(lat: number, lng: number, radius: number, userId?: string) {
+  async getNearbyPharmacies(
+    lat: number,
+    lng: number,
+    radius: number,
+    userId?: string,
+  ) {
     // 1. Update patient location if userId is provided (Recording recent location)
     if (userId) {
-      await this.prisma.patient.updateMany({
-        where: { userId },
-        data: { lastLat: lat, lastLng: lng },
-      }).catch(err => console.error('Failed to update patient last location:', err));
+      await this.prisma.patient
+        .updateMany({
+          where: { userId },
+          data: { lastLat: lat, lastLng: lng },
+        })
+        .catch((err) =>
+          console.error('Failed to update patient last location:', err),
+        );
     }
 
     // 2. Fetch all Approved pharmacies and active Branches that have coordinates
     const [pharmacies, branches] = await Promise.all([
       this.prisma.pharmacy.findMany({
-        where: { 
-          status: 'APPROVED', 
-          latitude: { not: null }, 
-          longitude: { not: null } 
+        where: {
+          status: 'APPROVED',
+          latitude: { not: null },
+          longitude: { not: null },
         },
-        select: { 
-          id: true, 
-          name: true, 
-          latitude: true, 
-          longitude: true, 
+        select: {
+          id: true,
+          name: true,
+          latitude: true,
+          longitude: true,
           address: true,
           phone: true,
           operatingHours: true,
@@ -173,9 +186,9 @@ export class TriangulationService {
           loc.latitude,
           loc.longitude,
         );
-        return { 
-          ...loc, 
-          distance: parseFloat(distance.toFixed(1)) 
+        return {
+          ...loc,
+          distance: parseFloat(distance.toFixed(1)),
         };
       })
       .filter((loc) => loc.distance <= radius)
@@ -194,7 +207,12 @@ export class TriangulationService {
       });
   }
 
-  private calculateHaversine(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  private calculateHaversine(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
     const R = 6371; // km
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
@@ -208,7 +226,7 @@ export class TriangulationService {
     return R * c;
   }
 
-    async getMapData(query: MapDataQueryDto) {
+  async getMapData(query: MapDataQueryDto) {
     const { view = 'all', district = 'all' } = query;
 
     // 1. Fetch all APPROVED pharmacies with their branches
@@ -258,13 +276,16 @@ export class TriangulationService {
       );
 
       if (!coords) {
-        this.logger.warn(`Could not resolve coordinates for patient ${patient.id}, skipping.`);
+        this.logger.warn(
+          `Could not resolve coordinates for patient ${patient.id}, skipping.`,
+        );
         continue;
       }
 
-      const locationSource = (patient.lastLat !== null && patient.lastLng !== null)
-        ? 'LIVE_GPS'
-        : 'FIXED_FALLBACK';
+      const locationSource =
+        patient.lastLat !== null && patient.lastLng !== null
+          ? 'LIVE_GPS'
+          : 'FIXED_FALLBACK';
 
       if (view === 'live' && locationSource !== 'LIVE_GPS') continue;
       if (view === 'fixed' && locationSource !== 'FIXED_FALLBACK') continue;
@@ -279,16 +300,39 @@ export class TriangulationService {
 
     // 4. Build district groups
     const districtMap: Record<DistrictName, DistrictGroup> = {
-      Gasabo:     { name: 'Gasabo',     pharmacies: [], branches: [], totalNearbyPatients: 0 },
-      Kicukiro:   { name: 'Kicukiro',   pharmacies: [], branches: [], totalNearbyPatients: 0 },
-      Nyarugenge: { name: 'Nyarugenge', pharmacies: [], branches: [], totalNearbyPatients: 0 },
-      Other:      { name: 'Other',      pharmacies: [], branches: [], totalNearbyPatients: 0 },
+      Gasabo: {
+        name: 'Gasabo',
+        pharmacies: [],
+        branches: [],
+        totalNearbyPatients: 0,
+      },
+      Kicukiro: {
+        name: 'Kicukiro',
+        pharmacies: [],
+        branches: [],
+        totalNearbyPatients: 0,
+      },
+      Nyarugenge: {
+        name: 'Nyarugenge',
+        pharmacies: [],
+        branches: [],
+        totalNearbyPatients: 0,
+      },
+      Other: {
+        name: 'Other',
+        pharmacies: [],
+        branches: [],
+        totalNearbyPatients: 0,
+      },
     };
 
     for (const pharmacy of pharmacies) {
       const pharmLat = pharmacy.latitude;
       const pharmLng = pharmacy.longitude;
-      const pharmDistrict = pharmLat && pharmLng ? getDistrict(pharmLat, pharmLng, pharmacy.address) : 'Other';
+      const pharmDistrict =
+        pharmLat && pharmLng
+          ? getDistrict(pharmLat, pharmLng, pharmacy.address)
+          : 'Other';
 
       districtMap[pharmDistrict].pharmacies.push({
         id: pharmacy.id,
@@ -301,13 +345,19 @@ export class TriangulationService {
 
       for (const branch of pharmacy.branches) {
         if (!branch.latitude || !branch.longitude) continue;
-        const branchDistrict = getDistrict(branch.latitude, branch.longitude, branch.address);
+        const branchDistrict = getDistrict(
+          branch.latitude,
+          branch.longitude,
+          branch.address,
+        );
         const nearbyPatients: PatientMapPoint[] = [];
 
         for (const patient of resolvedPatients) {
           const distance = this.calculateHaversine(
-            patient.lat, patient.lng,
-            branch.latitude, branch.longitude,
+            patient.lat,
+            patient.lng,
+            branch.latitude,
+            branch.longitude,
           );
 
           if (distance <= PROXIMITY_RADIUS_KM) {
@@ -333,7 +383,8 @@ export class TriangulationService {
           nearbyPatients,
         });
 
-        districtMap[branchDistrict].totalNearbyPatients += nearbyPatients.length;
+        districtMap[branchDistrict].totalNearbyPatients +=
+          nearbyPatients.length;
       }
     }
 
@@ -352,5 +403,4 @@ export class TriangulationService {
       districts,
     };
   }
-
 }

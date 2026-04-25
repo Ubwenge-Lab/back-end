@@ -5,7 +5,7 @@ import {
   NotFoundException,
   ForbiddenException,
   ConflictException,
-  BadRequestException
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../notifications/email.service';
@@ -195,7 +195,9 @@ export class StaffService {
     }
 
     if (staff.branchId !== branch.id) {
-      throw new ForbiddenException('This staff member belongs to another branch');
+      throw new ForbiddenException(
+        'This staff member belongs to another branch',
+      );
     }
 
     return staff;
@@ -205,7 +207,11 @@ export class StaffService {
   // UPDATE STAFF
   // ========================================
 
-  async updateStaff(branchManagerUserId: string, staffId: string, dto: UpdateStaffDto) {
+  async updateStaff(
+    branchManagerUserId: string,
+    staffId: string,
+    dto: UpdateStaffDto,
+  ) {
     const branch = await this.prisma.branch.findFirst({
       where: { managerId: branchManagerUserId },
     });
@@ -223,7 +229,9 @@ export class StaffService {
     }
 
     if (staff.branchId !== branch.id) {
-      throw new ForbiddenException('This staff member belongs to another branch');
+      throw new ForbiddenException(
+        'This staff member belongs to another branch',
+      );
     }
 
     // Update staff and permissions in transaction
@@ -271,7 +279,10 @@ export class StaffService {
   // DELETE STAFF
   // ========================================
 
-  async deleteStaff(branchManagerUserId: string, staffId: string): Promise<void> {
+  async deleteStaff(
+    branchManagerUserId: string,
+    staffId: string,
+  ): Promise<void> {
     const branch = await this.prisma.branch.findFirst({
       where: { managerId: branchManagerUserId },
     });
@@ -289,7 +300,9 @@ export class StaffService {
     }
 
     if (staff.branchId !== branch.id) {
-      throw new ForbiddenException('This staff member belongs to another branch');
+      throw new ForbiddenException(
+        'This staff member belongs to another branch',
+      );
     }
 
     // Delete user account (cascade will delete staff and permissions via FK)
@@ -324,7 +337,9 @@ export class StaffService {
     }
 
     if (staff.branchId !== branch.id) {
-      throw new ForbiddenException('This staff member belongs to another branch');
+      throw new ForbiddenException(
+        'This staff member belongs to another branch',
+      );
     }
 
     // Generate new temporary password
@@ -342,7 +357,7 @@ export class StaffService {
         where: { id: staffId },
         data: {
           tempPasswordHash: hashedPassword,
-          tempPasswordExpiry
+          tempPasswordExpiry,
         },
       }),
     ]);
@@ -399,7 +414,10 @@ export class StaffService {
   // CHECK STAFF PERMISSION (Type-Safe)
   // ========================================
 
-  async hasPermission(userId: string, permission: StaffPermission): Promise<boolean> {
+  async hasPermission(
+    userId: string,
+    permission: StaffPermission,
+  ): Promise<boolean> {
     const staff = await this.prisma.staff.findUnique({
       where: { userId },
       include: { permissions: true },
@@ -418,7 +436,7 @@ export class StaffService {
 
   async changeStaffPassword(
     userId: string,
-    dto: { tempPassword: string; newPassword: string; confirmPassword: string }
+    dto: { tempPassword: string; newPassword: string; confirmPassword: string },
   ) {
     if (dto.newPassword !== dto.confirmPassword) {
       throw new BadRequestException('Passwords do not match');
@@ -436,13 +454,18 @@ export class StaffService {
       throw new BadRequestException('No temporary password set');
     }
 
-    const isValid = await bcrypt.compare(dto.tempPassword, staff.tempPasswordHash);
+    const isValid = await bcrypt.compare(
+      dto.tempPassword,
+      staff.tempPasswordHash,
+    );
     if (!isValid) {
       throw new BadRequestException('Invalid temporary password');
     }
 
     if (staff.tempPasswordExpiry && staff.tempPasswordExpiry < new Date()) {
-      throw new ForbiddenException('Temporary password expired. Contact your branch manager.');
+      throw new ForbiddenException(
+        'Temporary password expired. Contact your branch manager.',
+      );
     }
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
@@ -466,7 +489,8 @@ export class StaffService {
   // ========================================
 
   private generateSecurePassword(): string {
-    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+    const chars =
+      'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
     const bytes = crypto.randomBytes(12);
     let password = '';
     for (let i = 0; i < 12; i++) {

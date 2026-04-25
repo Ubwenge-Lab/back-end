@@ -39,12 +39,19 @@ export class StockTransfersController {
 
   @Patch(':id/status')
   @Roles(Role.BRANCH_MANAGER)
-  @ApiOperation({ summary: 'Update status of a stock transfer (e.g. APPROVED, SHIPPED, COMPLETED)' })
+  @ApiOperation({
+    summary:
+      'Update status of a stock transfer (e.g. APPROVED, SHIPPED, COMPLETED)',
+  })
   updateTransferStatus(
     @Req() req: any,
     @Param('id') id: string,
     @Body() dto: UpdateStockTransferStatusDto,
   ) {
-    return this.stockTransfersService.updateTransferStatus(req.user.sub, id, dto);
+    return this.stockTransfersService.updateTransferStatus(
+      req.user.sub,
+      id,
+      dto,
+    );
   }
 }

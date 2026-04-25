@@ -13,7 +13,12 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { AttendanceService } from './attendance.service';
 import {
   ClockInDto,
@@ -43,7 +48,9 @@ export class AttendanceController {
   @Post('clock-in')
   @Roles(Role.PHARMACIST, Role.CASHIER, Role.NURSE)
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Staff initiates clock-in (requires manager approval)' })
+  @ApiOperation({
+    summary: 'Staff initiates clock-in (requires manager approval)',
+  })
   clockIn(@Req() req: any, @Body() dto: ClockInDto) {
     return this.attendanceService.clockIn(req.user.sub, dto);
   }
@@ -51,7 +58,9 @@ export class AttendanceController {
   @Post('clock-out')
   @Roles(Role.PHARMACIST, Role.CASHIER, Role.NURSE)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Staff initiates clock-out (requires manager approval)' })
+  @ApiOperation({
+    summary: 'Staff initiates clock-out (requires manager approval)',
+  })
   clockOut(@Req() req: any, @Body() dto: ClockOutDto) {
     return this.attendanceService.clockOut(req.user.sub, dto);
   }
@@ -91,7 +100,9 @@ export class AttendanceController {
 
   @Get('pending-clock-outs')
   @Roles(Role.BRANCH_MANAGER)
-  @ApiOperation({ summary: 'Get all pending clock-out requests (Manager only)' })
+  @ApiOperation({
+    summary: 'Get all pending clock-out requests (Manager only)',
+  })
   getPendingClockOuts(@Req() req: any) {
     return this.attendanceService.getPendingClockOuts(req.user.sub);
   }
@@ -105,7 +116,11 @@ export class AttendanceController {
     @Param('id') attendanceId: string,
     @Body() dto: ApproveClockInDto,
   ) {
-    return this.attendanceService.approveClockIn(req.user.sub, attendanceId, dto);
+    return this.attendanceService.approveClockIn(
+      req.user.sub,
+      attendanceId,
+      dto,
+    );
   }
 
   @Put(':id/reject-clock-in')
@@ -117,7 +132,11 @@ export class AttendanceController {
     @Param('id') attendanceId: string,
     @Body() dto: RejectClockInDto,
   ) {
-    return this.attendanceService.rejectClockIn(req.user.sub, attendanceId, dto);
+    return this.attendanceService.rejectClockIn(
+      req.user.sub,
+      attendanceId,
+      dto,
+    );
   }
 
   @Put(':id/approve-clock-out')
@@ -129,7 +148,11 @@ export class AttendanceController {
     @Param('id') attendanceId: string,
     @Body() dto: ApproveClockOutDto,
   ) {
-    return this.attendanceService.approveClockOut(req.user.sub, attendanceId, dto);
+    return this.attendanceService.approveClockOut(
+      req.user.sub,
+      attendanceId,
+      dto,
+    );
   }
 
   @Put(':id/reject-clock-out')
@@ -141,12 +164,18 @@ export class AttendanceController {
     @Param('id') attendanceId: string,
     @Body() dto: RejectClockOutDto,
   ) {
-    return this.attendanceService.rejectClockOut(req.user.sub, attendanceId, dto);
+    return this.attendanceService.rejectClockOut(
+      req.user.sub,
+      attendanceId,
+      dto,
+    );
   }
 
   @Get('branch')
   @Roles(Role.BRANCH_MANAGER)
-  @ApiOperation({ summary: 'Get all attendance records for branch (Manager only)' })
+  @ApiOperation({
+    summary: 'Get all attendance records for branch (Manager only)',
+  })
   @ApiQuery({ name: 'staffId', required: false, type: String })
   @ApiQuery({ name: 'status', required: false, enum: AttendanceStatus })
   @ApiQuery({ name: 'startDate', required: false, type: String })
@@ -178,6 +207,10 @@ export class AttendanceController {
   ) {
     const start = startDate ? new Date(startDate) : undefined;
     const end = endDate ? new Date(endDate) : undefined;
-    return this.attendanceService.getAttendanceSummary(req.user.sub, start, end);
+    return this.attendanceService.getAttendanceSummary(
+      req.user.sub,
+      start,
+      end,
+    );
   }
 }

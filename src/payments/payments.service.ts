@@ -69,7 +69,7 @@ export class PaymentsService {
         insuranceVerified: dto.insuranceVerified || false,
       },
     });
-    
+
     // Initialize payment based on method
     let paymentResponse;
 
@@ -124,9 +124,7 @@ export class PaymentsService {
       paymentId: payment.id,
       ...paymentResponse,
     };
-    
   }
-
 
   // ========================================
   // VERIFY PAYMENT
@@ -199,93 +197,95 @@ export class PaymentsService {
     }
   }
 
-
   // ========================================
   // PROCESS MTN WEBHOOK (DIRECT)
   // ========================================
 
   async processMtnPayment(data: MtnCallbackDto) {
-  // 1. Find the order based on the externalId sent by MTN
-  const order = await this.prisma.order.findUnique({
-    where: { id: data.externalId },
-    include: { patient: true },
-  });
-
-  if (!order) {
-    console.error(`Webhook Error: Order ${data.externalId} not found`);
-    throw new NotFoundException('Order not found');
-  }
-
-  // --- IDEMPOTENCY CHECK ---
-  // If the order is already marked as PAID, return success immediately 
-  // so we don't trigger handlePaymentSuccess() a second time.
-  if (order.paymentStatus === 'COMPLETED') {
-    console.log(`Webhook received for already completed Order ${order.id}. Skipping processing.`);
-    return { status: 'success', message: 'Order already processed' };
-  }
-
-  // --- FINANCIAL INTEGRITY CHECK ---
-  const receivedAmount = Number(data.amount);
-  const expectedAmount = Number(order.total); 
-
-  if (receivedAmount < expectedAmount) {
-    console.error(`SECURITY ALERT: Underpayment detected for Order ${order.id}. Expected ${expectedAmount}, received ${receivedAmount}`);
-    
-    await this.prisma.payment.updateMany({
-      where: { orderId: order.id },
-      data: { status: 'FAILED' },
-    });
-    
-    return { status: 'failed', message: 'Amount mismatch' };
-  }
-
-  if (data.currency !== 'RWF') {
-     return { status: 'failed', message: 'Invalid currency' };
-  }
-
-  // 2. Logic: What happened with the payment?
-  if (data.status === 'SUCCESSFUL') {
-    // Update the Payment record
-    await this.prisma.payment.updateMany({
-      where: { orderId: order.id },
-      data: {
-        status: 'COMPLETED',
-        transactionId: data.financialTransactionId,
-      },
+    // 1. Find the order based on the externalId sent by MTN
+    const order = await this.prisma.order.findUnique({
+      where: { id: data.externalId },
+      include: { patient: true },
     });
 
-    // Update Order status and handle stock
-    await this.ordersService.handlePaymentSuccess(order.id);
+    if (!order) {
+      console.error(`Webhook Error: Order ${data.externalId} not found`);
+      throw new NotFoundException('Order not found');
+    }
 
-    // Notify the patient
-    await this.notificationsService.create({
-      patientId: order.patientId,
-      orderId: order.id,
-      type: 'ORDER_PLACED',
-      title: 'Payment Received',
-      message: `Your payment of ${data.amount} ${data.currency} was successful!`,
-    });
+    // --- IDEMPOTENCY CHECK ---
+    // If the order is already marked as PAID, return success immediately
+    // so we don't trigger handlePaymentSuccess() a second time.
+    if (order.paymentStatus === 'COMPLETED') {
+      console.log(
+        `Webhook received for already completed Order ${order.id}. Skipping processing.`,
+      );
+      return { status: 'success', message: 'Order already processed' };
+    }
 
-    return { status: 'success', message: 'Order marked as PAID' };
-  } else {
-    // Handle Failure (FAILED, REJECTED, or TIMEOUT)
-    await this.prisma.payment.updateMany({
-      where: { orderId: order.id },
-      data: { status: 'FAILED' },
-    });
+    // --- FINANCIAL INTEGRITY CHECK ---
+    const receivedAmount = Number(data.amount);
+    const expectedAmount = Number(order.total);
 
-    console.warn(`Payment failed for Order ${order.id}. Reason: ${data.reason || 'Unknown'}`);
-    return { status: 'failed', message: 'Order marked as FAILED' };
+    if (receivedAmount < expectedAmount) {
+      console.error(
+        `SECURITY ALERT: Underpayment detected for Order ${order.id}. Expected ${expectedAmount}, received ${receivedAmount}`,
+      );
+
+      await this.prisma.payment.updateMany({
+        where: { orderId: order.id },
+        data: { status: 'FAILED' },
+      });
+
+      return { status: 'failed', message: 'Amount mismatch' };
+    }
+
+    if (data.currency !== 'RWF') {
+      return { status: 'failed', message: 'Invalid currency' };
+    }
+
+    // 2. Logic: What happened with the payment?
+    if (data.status === 'SUCCESSFUL') {
+      // Update the Payment record
+      await this.prisma.payment.updateMany({
+        where: { orderId: order.id },
+        data: {
+          status: 'COMPLETED',
+          transactionId: data.financialTransactionId,
+        },
+      });
+
+      // Update Order status and handle stock
+      await this.ordersService.handlePaymentSuccess(order.id);
+
+      // Notify the patient
+      await this.notificationsService.create({
+        patientId: order.patientId,
+        orderId: order.id,
+        type: 'ORDER_PLACED',
+        title: 'Payment Received',
+        message: `Your payment of ${data.amount} ${data.currency} was successful!`,
+      });
+
+      return { status: 'success', message: 'Order marked as PAID' };
+    } else {
+      // Handle Failure (FAILED, REJECTED, or TIMEOUT)
+      await this.prisma.payment.updateMany({
+        where: { orderId: order.id },
+        data: { status: 'FAILED' },
+      });
+
+      console.warn(
+        `Payment failed for Order ${order.id}. Reason: ${data.reason || 'Unknown'}`,
+      );
+      return { status: 'failed', message: 'Order marked as FAILED' };
+    }
   }
-}
-
-
-
 
   // ========================================
   // VALIDATE MOBILE MONEY OTP
 
-    async manualVerifyByOrderId(orderId: string, user: any) {
+  async manualVerifyByOrderId(orderId: string, user: any) {
     // 1. Find the payment associated with this order
     const payment = await this.prisma.payment.findUnique({
       where: { orderId: orderId },
@@ -309,16 +309,21 @@ export class PaymentsService {
       return { success: true, message: 'Payment is already COMPLETED' };
     }
 
-    // 4. Find the transaction ID. 
-    const txIdToVerify = payment.transactionId || (payment.paymentResponse as any)?.data?.id;
+    // 4. Find the transaction ID.
+    const txIdToVerify =
+      payment.transactionId || (payment.paymentResponse as any)?.data?.id;
 
     if (!txIdToVerify) {
-      throw new BadRequestException('No transaction ID found to verify against the Payment Provider');
+      throw new BadRequestException(
+        'No transaction ID found to verify against the Payment Provider',
+      );
     }
 
     try {
       // 5. Ask Flutterwave for the real-world status
-      const verification = await this.flutterwaveService.verifyPayment(txIdToVerify.toString());
+      const verification = await this.flutterwaveService.verifyPayment(
+        txIdToVerify.toString(),
+      );
 
       if (verification?.data?.status === 'successful') {
         // 6. If Flutterwave says it was successful, update our database!
@@ -327,25 +332,29 @@ export class PaymentsService {
           data: {
             status: 'COMPLETED',
             transactionId: txIdToVerify.toString(),
-            paymentResponse: verification as any,
+            paymentResponse: verification,
           },
         });
 
         // 7. Force Database Sync
         await this.ordersService.handlePaymentSuccess(payment.orderId);
 
-        return { success: true, message: 'Payment manually verified and Order updated successfully!' };
+        return {
+          success: true,
+          message: 'Payment manually verified and Order updated successfully!',
+        };
       } else {
-        return { 
-          success: false, 
-          message: `Payment is not successful yet. Current status from provider: ${verification?.data?.status || 'Unknown'}` 
+        return {
+          success: false,
+          message: `Payment is not successful yet. Current status from provider: ${verification?.data?.status || 'Unknown'}`,
         };
       }
     } catch (error) {
-       throw new BadRequestException('Failed to reach payment provider. It may still be processing.');
+      throw new BadRequestException(
+        'Failed to reach payment provider. It may still be processing.',
+      );
     }
   }
-
 
   async validateOTP(paymentId: string, otp: string) {
     const payment = await this.prisma.payment.findUnique({
@@ -445,25 +454,24 @@ export class PaymentsService {
     }
   }
 
-
-  async getRecentSuccessfulPayments(){
-      return this.prisma.payment.findMany({
-        where: {
-          status: 'COMPLETED'
+  async getRecentSuccessfulPayments() {
+    return this.prisma.payment.findMany({
+      where: {
+        status: 'COMPLETED',
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+      take: 50,
+      include: {
+        order: {
+          include: {
+            patient: true,
+          },
         },
-        orderBy: {
-          createdAt: 'desc'
-        },
-        take: 50,
-        include: {
-          order: {
-            include: {
-              patient: true,
-            }
-          }
-        }
-      })
-    }
+      },
+    });
+  }
 
   // CHECKOUT (Create order + initiate payment in one step)
 
@@ -511,5 +519,4 @@ export class PaymentsService {
       payment: paymentResult,
     };
   }
-
 }

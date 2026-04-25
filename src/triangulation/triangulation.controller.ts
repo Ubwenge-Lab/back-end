@@ -1,4 +1,10 @@
-import { Controller, Get, Query, ParseFloatPipe, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  ParseFloatPipe,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TriangulationService } from './triangulation.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -18,7 +24,9 @@ export class TriangulationController {
    * Access: PATIENTS and ADMINS
    */
   @Get('nearby')
-  @ApiOperation({ summary: 'Find nearest branches based on patient coordinates' })
+  @ApiOperation({
+    summary: 'Find nearest branches based on patient coordinates',
+  })
   async findNearby(
     @Query('lat', ParseFloatPipe) lat: number,
     @Query('lng', ParseFloatPipe) lng: number,
@@ -39,7 +47,9 @@ export class TriangulationController {
 
   @Get('map-data')
   @Roles(Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Get grouped pharmacies, branches and nearby patients by district' })
+  @ApiOperation({
+    summary: 'Get grouped pharmacies, branches and nearby patients by district',
+  })
   getMapData(@Query() query: MapDataQueryDto) {
     return this.triangulationService.getMapData(query);
   }

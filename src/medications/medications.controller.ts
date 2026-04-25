@@ -18,7 +18,11 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
-import { CreateMedicationDto, UpdateMedicationDto, SearchMedicationsDto } from './dto';
+import {
+  CreateMedicationDto,
+  UpdateMedicationDto,
+  SearchMedicationsDto,
+} from './dto';
 
 @ApiTags('Medications')
 @Controller('medications')
@@ -42,7 +46,13 @@ export class MedicationsController {
   // Pharmacy - Get low stock (MUST be before :id route)
   @Get('pharmacy/low-stock')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY, Role.PHARMACIST, Role.BRANCH_MANAGER, Role.CASHIER, Role.NURSE)
+  @Roles(
+    Role.PHARMACY,
+    Role.PHARMACIST,
+    Role.BRANCH_MANAGER,
+    Role.CASHIER,
+    Role.NURSE,
+  )
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get low stock medications' })
   getLowStock(@Req() req: any) {
@@ -52,7 +62,13 @@ export class MedicationsController {
   // Pharmacy - Get out of stock (MUST be before :id route)
   @Get('pharmacy/out-of-stock')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY, Role.PHARMACIST, Role.BRANCH_MANAGER, Role.CASHIER, Role.NURSE)
+  @Roles(
+    Role.PHARMACY,
+    Role.PHARMACIST,
+    Role.BRANCH_MANAGER,
+    Role.CASHIER,
+    Role.NURSE,
+  )
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get out of stock medications' })
   getOutOfStock(@Req() req: any) {
@@ -62,7 +78,13 @@ export class MedicationsController {
   // Pharmacy - Get their medications (MUST be before :id route)
   @Get('pharmacy/my-medications')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY, Role.PHARMACIST, Role.BRANCH_MANAGER, Role.CASHIER, Role.NURSE)
+  @Roles(
+    Role.PHARMACY,
+    Role.PHARMACIST,
+    Role.BRANCH_MANAGER,
+    Role.CASHIER,
+    Role.NURSE,
+  )
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get pharmacy medications' })
   async getMyMedications(@Req() req: any) {
@@ -79,7 +101,13 @@ export class MedicationsController {
   // Pharmacy - Create medication
   @Post()
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY, Role.PHARMACIST, Role.BRANCH_MANAGER, Role.CASHIER, Role.NURSE)
+  @Roles(
+    Role.PHARMACY,
+    Role.PHARMACIST,
+    Role.BRANCH_MANAGER,
+    Role.CASHIER,
+    Role.NURSE,
+  )
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Create medication' })
   create(@Req() req: any, @Body() dto: CreateMedicationDto) {
@@ -89,17 +117,33 @@ export class MedicationsController {
   // Pharmacy - Update medication
   @Put(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY, Role.PHARMACIST, Role.BRANCH_MANAGER, Role.CASHIER, Role.NURSE)
+  @Roles(
+    Role.PHARMACY,
+    Role.PHARMACIST,
+    Role.BRANCH_MANAGER,
+    Role.CASHIER,
+    Role.NURSE,
+  )
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Update medication' })
-  update(@Param('id') id: string, @Req() req: any, @Body() dto: UpdateMedicationDto) {
+  update(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() dto: UpdateMedicationDto,
+  ) {
     return this.medicationsService.update(id, req.user.sub, dto);
   }
 
   // Pharmacy - Delete medication
   @Delete(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
-  @Roles(Role.PHARMACY, Role.PHARMACIST, Role.BRANCH_MANAGER, Role.CASHIER, Role.NURSE)
+  @Roles(
+    Role.PHARMACY,
+    Role.PHARMACIST,
+    Role.BRANCH_MANAGER,
+    Role.CASHIER,
+    Role.NURSE,
+  )
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Delete medication' })
   delete(@Param('id') id: string, @Req() req: any) {

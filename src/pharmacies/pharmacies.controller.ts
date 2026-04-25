@@ -15,7 +15,12 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiOkResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiOkResponse,
+} from '@nestjs/swagger';
 import { PharmaciesService } from './pharmacies.service';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -32,7 +37,7 @@ export class PharmaciesController {
   constructor(
     private pharmaciesService: PharmaciesService,
     private triangulationService: TriangulationService,
-  ) { }
+  ) {}
 
   // ========================================
   // PATIENT ENDPOINTS
@@ -49,7 +54,12 @@ export class PharmaciesController {
     @Query('radius', ParseFloatPipe) radius: number,
     @Req() req: any,
   ) {
-    return this.triangulationService.getNearbyPharmacies(lat, lng, radius, req.user.sub);
+    return this.triangulationService.getNearbyPharmacies(
+      lat,
+      lng,
+      radius,
+      req.user.sub,
+    );
   }
 
   // ========================================
@@ -72,7 +82,10 @@ export class PharmaciesController {
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get pharmacy dashboard statistics' })
-  @ApiOkResponse({ type: PharmacyStatsResponseDto, description: 'Dashboard stats for the authenticated pharmacy' })
+  @ApiOkResponse({
+    type: PharmacyStatsResponseDto,
+    description: 'Dashboard stats for the authenticated pharmacy',
+  })
   getStats(@Req() req: any) {
     return this.pharmaciesService.getStats(req.user.sub);
   }
@@ -102,7 +115,9 @@ export class PharmaciesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get daily revenue for the past 30 days (total + per branch)' })
+  @ApiOperation({
+    summary: 'Get daily revenue for the past 30 days (total + per branch)',
+  })
   getDailyRevenue(@Req() req: any) {
     return this.pharmaciesService.getDailyRevenue(req.user.sub);
   }
@@ -112,7 +127,9 @@ export class PharmaciesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get weekly revenue for the past 30 days (total + per branch)' })
+  @ApiOperation({
+    summary: 'Get weekly revenue for the past 30 days (total + per branch)',
+  })
   getWeeklyRevenue(@Req() req: any) {
     return this.pharmaciesService.getWeeklyRevenue(req.user.sub);
   }
@@ -141,7 +158,10 @@ export class PharmaciesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update pharmacy profile (critical changes require admin approval)' })
+  @ApiOperation({
+    summary:
+      'Update pharmacy profile (critical changes require admin approval)',
+  })
   updateProfile(@Req() req: any, @Body() dto: UpdatePharmacyDto) {
     return this.pharmaciesService.updateProfile(req.user.sub, dto);
   }
@@ -151,7 +171,10 @@ export class PharmaciesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Resubmit pharmacy application with updated documents (for rejected pharmacies)' })
+  @ApiOperation({
+    summary:
+      'Resubmit pharmacy application with updated documents (for rejected pharmacies)',
+  })
   resubmitApplication(@Req() req: any, @Body() dto: UpdatePharmacyDto) {
     return this.pharmaciesService.resubmitApplication(req.user.sub, dto);
   }
@@ -244,7 +267,11 @@ export class PharmaciesController {
     @Param('id') id: string,
     @Body() body: { approved: boolean; rejectionReason?: string },
   ) {
-    return this.pharmaciesService.approvePharmacy(id, body.approved, body.rejectionReason);
+    return this.pharmaciesService.approvePharmacy(
+      id,
+      body.approved,
+      body.rejectionReason,
+    );
   }
 
   @Get(':id')

@@ -1,6 +1,5 @@
 // backend/src/upload/upload.service.ts
 
-
 import { Injectable, BadRequestException } from '@nestjs/common';
 
 type MulterFile = {
@@ -13,15 +12,14 @@ type MulterFile = {
 };
 
 export interface UploadResult {
-  url: string;       // data URI — store directly in DB
-  fileName: string;  // original file name
-  fileType: string;  // MIME type
-  sizeKb: number;    // file size in KB for logging
+  url: string; // data URI — store directly in DB
+  fileName: string; // original file name
+  fileType: string; // MIME type
+  sizeKb: number; // file size in KB for logging
 }
 
 @Injectable()
 export class UploadService {
-
   // ========================================
   // CORE: FILE → BASE64 DATA URI
   // ========================================
@@ -112,7 +110,6 @@ export class UploadService {
       sizeKb: Math.round(file.size / 1024),
     };
   }
-
 
   async deleteFile(_fileUrl: string): Promise<void> {
     return;

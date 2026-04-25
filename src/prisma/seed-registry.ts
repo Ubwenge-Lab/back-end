@@ -10,7 +10,9 @@ async function main() {
 
   if (!fs.existsSync(csvFilePath)) {
     console.error(`❌ CSV file not found at: ${csvFilePath}`);
-    console.log('Please place "medication_registry.csv" in the back-end root folder.');
+    console.log(
+      'Please place "medication_registry.csv" in the back-end root folder.',
+    );
     process.exit(1);
   }
 
@@ -28,7 +30,7 @@ async function main() {
   let errorCount = 0;
 
   let lineBuffer = '';
-  let insideQuotes = false;
+  const insideQuotes = false;
 
   for await (const line of rl) {
     if (lineBuffer) {
@@ -57,7 +59,7 @@ async function main() {
     const columns = parseCSVLine(recordText);
 
     if (rowCount === 0) {
-      headers = columns.map(h => h.toLowerCase().trim());
+      headers = columns.map((h) => h.toLowerCase().trim());
       console.log('📝 Headers found:', headers);
       rowCount++;
       continue;
@@ -66,8 +68,11 @@ async function main() {
     try {
       const getVal = (index: number, ...possibleHeaders: string[]) => {
         for (const ph of possibleHeaders) {
-          const foundIdx = headers.findIndex(h => h.includes(ph.toLowerCase()));
-          if (foundIdx !== -1 && columns[foundIdx]) return columns[foundIdx].trim();
+          const foundIdx = headers.findIndex((h) =>
+            h.includes(ph.toLowerCase()),
+          );
+          if (foundIdx !== -1 && columns[foundIdx])
+            return columns[foundIdx].trim();
         }
         return columns[index] ? columns[index].trim() : '';
       };
@@ -125,9 +130,11 @@ async function main() {
       if (successCount % 100 === 0) {
         process.stdout.write(`\r✅ Processed ${successCount} records...`);
       }
-
     } catch (error) {
-      console.error(`\n❌ Error processing row ${rowCount} (${columns[0]}):`, error);
+      console.error(
+        `\n❌ Error processing row ${rowCount} (${columns[0]}):`,
+        error,
+      );
       errorCount++;
     }
 
@@ -161,7 +168,8 @@ function parseCSVLine(text: string): string[] {
     } else {
       if (char === '"') {
         inQuote = true;
-      } else if (char === ',') { // REMOVED semicolon support!
+      } else if (char === ',') {
+        // REMOVED semicolon support!
         result.push(curVal);
         curVal = '';
       } else {
@@ -178,10 +186,10 @@ function parseDate(dateStr: string | undefined): Date {
   try {
     const d = new Date(dateStr);
     if (isNaN(d.getTime())) {
-        // Fallback or log?
-        // Let's treat today as fallback for now
-        // console.warn(`Invalid Date found: ${dateStr}, using NOW`);
-        return new Date();
+      // Fallback or log?
+      // Let's treat today as fallback for now
+      // console.warn(`Invalid Date found: ${dateStr}, using NOW`);
+      return new Date();
     }
     return d;
   } catch (e) {
