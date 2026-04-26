@@ -4,6 +4,7 @@ import {
   Query,
   ParseFloatPipe,
   UseGuards,
+  Req,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TriangulationService } from './triangulation.service';
@@ -12,6 +13,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
 import { MapDataQueryDto } from './dto/map-data-query.dto';
+import { Request } from 'express';
 
 @ApiTags('Triangulation')
 @Controller('triangulation')
@@ -52,5 +54,34 @@ export class TriangulationController {
   })
   getMapData(@Query() query: MapDataQueryDto) {
     return this.triangulationService.getMapData(query);
+  }
+
+  @Get('owner')
+  @Roles(Role.PHARMACY)
+  @ApiOperation({
+    summary: "Get triangulation data for pharmacy owner's branches",
+  })
+  async getOwnerBranches(@Req() req: Request) {
+    const user = req.user as any;
+    const pharmacy = await this.triangulationService[
+      'prisma'
+    ].pharmacy.findUnique({
+      where: { userId: user.sub },
+      select: { id: true },
+    });
+    if (!pharmacy) {
+      throw new Error('Pharmacy not found');
+    }
+    return this.triangulationService.getOwnerBranches(pharmacy.id);
+  }
+
+  @Get('manager')
+  @Roles(Role.BRANCH_MANAGER)
+  @ApiOperation({
+    summary: "Get triangulation data for branch manager's branch against sister branches",
+  })
+  async getManagerTriangulation(@Req() req: Request) {
+    const user = req.user as any;
+    return this.triangulationService.getManagerTriangulation(user.sub);
   }
 }

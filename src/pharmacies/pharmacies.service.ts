@@ -161,16 +161,15 @@ export class PharmaciesService {
       meds?: { name: string; quantity: number }[];
     }[] = [];
 
-    // group low stock meds by branch
-    const lowStockByBranch = lowStockMeds.reduce(
-      (acc, med) => {
-        const branchName = med.branch.name;
-        if (!acc[branchName]) acc[branchName] = [];
-        acc[branchName].push({ name: med.name, quantity: med.quantity });
-        return acc;
-      },
-      {} as Record<string, { name: string; quantity: number }[]>,
-    );
+    const lowStockByBranch: Record<
+      string,
+      { name: string; quantity: number }[]
+    > = lowStockMeds.reduce((acc, med) => {
+      const branchName = med.branch.name;
+      if (!acc[branchName]) acc[branchName] = [];
+      acc[branchName].push({ name: med.name, quantity: med.quantity });
+      return acc;
+    }, {});
 
     for (const [branchName, meds] of Object.entries(lowStockByBranch)) {
       alerts.push({
