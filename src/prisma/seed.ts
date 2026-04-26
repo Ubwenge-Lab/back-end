@@ -320,8 +320,10 @@ async function main() {
   // ==========================================
   console.log('💊 Creating medications...');
 
-  const medications = await Promise.all([
-    prisma.medication.create({
+  // Sequential rather than Promise.all because Supabase free tier pooler
+  // drops connections under parallel load.
+  const medications = [
+    await prisma.medication.create({
       data: {
         pharmacyId: pharmacy.id,
         branchId: mainBranch.id,
@@ -335,7 +337,7 @@ async function main() {
         requiresPrescription: true,
       },
     }),
-    prisma.medication.create({
+    await prisma.medication.create({
       data: {
         pharmacyId: pharmacy.id,
         branchId: mainBranch.id,
@@ -349,7 +351,7 @@ async function main() {
         requiresPrescription: false,
       },
     }),
-    prisma.medication.create({
+    await prisma.medication.create({
       data: {
         pharmacyId: pharmacy.id,
         branchId: mainBranch.id,
@@ -363,7 +365,7 @@ async function main() {
         requiresPrescription: true,
       },
     }),
-    prisma.medication.create({
+    await prisma.medication.create({
       data: {
         pharmacyId: pharmacy.id,
         branchId: mainBranch.id,
@@ -377,7 +379,7 @@ async function main() {
         requiresPrescription: false,
       },
     }),
-    prisma.medication.create({
+    await prisma.medication.create({
       data: {
         pharmacyId: pharmacy.id,
         branchId: mainBranch.id,
@@ -391,7 +393,7 @@ async function main() {
         requiresPrescription: true,
       },
     }),
-    prisma.medication.create({
+    await prisma.medication.create({
       data: {
         pharmacyId: pharmacy.id,
         branchId: mainBranch.id,
@@ -405,7 +407,7 @@ async function main() {
         requiresPrescription: false,
       },
     }),
-    prisma.medication.create({
+    await prisma.medication.create({
       data: {
         pharmacyId: pharmacy.id,
         branchId: mainBranch.id,
@@ -419,7 +421,7 @@ async function main() {
         requiresPrescription: false,
       },
     }),
-    prisma.medication.create({
+    await prisma.medication.create({
       data: {
         pharmacyId: pharmacy.id,
         branchId: mainBranch.id,
@@ -434,7 +436,7 @@ async function main() {
       },
     }),
     // Medications for second branch (stock transfer scenario)
-    prisma.medication.create({
+    await prisma.medication.create({
       data: {
         pharmacyId: pharmacy.id,
         branchId: secondBranch.id,
@@ -448,7 +450,7 @@ async function main() {
         requiresPrescription: true,
       },
     }),
-    prisma.medication.create({
+    await prisma.medication.create({
       data: {
         pharmacyId: pharmacy.id,
         branchId: secondBranch.id,
@@ -462,7 +464,7 @@ async function main() {
         requiresPrescription: false,
       },
     }),
-  ]);
+  ];
 
   const [
     amoxicillin,
