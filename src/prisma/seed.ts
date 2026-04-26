@@ -42,6 +42,10 @@ async function main() {
   console.log('🌱 Starting idempotent seed (Upsert Mode)...\n');
 
   const password = await bcrypt.hash(DEFAULT_PASSWORD, HASH_ROUNDS);
+  
+  // Use .env for Super Admin
+  const ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'admin@evuze.rw';
+  const ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD ? await bcrypt.hash(process.env.SUPER_ADMIN_PASSWORD, HASH_ROUNDS) : password;
 
   // ==========================================
   // 1. USERS
@@ -49,31 +53,30 @@ async function main() {
   console.log('👤 Syncing users...');
 
   const users = [
-    { id: IDS.users.superAdmin, email: 'superadmin@pharma.com', role: UserRole.SUPER_ADMIN, isVerified: true },
-    { id: IDS.users.medplusOwner, email: 'owner@medplus.com', role: UserRole.PHARMACY, isVerified: true },
-    { id: IDS.users.medplusManager, email: 'manager@medplus.com', role: UserRole.BRANCH_MANAGER, isVerified: true },
-    { id: IDS.users.medplusPharmacist, email: 'pharmacist@medplus.com', role: UserRole.PHARMACIST, isVerified: true },
-    { id: IDS.users.medplusCashier, email: 'cashier@medplus.com', role: UserRole.CASHIER, isVerified: true },
-    { id: IDS.users.ubumweOwner, email: 'owner@ubumwepharma.com', role: UserRole.PHARMACY, isVerified: true },
-    { id: IDS.users.ubumweManager, email: 'manager@ubumwepharma.com', role: UserRole.BRANCH_MANAGER, isVerified: true },
-    { id: IDS.users.remeraOwner, email: 'owner@remerahealth.com', role: UserRole.PHARMACY, isVerified: true },
-    { id: IDS.users.kigaliCentralOwner, email: 'owner@kigalicentralpharma.com', role: UserRole.PHARMACY, isVerified: true },
-    { id: IDS.users.alice, email: 'alice@patient.com', role: UserRole.PATIENT, isVerified: true },
-    { id: IDS.users.bob, email: 'bob@patient.com', role: UserRole.PATIENT, isVerified: true },
-    { id: IDS.users.claire, email: 'claire@patient.com', role: UserRole.PATIENT, isVerified: true },
-    { id: IDS.users.david, email: 'david@patient.com', role: UserRole.PATIENT, isVerified: true },
+    { id: IDS.users.superAdmin, email: ADMIN_EMAIL, role: UserRole.SUPER_ADMIN, isVerified: true, pass: ADMIN_PASSWORD },
+    { id: IDS.users.medplusOwner, email: 'owner@medplus.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
+    { id: IDS.users.medplusManager, email: 'manager@medplus.com', role: UserRole.BRANCH_MANAGER, isVerified: true, pass: password },
+    { id: IDS.users.medplusPharmacist, email: 'pharmacist@medplus.com', role: UserRole.PHARMACIST, isVerified: true, pass: password },
+    { id: IDS.users.medplusCashier, email: 'cashier@medplus.com', role: UserRole.CASHIER, isVerified: true, pass: password },
+    { id: IDS.users.ubumweOwner, email: 'owner@ubumwepharma.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
+    { id: IDS.users.ubumweManager, email: 'manager@ubumwepharma.com', role: UserRole.BRANCH_MANAGER, isVerified: true, pass: password },
+    { id: IDS.users.remeraOwner, email: 'owner@remerahealth.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
+    { id: IDS.users.kigaliCentralOwner, email: 'owner@kigalicentralpharma.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
+    { id: IDS.users.alice, email: 'alice@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
+    { id: IDS.users.bob, email: 'bob@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
+    { id: IDS.users.claire, email: 'claire@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
+    { id: IDS.users.david, email: 'david@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
   ];
 
   for (const u of users) {
-    const { id, email, role, isVerified } = u;
     await prisma.user.upsert({
-      where: { email },
-      update: { role, isVerified, isActive: true },
-      create: { id, email, role, isVerified, password, isActive: true },
+      where: { email: u.email },
+      update: { role: u.role, isVerified: u.isVerified, isActive: true },
+      create: { id: u.id, email: u.email, role: u.role, isVerified: u.isVerified, password: u.pass, isActive: true },
     });
   }
 
-  // Get actual IDs from DB (since users might have existed with different IDs)
+  // Get actual IDs from DB
   const getUserId = async (email: string) => {
     const u = await prisma.user.findUnique({ where: { email } });
     return u?.id;
@@ -237,21 +240,16 @@ async function main() {
 
   for (const b of branches) {
     const { pharmacyEmail, managerEmail, ...bData } = b;
-    
-    // Find pharmacy by user email
     const owner = await prisma.user.findUnique({ where: { email: pharmacyEmail }, include: { pharmacy: true } });
     const pharmacyId = owner?.pharmacy?.id;
     if (!pharmacyId) continue;
 
-    // Find manager if provided
     let managerId = null;
     if (managerEmail) {
       managerId = (await getUserId(managerEmail)) || null;
     }
 
     const { id, ...updateData } = bData;
-
-    // Upsert logic: use managerId if unique, otherwise fall back to ID
     const whereClause = managerId ? { managerId } : { id: b.id };
 
     await prisma.branch.upsert({
@@ -262,7 +260,7 @@ async function main() {
   }
 
   // ==========================================
-  // 4. PATIENTS & STAFF (Representative records)
+  // 4. PATIENTS & STAFF
   // ==========================================
   console.log('🧑‍🤝‍🧑 Syncing patients & staff...');
 
@@ -293,14 +291,15 @@ async function main() {
   }
 
   const pharmId = await getUserId('pharmacist@medplus.com');
-  if (pharmId) {
-    const medPlusMain = await prisma.branch.findFirst({ where: { name: 'MedPlus Main Branch' } });
+  const medPlusMain = await prisma.branch.findFirst({ where: { name: 'MedPlus Main Branch' } });
+
+  if (pharmId && medPlusMain) {
     await prisma.staff.upsert({
       where: { userId: pharmId },
       update: { firstName: 'Samuel', status: 'ACTIVE' },
       create: {
         userId: pharmId,
-        branchId: medPlusMain?.id || IDS.branches.medplusMain,
+        branchId: medPlusMain.id,
         firstName: 'Samuel',
         lastName: 'Nkurunziza',
         phone: '+250788100001',
@@ -310,14 +309,13 @@ async function main() {
   }
 
   const cashierId = await getUserId('cashier@medplus.com');
-  if (cashierId) {
-    const medPlusMain = await prisma.branch.findFirst({ where: { name: 'MedPlus Main Branch' } });
+  if (cashierId && medPlusMain) {
     await prisma.staff.upsert({
       where: { userId: cashierId },
       update: { firstName: 'Grace', status: 'ACTIVE' },
       create: {
         userId: cashierId,
-        branchId: medPlusMain?.id || IDS.branches.medplusMain,
+        branchId: medPlusMain.id,
         firstName: 'Grace',
         lastName: 'Uwimana',
         phone: '+250788100002',
@@ -327,95 +325,82 @@ async function main() {
   }
 
   // ==========================================
-  // 5. TEST ORDERS (Nelly's Data)
+  // 5. MEDICATIONS & ORDERS
   // ==========================================
-  console.log('🛒 Syncing test orders...');
+  console.log('🛒 Syncing medications & orders...');
 
-  const patientAlice = await prisma.user.findUnique({ where: { email: 'alice@patient.com' }, include: { patient: true } });
-  const patientId = patientAlice?.patient?.id;
-  if (!patientId) {
-    console.warn('⚠️ Alice patient record not found, skipping orders.');
-  } else {
-    // Create a few medications first for the orders
-    const medPlusOwner = await prisma.user.findUnique({ where: { email: 'owner@medplus.com' }, include: { pharmacy: true } });
-    const pharmacyId = medPlusOwner?.pharmacy?.id;
-    const medPlusMain = await prisma.branch.findFirst({ where: { name: 'MedPlus Main Branch' } });
-    const branchId = medPlusMain?.id;
+  const medId = "30000000-0000-0000-0000-000000000001";
+  if (medPlusMain && medPlusMain.pharmacyId) {
+    await prisma.medication.upsert({
+      where: { id: medId },
+      update: { quantity: 200 },
+      create: {
+        id: medId,
+        pharmacyId: medPlusMain.pharmacyId,
+        branchId: medPlusMain.id,
+        name: 'Amoxicillin 500mg',
+        category: 'Antibiotics',
+        price: 2500,
+        quantity: 200,
+      }
+    });
 
-    if (!pharmacyId || !branchId) {
-      console.warn('⚠️ MedPlus Main Branch not found, skipping medications.');
-    } else {
-      const amoxicillin = await prisma.medication.upsert({
-        where: { id: "30000000-0000-0000-0000-000000000001" },
-        update: { quantity: 200 },
-        create: {
-          id: "30000000-0000-0000-0000-000000000001",
-          pharmacyId,
-          branchId,
-          name: 'Amoxicillin 500mg',
-          category: 'Antibiotics',
-          price: 2500,
-          quantity: 200,
-        }
-      });
+    const aliceP = await prisma.patient.findFirst({ where: { firstName: 'Alice' } });
+    const bobP = await prisma.patient.findFirst({ where: { firstName: 'Bob' } });
 
+    if (aliceP && bobP) {
       const orders = [
-        {
-          orderNumber: 'ORD-2026-0001',
-          patientId,
-          pharmacyId,
-          branchId,
-          type: 'DELIVERY',
-          status: 'COMPLETED',
-          subtotal: 5000,
-          total: 6000,
-          paymentMethod: 'MTN_MOMO',
-          paymentStatus: 'COMPLETED',
-          patientPayment: 1200,
-        },
-        {
-          orderNumber: 'ORD-2026-0005',
-          patientId: (await prisma.user.findUnique({ where: { email: 'bob@patient.com' }, include: { patient: true } }))?.patient?.id,
-          pharmacyId,
-          branchId,
-          type: 'PICKUP',
-          status: 'READY_FOR_PICKUP',
-          subtotal: 4500,
-          total: 4500,
-          paymentMethod: 'CASH',
-          paymentStatus: 'PENDING',
-          patientPayment: 4500,
-        }
+        { orderNumber: 'ORD-2026-0001', patientId: aliceP.id, status: 'COMPLETED', paymentMethod: 'MTN_MOMO', paymentStatus: 'COMPLETED', patientPayment: 1200 },
+        { orderNumber: 'ORD-2026-0002', patientId: bobP.id, status: 'PENDING', paymentMethod: 'CARD', paymentStatus: 'PENDING', patientPayment: 5600 },
+        { orderNumber: 'ORD-2026-0003', patientId: aliceP.id, status: 'ACCEPTED', paymentMethod: 'CARD', paymentStatus: 'PENDING', patientPayment: 11000 },
+        { orderNumber: 'ORD-2026-0004', patientId: aliceP.id, status: 'READY_FOR_PICKUP', paymentMethod: 'MTN_MOMO', paymentStatus: 'COMPLETED', patientPayment: 1600 },
+        { orderNumber: 'ORD-2026-0005', patientId: bobP.id, status: 'READY_FOR_PICKUP', paymentMethod: 'CASH', paymentStatus: 'PENDING', patientPayment: 4500 },
+        { orderNumber: 'ORD-2026-0006', patientId: bobP.id, status: 'PREPARING', paymentMethod: 'CARD', paymentStatus: 'PENDING', patientPayment: 11000 },
       ];
 
       for (const o of orders) {
-        if (!o.patientId) continue;
-        
-        const { orderNumber, ...orderData } = o;
-        
         await prisma.order.upsert({
-          where: { orderNumber },
-          update: { 
-            paymentMethod: o.paymentMethod as any,
-            status: o.status as any,
-            paymentStatus: o.paymentStatus as any 
-          },
+          where: { orderNumber: o.orderNumber },
+          update: { status: o.status as any, paymentMethod: o.paymentMethod as any },
           create: {
-            orderNumber,
-            ...orderData as any,
-            orderItems: {
-              create: [
-                { medicationId: amoxicillin.id, quantity: 2, price: 2500 }
-              ]
-            }
+            ...o as any,
+            pharmacyId: medPlusMain.pharmacyId,
+            branchId: medPlusMain.id,
+            type: 'PICKUP',
+            subtotal: 5000,
+            total: 5000,
+            orderItems: { create: [{ medicationId: medId, quantity: 1, price: 2500 }] }
           }
         });
       }
     }
   }
 
-  console.log('\n✅ Idempotent Seed Completed Successfully!');
-  console.log('📌 Database is now in sync with latest branch requirements.');
+  // ==========================================
+  // 6. ATTENDANCE & MISC
+  // ==========================================
+  console.log('🕐 Syncing attendance & misc...');
+
+  const staffG = await prisma.staff.findFirst({ where: { firstName: 'Grace' } });
+  if (staffG && medPlusMain) {
+    const today = new Date();
+    today.setHours(8, 0, 0, 0);
+    
+    await prisma.attendance.upsert({
+      where: { id: "40000000-0000-0000-0000-000000000001" },
+      update: { status: 'COMPLETED' },
+      create: {
+        id: "40000000-0000-0000-0000-000000000001",
+        staffId: staffG.id,
+        branchId: medPlusMain.id,
+        clockInTime: today,
+        status: 'COMPLETED',
+        clockInLocation: { lat: -1.9441, lng: 30.0619, accuracy: 10 },
+      }
+    });
+  }
+
+  console.log('\n✅ Nelly\'s branch conflict resolved and updated with Dev branch!');
 }
 
 main()
