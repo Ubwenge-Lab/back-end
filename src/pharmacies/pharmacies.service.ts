@@ -1006,69 +1006,104 @@ export class PharmaciesService {
   //-----------------------------------
 
   async getPharmacyLocations() {
-    const pharmacies = await this.prisma.pharmacy.findMany({
-      select: {
-        id: true,
-        name: true,
-        address: true,
-        phone: true,
-        latitude: true,
-        longitude: true,
-        status: true,
-        operatingHours: true,
-      },
-      orderBy: { name: 'asc' },
-    });
+    const dayOfWeek = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali", weekday: 'long' }).toLowerCase();
 
-    const mapped = pharmacies.map((pharmacy) =>
-      toPharmacyLocationDto({
-        ...pharmacy,
-
-        hours: pharmacy.operatingHours
-          ? ((pharmacy.operatingHours as any).hour ?? null)
-          : null,
-
-        region: null,
-        rating: null,
-        isActive: pharmacy.status === 'APPROVED',
+    const [pharmacies, branches] = await Promise.all([
+      this.prisma.pharmacy.findMany({
+        where: { status: 'APPROVED' },
+        include: { user: { select: { isActive: true } } },
       }),
-    );
+      this.prisma.branch.findMany({
+        where: { branchStatus: 'APPROVED' },
+        include: { pharmacy: { include: { user: { select: { isActive: true } } } } },
+      }),
+    ]);
+
+    const all = [
+      ...pharmacies.map(p => {
+        const todayHours = p.operatingHours ? (p.operatingHours as any)[dayOfWeek] : null;
+        const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+        return toPharmacyLocationDto({
+          ...p,
+          isActive: p.user?.isActive ?? true,
+          hours: hoursString,
+          region: null, // Resolved by mapper
+          rating: null,
+        });
+      }),
+      ...branches.map(b => {
+        const todayHours = b.operatingHours ? (b.operatingHours as any)[dayOfWeek] : null;
+        const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+        return toPharmacyLocationDto({
+          ...b,
+          name: `${b.pharmacy.name} - ${b.name}`,
+          isActive: b.pharmacy.user?.isActive ?? true,
+          hours: hoursString,
+          region: null, // Resolved by mapper
+          rating: null,
+        });
+      }),
+    ];
 
     return {
-      pharmacies: mapped,
-      total: mapped.length,
+      pharmacies: all,
+      total: all.length,
     };
   }
   // ========================================
   // ADMIN&PATIENT: GET PHARMACY DETAILS (FOR MAP VIEW)
   // ========================================
   async getPharmacyDetails(id: string) {
+    const dayOfWeek = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali", weekday: 'long' }).toLowerCase();
+
+    // Check main pharmacy
     const pharmacy = await this.prisma.pharmacy.findUnique({
       where: { id },
       include: {
-        user: {
-          select: {
-            isActive: true,
+        user: { select: { isActive: true } },
+      },
+    });
+
+    if (pharmacy) {
+      const todayHours = pharmacy.operatingHours ? (pharmacy.operatingHours as any)[dayOfWeek] : null;
+      const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+
+      return toPharmacyLocationDto({
+        ...pharmacy,
+        isActive: pharmacy.user?.isActive ?? true,
+        hours: hoursString,
+        region: null, // Mapper will resolve via coordinates
+        rating: null,
+      });
+    }
+
+    // Check branch
+    const branch = await this.prisma.branch.findUnique({
+      where: { id },
+      include: {
+        pharmacy: {
+          include: {
+            user: { select: { isActive: true } },
           },
         },
       },
     });
 
-    if (!pharmacy) {
-      throw new NotFoundException('Pharmacy not found');
+    if (branch) {
+      const todayHours = branch.operatingHours ? (branch.operatingHours as any)[dayOfWeek] : null;
+      const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+
+      return toPharmacyLocationDto({
+        ...branch,
+        name: `${branch.pharmacy.name} - ${branch.name}`,
+        isActive: branch.pharmacy.user?.isActive ?? true,
+        hours: hoursString,
+        region: null, // Mapper will resolve via coordinates
+        rating: null,
+      });
     }
 
-    const p = pharmacy as any;
-
-    const payload = {
-      ...p,
-      isActive: p.user?.isActive ?? false,
-      hours: p.operatingHours?.hour ?? null,
-      region: null,
-      rating: null,
-    };
-
-    return toPharmacyLocationDto(payload);
+    throw new NotFoundException('Pharmacy or Branch not found');
   }
 
 

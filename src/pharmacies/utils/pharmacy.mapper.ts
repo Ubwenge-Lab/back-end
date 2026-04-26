@@ -1,4 +1,6 @@
+import { getDistrict } from "../../triangulation/triangulation.helpers";
 import { PharmacyLocationDto } from "../dto/pharmacy_location.dto";
+
 export function toPharmacyLocationDto(pharmacy: any, distanceKm?: number): PharmacyLocationDto {
   return {
     id: pharmacy.id,
@@ -17,7 +19,11 @@ export function toPharmacyLocationDto(pharmacy: any, distanceKm?: number): Pharm
   };
 }
 function mapRegion(pharmacy: any): string {
-  return pharmacy.region ? String(pharmacy.region) : 'Uknown';
+  if (pharmacy.region) return String(pharmacy.region);
+  if (pharmacy.latitude && pharmacy.longitude) {
+    return getDistrict(pharmacy.latitude, pharmacy.longitude, pharmacy.address);
+  }
+  return 'Unknown';
 }
 function getPharmacyStatus(hours: string): 'OPEN' | 'CLOSED' {
   if (!hours) return 'CLOSED';
