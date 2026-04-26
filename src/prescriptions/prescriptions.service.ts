@@ -1,7 +1,12 @@
 // backend/src/prescriptions/prescriptions.service.ts
 // GEMINI AI VERSION - Free prescription reading
 
-import { Injectable, NotFoundException, ForbiddenException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PatientsService } from '../patients/patients.service';
 import { NotificationsService } from '../notifications/notifications.service';
@@ -41,7 +46,9 @@ export class PrescriptionsService {
       this.genAI = new GoogleGenerativeAI(apiKey);
       console.log('✅ Gemini AI initialized for prescription reading');
     } else {
-      console.warn('⚠️  GEMINI_API_KEY not set - AI prescription reading disabled');
+      console.warn(
+        '⚠️  GEMINI_API_KEY not set - AI prescription reading disabled',
+      );
     }
   }
 
@@ -65,9 +72,11 @@ export class PrescriptionsService {
 
     // Process prescription with AI (async - don't block response)
     if (this.genAI) {
-      this.processPrescriptionWithAI(prescription.id, dto.fileUrl).catch(error => {
-        console.error('AI processing failed:', error);
-      });
+      this.processPrescriptionWithAI(prescription.id, dto.fileUrl).catch(
+        (error) => {
+          console.error('AI processing failed:', error);
+        },
+      );
     }
 
     return {
@@ -78,12 +87,14 @@ export class PrescriptionsService {
     };
   }
 
-
   // ========================================
   // AI PRESCRIPTION PROCESSING
   // ========================================
 
-  private async processPrescriptionWithAI(prescriptionId: string, fileUrl: string) {
+  private async processPrescriptionWithAI(
+    prescriptionId: string,
+    fileUrl: string,
+  ) {
     if (!this.genAI) {
       return;
     }
@@ -96,7 +107,8 @@ export class PrescriptionsService {
       });
 
       // Extract medications from prescription image
-      const extractedMeds = await this.extractMedicationsFromPrescription(fileUrl);
+      const extractedMeds =
+        await this.extractMedicationsFromPrescription(fileUrl);
 
       if (extractedMeds.length === 0) {
         await this.prisma.prescription.update({
@@ -110,7 +122,8 @@ export class PrescriptionsService {
       }
 
       // Match medications with available pharmacy inventory
-      const matchedMeds = await this.matchMedicationsWithInventory(extractedMeds);
+      const matchedMeds =
+        await this.matchMedicationsWithInventory(extractedMeds);
 
       // Store extracted medications in database
       await this.storePrescriptionMedications(prescriptionId, matchedMeds);
@@ -126,18 +139,18 @@ export class PrescriptionsService {
 
       // Notify patient that prescription is ready
       const prescription = await this.findById(prescriptionId);
-      const availableCount = matchedMeds.filter(m => m.available).length;
+      const availableCount = matchedMeds.filter((m) => m.available).length;
       const totalCount = matchedMeds.length;
 
       await this.notificationsService.create({
         patientId: prescription.patientId,
         type: 'PRESCRIPTION_APPROVED',
         title: 'Prescription Processed',
-        message: availableCount === totalCount
-          ? `All ${totalCount} medications are available! Ready to add to cart.`
-          : `Found ${availableCount} of ${totalCount} medications available. Ready to add to cart!`,
+        message:
+          availableCount === totalCount
+            ? `All ${totalCount} medications are available! Ready to add to cart.`
+            : `Found ${availableCount} of ${totalCount} medications available. Ready to add to cart!`,
       });
-
     } catch (error: unknown) {
       const message = error instanceof Error ? error.message : 'Unknown error';
       console.error('AI processing error:', error);
@@ -155,7 +168,9 @@ export class PrescriptionsService {
   // EXTRACT MEDICATIONS USING GEMINI AI
   // ========================================
 
-  private async extractMedicationsFromPrescription(fileUrl: string): Promise<ExtractedMedication[]> {
+  private async extractMedicationsFromPrescription(
+    fileUrl: string,
+  ): Promise<ExtractedMedication[]> {
     try {
       // Download image as base64
       const imageBase64 = await this.downloadImageAsBase64(fileUrl);
@@ -213,10 +228,11 @@ Do not include any explanation, only the JSON array.`,
       }
 
       const medications: ExtractedMedication[] = JSON.parse(jsonMatch[0]);
-      console.log(`Extracted ${medications.length} medications from prescription`);
+      console.log(
+        `Extracted ${medications.length} medications from prescription`,
+      );
 
       return medications;
-
     } catch (error: unknown) {
       console.error('Gemini AI extraction error:', error);
       throw new Error('Failed to extract medications from prescription');
@@ -228,7 +244,7 @@ Do not include any explanation, only the JSON array.`,
   // ========================================
 
   private async matchMedicationsWithInventory(
-    extractedMeds: ExtractedMedication[]
+    extractedMeds: ExtractedMedication[],
   ): Promise<ExtractedMedication[]> {
     const matchedMeds: ExtractedMedication[] = [];
 
@@ -264,7 +280,7 @@ Do not include any explanation, only the JSON array.`,
 
   private async storePrescriptionMedications(
     prescriptionId: string,
-    medications: ExtractedMedication[]
+    medications: ExtractedMedication[],
   ) {
     for (const med of medications) {
       await this.prisma.prescriptionMedication.create({
@@ -313,11 +329,16 @@ Do not include any explanation, only the JSON array.`,
     }
 
     // Get all available medications from prescription
-    const prescriptionMeds = await this.getPrescriptionMedications(prescriptionId);
-    const availableMeds = prescriptionMeds.filter(m => m.available && m.matchedMedicationId);
+    const prescriptionMeds =
+      await this.getPrescriptionMedications(prescriptionId);
+    const availableMeds = prescriptionMeds.filter(
+      (m) => m.available && m.matchedMedicationId,
+    );
 
     if (availableMeds.length === 0) {
-      throw new BadRequestException('No available medications found in this prescription');
+      throw new BadRequestException(
+        'No available medications found in this prescription',
+      );
     }
 
     // Group medications by pharmacy
@@ -378,7 +399,7 @@ Do not include any explanation, only the JSON array.`,
     return {
       message: `Added ${cartItems.length} medications to cart from ${medsByPharmacy.size} pharmacy(ies)`,
       cartItems,
-      unavailableMedications: prescriptionMeds.filter(m => !m.available),
+      unavailableMedications: prescriptionMeds.filter((m) => !m.available),
     };
   }
 
@@ -428,7 +449,9 @@ Do not include any explanation, only the JSON array.`,
       const staff = await this.staffService.findByUserId(userId);
       branchId = staff.branch.id;
     } catch (e) {
-      throw new ForbiddenException('Only pharmacy staff can view branch prescriptions');
+      throw new ForbiddenException(
+        'Only pharmacy staff can view branch prescriptions',
+      );
     }
 
     const where: any = {
@@ -436,9 +459,9 @@ Do not include any explanation, only the JSON array.`,
         some: {
           matchedMedication: {
             branchId: branchId,
-          }
-        }
-      }
+          },
+        },
+      },
     };
 
     if (statusStr) {
@@ -450,21 +473,26 @@ Do not include any explanation, only the JSON array.`,
       orderBy: { createdAt: 'desc' },
       include: {
         patient: {
-          select: { firstName: true, lastName: true, phone: true }
+          select: { firstName: true, lastName: true, phone: true },
         },
         prescriptionMedications: {
           where: {
             matchedMedication: {
-              branchId: branchId
-            }
+              branchId: branchId,
+            },
           },
           include: {
             matchedMedication: {
-              select: { name: true, price: true, quantity: true, imageUrl: true }
-            }
-          }
-        }
-      }
+              select: {
+                name: true,
+                price: true,
+                quantity: true,
+                imageUrl: true,
+              },
+            },
+          },
+        },
+      },
     });
   }
 
@@ -485,7 +513,9 @@ Do not include any explanation, only the JSON array.`,
         patientId: prescription.patientId,
         type: 'PRESCRIPTION_REJECTED',
         title: 'Prescription Rejected',
-        message: dto.rejectionReason || 'Your prescription was rejected by the pharmacy.',
+        message:
+          dto.rejectionReason ||
+          'Your prescription was rejected by the pharmacy.',
       });
     }
 
@@ -527,13 +557,18 @@ Do not include any explanation, only the JSON array.`,
     // Legacy: infer from file extension
     const extension = fileUrl.split('.').pop()?.toLowerCase();
     switch (extension) {
-      case 'png':  return 'image/png';
-      case 'gif':  return 'image/gif';
-      case 'webp': return 'image/webp';
-      case 'pdf':  return 'application/pdf';
+      case 'png':
+        return 'image/png';
+      case 'gif':
+        return 'image/gif';
+      case 'webp':
+        return 'image/webp';
+      case 'pdf':
+        return 'application/pdf';
       case 'jpg':
       case 'jpeg':
-      default:     return 'image/jpeg';
+      default:
+        return 'image/jpeg';
     }
   }
 }

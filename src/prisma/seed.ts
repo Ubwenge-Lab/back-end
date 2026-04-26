@@ -1,169 +1,185 @@
-// backend/src/prisma/seed.ts
-
-import { PrismaClient } from '@prisma/client';
+import { PrismaClient, UserRole, PharmacyStatus, BranchStatus } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
 import 'dotenv/config';
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-const prisma = new PrismaClient() as any;
+const prisma = new PrismaClient();
 
 const HASH_ROUNDS = 10;
 const DEFAULT_PASSWORD = 'Test@1234';
 
-async function clearDatabase() {
-  console.log('🧹 Clearing existing data...');
-  // Delete in dependency order (leaf tables first)
-  await prisma.notification.deleteMany();
-  await prisma.payment.deleteMany();
-  await prisma.cartItem.deleteMany();
-  await prisma.orderItem.deleteMany();
-  await prisma.order.deleteMany();
-  await prisma.prescriptionMedication.deleteMany();
-  await prisma.prescription.deleteMany();
-  await prisma.stockTransferItem.deleteMany();
-  await prisma.stockTransfer.deleteMany();
-  await prisma.attendance.deleteMany();
-  await prisma.staffPermissions.deleteMany();
-  await prisma.staff.deleteMany();
-  await prisma.medication.deleteMany();
-  await prisma.branch.deleteMany();
-  await prisma.patient.deleteMany();
-  await prisma.pharmacy.deleteMany();
-  await prisma.user.deleteMany();
-  console.log('✅ Database cleared.\n');
-}
+// Fixed IDs for Idempotency
+const IDS = {
+  users: {
+    superAdmin: "00000000-0000-0000-0000-000000000001",
+    medplusOwner: "00000000-0000-0000-0000-000000000002",
+    medplusManager: "00000000-0000-0000-0000-000000000003",
+    medplusPharmacist: "00000000-0000-0000-0000-000000000004",
+    medplusCashier: "00000000-0000-0000-0000-000000000005",
+    ubumweOwner: "00000000-0000-0000-0000-000000000006",
+    ubumweManager: "00000000-0000-0000-0000-000000000007",
+    remeraOwner: "00000000-0000-0000-0000-000000000008",
+    kigaliCentralOwner: "00000000-0000-0000-0000-000000000011",
+    alice: "00000000-0000-0000-0000-000000000009",
+    bob: "00000000-0000-0000-0000-000000000010",
+    claire: "00000000-0000-0000-0000-000000000012",
+    david: "00000000-0000-0000-0000-000000000013",
+  },
+  pharmacies: {
+    medplus: "10000000-0000-0000-0000-000000000001",
+    ubumwe: "10000000-0000-0000-0000-000000000002",
+    remera: "10000000-0000-0000-0000-000000000003",
+    kigaliCentral: "10000000-0000-0000-0000-000000000004",
+  },
+  branches: {
+    medplusMain: "20000000-0000-0000-0000-000000000001",
+    medplusRemera: "20000000-0000-0000-0000-000000000002",
+    ubumweKimironko: "20000000-0000-0000-0000-000000000003",
+    kigaliCentralMain: "20000000-0000-0000-0000-000000000004",
+  }
+};
 
 async function main() {
-  console.log('🌱 Starting full seed...\n');
-
-  await clearDatabase();
+  console.log('🌱 Starting idempotent seed (Upsert Mode)...\n');
 
   const password = await bcrypt.hash(DEFAULT_PASSWORD, HASH_ROUNDS);
+  
+  // Use .env for Super Admin
+  const ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'admin@evuze.rw';
+  const ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD ? await bcrypt.hash(process.env.SUPER_ADMIN_PASSWORD, HASH_ROUNDS) : password;
 
   // ==========================================
   // 1. USERS
   // ==========================================
-  console.log('👤 Creating users...');
+  console.log('👤 Syncing users...');
 
-  const superAdminUser = await prisma.user.create({
-    data: {
-      email: process.env.SUPER_ADMIN_EMAIL ?? 'superadmin@pharma.com',
-      password: await bcrypt.hash(
-        process.env.SUPER_ADMIN_PASSWORD ?? 'SuperAdminPower@2025',
-        HASH_ROUNDS,
-      ),
-      role: 'SUPER_ADMIN',
-      isVerified: true,
-    },
-  });
+  const users = [
+    { id: IDS.users.superAdmin, email: ADMIN_EMAIL, role: UserRole.SUPER_ADMIN, isVerified: true, pass: ADMIN_PASSWORD },
+    { id: IDS.users.medplusOwner, email: 'owner@medplus.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
+    { id: IDS.users.medplusManager, email: 'manager@medplus.com', role: UserRole.BRANCH_MANAGER, isVerified: true, pass: password },
+    { id: IDS.users.medplusPharmacist, email: 'pharmacist@medplus.com', role: UserRole.PHARMACIST, isVerified: true, pass: password },
+    { id: IDS.users.medplusCashier, email: 'cashier@medplus.com', role: UserRole.CASHIER, isVerified: true, pass: password },
+    { id: IDS.users.ubumweOwner, email: 'owner@ubumwepharma.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
+    { id: IDS.users.ubumweManager, email: 'manager@ubumwepharma.com', role: UserRole.BRANCH_MANAGER, isVerified: true, pass: password },
+    { id: IDS.users.remeraOwner, email: 'owner@remerahealth.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
+    { id: IDS.users.kigaliCentralOwner, email: 'owner@kigalicentralpharma.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
+    { id: IDS.users.alice, email: 'alice@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
+    { id: IDS.users.bob, email: 'bob@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
+    { id: IDS.users.claire, email: 'claire@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
+    { id: IDS.users.david, email: 'david@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
+  ];
 
-  const pharmacyUser = await prisma.user.create({
-    data: {
-      email: 'owner@medplus.com',
-      password,
-      role: 'PHARMACY',
-      isVerified: true,
-    },
-  });
+  for (const u of users) {
+    await prisma.user.upsert({
+      where: { email: u.email },
+      update: { role: u.role, isVerified: u.isVerified, isActive: true },
+      create: { id: u.id, email: u.email, role: u.role, isVerified: u.isVerified, password: u.pass, isActive: true },
+    });
+  }
 
-  const branchManagerUser = await prisma.user.create({
-    data: {
-      email: 'manager@medplus.com',
-      password,
-      role: 'BRANCH_MANAGER',
-      isVerified: true,
-    },
-  });
-
-  const pharmacistUser = await prisma.user.create({
-    data: {
-      email: 'pharmacist@medplus.com',
-      password,
-      role: 'PHARMACIST',
-      isVerified: true,
-    },
-  });
-
-  const cashierUser = await prisma.user.create({
-    data: {
-      email: 'cashier@medplus.com',
-      password,
-      role: 'CASHIER',
-      isVerified: true,
-    },
-  });
-
-  const patient1User = await prisma.user.create({
-    data: {
-      email: 'alice@patient.com',
-      password,
-      role: 'PATIENT',
-      isVerified: true,
-    },
-  });
-
-  const patient2User = await prisma.user.create({
-    data: {
-      email: 'bob@patient.com',
-      password,
-      role: 'PATIENT',
-      isVerified: true,
-    },
-  });
-
-  console.log('✅ Users created.\n');
+  // Get actual IDs from DB
+  const getUserId = async (email: string) => {
+    const u = await prisma.user.findUnique({ where: { email } });
+    return u?.id;
+  };
 
   // ==========================================
-  // 2. PHARMACY
+  // 2. PHARMACIES
   // ==========================================
-  console.log('🏥 Creating pharmacy...');
+  console.log('🏥 Syncing pharmacies...');
 
-  const pharmacy = await prisma.pharmacy.create({
-    data: {
-      userId: pharmacyUser.id,
+  const pharmacies = [
+    {
+      id: IDS.pharmacies.medplus,
+      userEmail: 'owner@medplus.com',
       name: 'MedPlus Pharmacy',
-      representativeName: 'Dr. John Doe',
+      representativeName: 'Dr. Jean Damascene',
       phone: '+250788000001',
-      address: 'KN 5 Ave, Kigali, Rwanda',
+      address: 'KN 5 Ave, Nyarugenge, Kigali',
       latitude: -1.9441,
       longitude: 30.0619,
       dateOfIncorporation: new Date('2018-03-15'),
       rdbCertificate: 'RDB-2018-001234',
       pharmacyLicense: 'LIC-2018-PH-001',
-      businessRegistration: 'BRN-2018-567890',
-      deliveryZones: ['Kigali', 'Gasabo', 'Kicukiro', 'Nyarugenge'],
-      operatingHours: {
-        monday: { open: '08:00', close: '20:00' },
-        tuesday: { open: '08:00', close: '20:00' },
-        wednesday: { open: '08:00', close: '20:00' },
-        thursday: { open: '08:00', close: '20:00' },
-        friday: { open: '08:00', close: '20:00' },
-        saturday: { open: '09:00', close: '18:00' },
-        sunday: { open: '10:00', close: '16:00' },
-      },
-      status: 'APPROVED',
+      status: PharmacyStatus.APPROVED,
       approvedAt: new Date('2018-04-01'),
     },
-  });
+    {
+      id: IDS.pharmacies.ubumwe,
+      userEmail: 'owner@ubumwepharma.com',
+      name: 'Ubumwe Pharmacy',
+      representativeName: 'Uwimana Marie Claire',
+      phone: '+250788000002',
+      address: 'KG 11 Ave, Kimironko, Gasabo, Kigali',
+      latitude: -1.9412,
+      longitude: 30.1092,
+      dateOfIncorporation: new Date('2019-06-20'),
+      rdbCertificate: 'RDB-2019-004521',
+      pharmacyLicense: 'LIC-2019-PH-022',
+      status: PharmacyStatus.APPROVED,
+      approvedAt: new Date('2019-07-10'),
+    },
+    {
+      id: IDS.pharmacies.kigaliCentral,
+      userEmail: 'owner@kigalicentralpharma.com',
+      name: 'Kigali Central Pharmacy',
+      representativeName: 'Mugisha Emmanuel',
+      phone: '+250788000003',
+      address: 'KN 3 Rd, City Centre, Nyarugenge, Kigali',
+      latitude: -1.9500,
+      longitude: 30.0588,
+      dateOfIncorporation: new Date('2020-01-10'),
+      rdbCertificate: 'RDB-2020-005566',
+      pharmacyLicense: 'LIC-2020-PH-055',
+      status: PharmacyStatus.APPROVED,
+      approvedAt: new Date('2020-02-01'),
+    },
+    {
+      id: IDS.pharmacies.remera,
+      userEmail: 'owner@remerahealth.com',
+      name: 'Remera Health Pharmacy',
+      representativeName: 'Habimana Patrick',
+      phone: '+250788000004',
+      address: 'KG 9 Ave, Remera, Gasabo, Kigali',
+      latitude: -1.9559,
+      longitude: 30.1125,
+      dateOfIncorporation: new Date('2023-08-05'),
+      rdbCertificate: 'RDB-2023-009988',
+      pharmacyLicense: 'LIC-2023-PH-099',
+      status: PharmacyStatus.PENDING,
+    }
+  ];
 
-  console.log('✅ Pharmacy created.\n');
+  for (const p of pharmacies) {
+    const { userEmail, ...pData } = p;
+    const userId = await getUserId(userEmail);
+    if (!userId) continue;
+
+    const { id, ...updateData } = pData;
+
+    await prisma.pharmacy.upsert({
+      where: { userId },
+      update: { ...updateData },
+      create: { ...pData, userId },
+    });
+  }
 
   // ==========================================
-  // 3. BRANCH (with manager linked)
+  // 3. BRANCHES
   // ==========================================
-  console.log('🏪 Creating branches...');
+  console.log('🏪 Syncing branches...');
 
-  const mainBranch = await prisma.branch.create({
-    data: {
-      pharmacyId: pharmacy.id,
-      managerId: branchManagerUser.id,
+  const branches = [
+    {
+      id: IDS.branches.medplusMain,
+      pharmacyEmail: 'owner@medplus.com',
+      managerEmail: 'manager@medplus.com',
       name: 'MedPlus Main Branch',
-      address: 'KN 5 Ave, Kigali, Rwanda',
+      address: 'KN 5 Ave, Nyarugenge, Kigali',
       phone: '+250788000010',
       latitude: -1.9441,
       longitude: 30.0619,
       isActive: true,
-      branchStatus: 'APPROVED',
+      branchStatus: BranchStatus.APPROVED,
       branchManagerEmail: 'manager@medplus.com',
       operatingHours: {
         monday: { open: '08:00', close: '20:00' },
@@ -175,18 +191,16 @@ async function main() {
         sunday: { open: '10:00', close: '16:00' },
       },
     },
-  });
-
-  const secondBranch = await prisma.branch.create({
-    data: {
-      pharmacyId: pharmacy.id,
+    {
+      id: IDS.branches.medplusRemera,
+      pharmacyEmail: 'owner@medplus.com',
       name: 'MedPlus Remera Branch',
-      address: 'Remera, Kigali, Rwanda',
+      address: 'KG 9 Ave, Remera, Gasabo, Kigali',
       phone: '+250788000020',
       latitude: -1.9559,
       longitude: 30.1125,
       isActive: true,
-      branchStatus: 'APPROVED',
+      branchStatus: BranchStatus.APPROVED,
       branchManagerEmail: 'remera.manager@medplus.com',
       operatingHours: {
         monday: { open: '08:00', close: '19:00' },
@@ -197,827 +211,196 @@ async function main() {
         saturday: { open: '09:00', close: '17:00' },
       },
     },
-  });
-
-  console.log('✅ Branches created.\n');
-
-  // ==========================================
-  // 4. STAFF (Pharmacist + Cashier)
-  // ==========================================
-  console.log('👨‍⚕️ Creating staff...');
-
-  const pharmacistStaff = await prisma.staff.create({
-    data: {
-      userId: pharmacistUser.id,
-      branchId: mainBranch.id,
-      firstName: 'Samuel',
-      lastName: 'Nkurunziza',
-      phone: '+250788100001',
-      nationalId: '1199080012345678',
-      gender: 'Male',
-      dateOfBirth: new Date('1990-05-14'),
-      status: 'ACTIVE',
-      workingHours: {
-        monday: { start: '08:00', end: '17:00' },
-        tuesday: { start: '08:00', end: '17:00' },
-        wednesday: { start: '08:00', end: '17:00' },
-        thursday: { start: '08:00', end: '17:00' },
-        friday: { start: '08:00', end: '17:00' },
-      },
-      permissions: {
-        create: {
-          permissions: [
-            'VIEW_ORDERS',
-            'ACCEPT_ORDERS',
-            'UPDATE_ORDER_STATUS',
-            'VIEW_INVENTORY',
-            'ADD_MEDICATION',
-            'EDIT_MEDICATION',
-            'VIEW_PRESCRIPTIONS',
-            'APPROVE_PRESCRIPTIONS',
-            'REJECT_PRESCRIPTIONS',
-            'VIEW_CUSTOMERS',
-            'VIEW_ANALYTICS',
-          ],
-        },
-      },
+    {
+      id: IDS.branches.ubumweKimironko,
+      pharmacyEmail: 'owner@ubumwepharma.com',
+      managerEmail: 'manager@ubumwepharma.com',
+      name: 'Ubumwe Kimironko Branch',
+      address: 'KG 11 Ave, Kimironko, Gasabo, Kigali',
+      phone: '+250788000030',
+      latitude: -1.9412,
+      longitude: 30.1092,
+      isActive: true,
+      branchStatus: BranchStatus.APPROVED,
+      branchManagerEmail: 'manager@ubumwepharma.com',
     },
-  });
-
-  const cashierStaff = await prisma.staff.create({
-    data: {
-      userId: cashierUser.id,
-      branchId: mainBranch.id,
-      firstName: 'Grace',
-      lastName: 'Uwimana',
-      phone: '+250788100002',
-      nationalId: '1199580098765432',
-      gender: 'Female',
-      dateOfBirth: new Date('1995-08-22'),
-      status: 'ACTIVE',
-      workingHours: {
-        monday: { start: '09:00', end: '18:00' },
-        tuesday: { start: '09:00', end: '18:00' },
-        wednesday: { start: '09:00', end: '18:00' },
-        thursday: { start: '09:00', end: '18:00' },
-        friday: { start: '09:00', end: '18:00' },
-      },
-      permissions: {
-        create: {
-          permissions: [
-            'VIEW_ORDERS',
-            'VIEW_INVENTORY',
-            'VIEW_PAYMENTS',
-            'PROCESS_PAYMENTS',
-            'VIEW_CUSTOMERS',
-          ],
-        },
-      },
-    },
-  });
-
-  console.log('✅ Staff created.\n');
-
-  // ==========================================
-  // 5. PATIENTS
-  // ==========================================
-  console.log('🧑‍🤝‍🧑 Creating patients...');
-
-  const patient1 = await prisma.patient.create({
-    data: {
-      userId: patient1User.id,
-      firstName: 'Alice',
-      lastName: 'Mukamana',
-      phone: '+250788200001',
-      dateOfBirth: new Date('1992-03-10'),
-      gender: 'Female',
-      address: 'Gasabo District, Kigali, Rwanda',
-      nationalId: '1199280000111222',
-      insuranceProvider: 'RSSB',
-      insurancePolicy: 'RSSB-2024-001',
-      insuranceMemberId: 'MBR-001122',
-      insuranceCoverage: 80,
-    },
-  });
-
-  const patient2 = await prisma.patient.create({
-    data: {
-      userId: patient2User.id,
-      firstName: 'Bob',
-      lastName: 'Habimana',
-      phone: '+250788200002',
-      dateOfBirth: new Date('1988-11-25'),
-      gender: 'Male',
-      address: 'Nyarugenge District, Kigali, Rwanda',
-      nationalId: '1198880000333444',
-    },
-  });
-
-  console.log('✅ Patients created.\n');
-
-  // ==========================================
-  // 6. MEDICATIONS
-  // ==========================================
-  console.log('💊 Creating medications...');
-
-  // Sequential rather than Promise.all because Supabase free tier pooler
-  // drops connections under parallel load.
-  const medications = [
-    await prisma.medication.create({
-      data: {
-        pharmacyId: pharmacy.id,
-        branchId: mainBranch.id,
-        name: 'Amoxicillin 500mg Capsules',
-        chemicalName: 'Amoxicillin trihydrate',
-        description: 'Broad-spectrum antibiotic used to treat bacterial infections.',
-        category: 'Antibiotics',
-        price: 2500,
-        quantity: 200,
-        lowStockThreshold: 20,
-        requiresPrescription: true,
-      },
-    }),
-    await prisma.medication.create({
-      data: {
-        pharmacyId: pharmacy.id,
-        branchId: mainBranch.id,
-        name: 'Paracetamol 500mg Tablets',
-        chemicalName: 'Paracetamol (Acetaminophen)',
-        description: 'Common pain reliever and fever reducer.',
-        category: 'Analgesics',
-        price: 500,
-        quantity: 500,
-        lowStockThreshold: 50,
-        requiresPrescription: false,
-      },
-    }),
-    await prisma.medication.create({
-      data: {
-        pharmacyId: pharmacy.id,
-        branchId: mainBranch.id,
-        name: 'Metformin 850mg Tablets',
-        chemicalName: 'Metformin hydrochloride',
-        description: 'First-line medication for type 2 diabetes management.',
-        category: 'Antidiabetics',
-        price: 3500,
-        quantity: 150,
-        lowStockThreshold: 15,
-        requiresPrescription: true,
-      },
-    }),
-    await prisma.medication.create({
-      data: {
-        pharmacyId: pharmacy.id,
-        branchId: mainBranch.id,
-        name: 'Ibuprofen 400mg Tablets',
-        chemicalName: 'Ibuprofen',
-        description: 'Non-steroidal anti-inflammatory drug for pain, fever and inflammation.',
-        category: 'NSAIDs',
-        price: 800,
-        quantity: 300,
-        lowStockThreshold: 30,
-        requiresPrescription: false,
-      },
-    }),
-    await prisma.medication.create({
-      data: {
-        pharmacyId: pharmacy.id,
-        branchId: mainBranch.id,
-        name: 'Atorvastatin 20mg Tablets',
-        chemicalName: 'Atorvastatin calcium',
-        description: 'Statin medication to lower cholesterol levels.',
-        category: 'Cardiovascular',
-        price: 4500,
-        quantity: 100,
-        lowStockThreshold: 10,
-        requiresPrescription: true,
-      },
-    }),
-    await prisma.medication.create({
-      data: {
-        pharmacyId: pharmacy.id,
-        branchId: mainBranch.id,
-        name: 'ORS Sachets (Oral Rehydration Salts)',
-        chemicalName: 'Sodium chloride / Potassium chloride / Glucose',
-        description: 'Used to prevent and treat dehydration due to diarrhea or vomiting.',
-        category: 'Electrolytes',
-        price: 300,
-        quantity: 600,
-        lowStockThreshold: 60,
-        requiresPrescription: false,
-      },
-    }),
-    await prisma.medication.create({
-      data: {
-        pharmacyId: pharmacy.id,
-        branchId: mainBranch.id,
-        name: 'Omeprazole 20mg Capsules',
-        chemicalName: 'Omeprazole magnesium',
-        description: 'Proton pump inhibitor used to treat gastroesophageal reflux disease (GERD) and stomach ulcers.',
-        category: 'Gastrointestinal',
-        price: 1800,
-        quantity: 8, // intentionally low to trigger LOW_STOCK
-        lowStockThreshold: 10,
-        requiresPrescription: false,
-      },
-    }),
-    await prisma.medication.create({
-      data: {
-        pharmacyId: pharmacy.id,
-        branchId: mainBranch.id,
-        name: 'Amlodipine 5mg Tablets',
-        chemicalName: 'Amlodipine besylate',
-        description: 'Calcium channel blocker used to treat high blood pressure and chest pain.',
-        category: 'Cardiovascular',
-        price: 2000,
-        quantity: 120,
-        lowStockThreshold: 10,
-        requiresPrescription: true,
-      },
-    }),
-    // Medications for second branch (stock transfer scenario)
-    await prisma.medication.create({
-      data: {
-        pharmacyId: pharmacy.id,
-        branchId: secondBranch.id,
-        name: 'Amoxicillin 500mg Capsules',
-        chemicalName: 'Amoxicillin trihydrate',
-        description: 'Broad-spectrum antibiotic used to treat bacterial infections.',
-        category: 'Antibiotics',
-        price: 2500,
-        quantity: 50,
-        lowStockThreshold: 20,
-        requiresPrescription: true,
-      },
-    }),
-    await prisma.medication.create({
-      data: {
-        pharmacyId: pharmacy.id,
-        branchId: secondBranch.id,
-        name: 'Paracetamol 500mg Tablets',
-        chemicalName: 'Paracetamol (Acetaminophen)',
-        description: 'Common pain reliever and fever reducer.',
-        category: 'Analgesics',
-        price: 500,
-        quantity: 200,
-        lowStockThreshold: 50,
-        requiresPrescription: false,
-      },
-    }),
+    {
+      id: IDS.branches.kigaliCentralMain,
+      pharmacyEmail: 'owner@kigalicentralpharma.com',
+      name: 'Kigali Central Main Branch',
+      address: 'KN 3 Rd, City Centre, Nyarugenge, Kigali',
+      phone: '+250788000040',
+      latitude: -1.9500,
+      longitude: 30.0588,
+      isActive: true,
+      branchStatus: BranchStatus.APPROVED,
+      branchManagerEmail: 'manager@kigalicentralpharma.com',
+    }
   ];
 
-  const [
-    amoxicillin,
-    paracetamol,
-    metformin,
-    ibuprofen,
-    atorvastatin,
-    ors,
-    omeprazole,
-    amlodipine,
-  ] = medications;
+  for (const b of branches) {
+    const { pharmacyEmail, managerEmail, ...bData } = b;
+    const owner = await prisma.user.findUnique({ where: { email: pharmacyEmail }, include: { pharmacy: true } });
+    const pharmacyId = owner?.pharmacy?.id;
+    if (!pharmacyId) continue;
 
-  console.log('✅ Medications created.\n');
+    let managerId = null;
+    if (managerEmail) {
+      managerId = (await getUserId(managerEmail)) || null;
+    }
 
-  // ==========================================
-  // 7. PRESCRIPTIONS
-  // ==========================================
-  console.log('📋 Creating prescriptions...');
+    const { id, ...updateData } = bData;
+    const whereClause = managerId ? { managerId } : { id: b.id };
 
-  const approvedPrescription = await prisma.prescription.create({
-    data: {
-      patientId: patient1.id,
-      fileUrl: 'https://storage.example.com/prescriptions/rx-alice-001.pdf',
-      fileName: 'prescription_alice_001.pdf',
-      fileType: 'application/pdf',
-      status: 'APPROVED',
-      reviewedAt: new Date('2026-03-10T10:00:00Z'),
-      aiProcessingStatus: 'COMPLETED',
-      extractedMedications: [
-        { name: 'Amoxicillin 500mg', dosage: '500mg', frequency: 'Three times daily', duration: '7 days' },
-        { name: 'Paracetamol 500mg', dosage: '500mg', frequency: 'Twice daily', duration: '5 days' },
-      ],
-      prescriptionMedications: {
-        create: [
-          {
-            medicationName: 'Amoxicillin 500mg',
-            dosage: '500mg',
-            frequency: 'Three times daily',
-            duration: '7 days',
-            quantity: 21,
-            matchedMedicationId: amoxicillin.id,
-            available: true,
-          },
-          {
-            medicationName: 'Paracetamol 500mg',
-            dosage: '500mg',
-            frequency: 'Twice daily',
-            duration: '5 days',
-            quantity: 10,
-            matchedMedicationId: paracetamol.id,
-            available: true,
-          },
-        ],
-      },
-    },
-  });
-
-  await prisma.prescription.create({
-    data: {
-      patientId: patient2.id,
-      fileUrl: 'https://storage.example.com/prescriptions/rx-bob-001.pdf',
-      fileName: 'prescription_bob_001.pdf',
-      fileType: 'application/pdf',
-      status: 'PENDING',
-      aiProcessingStatus: 'COMPLETED',
-      extractedMedications: [
-        { name: 'Metformin 850mg', dosage: '850mg', frequency: 'Twice daily', duration: '30 days' },
-      ],
-      prescriptionMedications: {
-        create: [
-          {
-            medicationName: 'Metformin 850mg',
-            dosage: '850mg',
-            frequency: 'Twice daily',
-            duration: '30 days',
-            quantity: 60,
-            matchedMedicationId: metformin.id,
-            available: true,
-          },
-        ],
-      },
-    },
-  });
-
-  console.log('✅ Prescriptions created.\n');
+    await prisma.branch.upsert({
+      where: whereClause as any,
+      update: { ...updateData, pharmacyId, managerId },
+      create: { ...bData, id: b.id, pharmacyId, managerId },
+    });
+  }
 
   // ==========================================
-  // 8. ORDERS
+  // 4. PATIENTS & STAFF
   // ==========================================
-  console.log('🛒 Creating orders...');
+  console.log('🧑‍🤝‍🧑 Syncing patients & staff...');
 
-  // Order 1: COMPLETED delivery order for Alice, paid via MTN MOMO
-  const completedOrder = await prisma.order.create({
-    data: {
-      patientId: patient1.id,
-      pharmacyId: pharmacy.id,
-      branchId: mainBranch.id,
-      orderNumber: 'ORD-2026-0001',
-      type: 'DELIVERY',
-      status: 'COMPLETED',
-      deliveryAddress: 'Gasabo District, Kigali, Rwanda',
-      deliveryFee: 1000,
-      deliveryZone: 'Gasabo',
-      prescriptionId: approvedPrescription.id,
-      subtotal: 57500, // 21*2500 + 10*500
-      total: 58500,
-      paymentMethod: 'MTN_MOMO',
-      paymentStatus: 'COMPLETED',
-      insuranceCoverage: 46800, // 80% of subtotal from RSSB
-      patientPayment: 11700,
-      orderItems: {
-        create: [
-          {
-            medicationId: amoxicillin.id,
-            quantity: 21,
-            price: 2500,
-          },
-          {
-            medicationId: paracetamol.id,
-            quantity: 10,
-            price: 500,
-          },
-        ],
-      },
-    },
-  });
+  const patients = [
+    { email: 'alice@patient.com', firstName: 'Alice', lastName: 'Mukamana', address: 'KG 7 Ave, Kimironko, Gasabo, Kigali', insuranceProvider: 'RSSB', coverage: 80 },
+    { email: 'bob@patient.com', firstName: 'Bob', lastName: 'Habimana', address: 'KN 4 Ave, Nyarugenge, Kigali', insuranceProvider: null, coverage: 0 },
+    { email: 'claire@patient.com', firstName: 'Claire', lastName: 'Ingabire', address: 'KG 12 Ave, Remera, Gasabo, Kigali', insuranceProvider: 'MMI', coverage: 60 },
+    { email: 'david@patient.com', firstName: 'David', lastName: 'Nshuti', address: 'Kicukiro District, Kigali, Rwanda', insuranceProvider: null, coverage: 0 },
+  ];
 
-  await prisma.payment.create({
-    data: {
-      orderId: completedOrder.id,
-      amount: 11700,
-      paymentMethod: 'MTN_MOMO',
-      status: 'COMPLETED',
-      transactionId: 'TXN-MTN-20260310-001',
-      flutterwaveRef: 'FLW-MOCK-001122',
-      insuranceProvider: 'RSSB',
-      insurancePolicyNumber: 'RSSB-2024-001',
-      insuranceCoverage: 46800,
-      insuranceVerified: true,
-      paymentResponse: {
-        status: 'success',
-        message: 'Payment processed successfully',
-        data: { reference: 'FLW-MOCK-001122', amount: 11700, currency: 'RWF' },
-      },
-    },
-  });
+  for (const p of patients) {
+    const userId = await getUserId(p.email);
+    if (!userId) continue;
 
-  // Order 2: PENDING pickup order for Bob
-  const pendingOrder = await prisma.order.create({
-    data: {
-      patientId: patient2.id,
-      pharmacyId: pharmacy.id,
-      branchId: mainBranch.id,
-      orderNumber: 'ORD-2026-0002',
-      type: 'PICKUP',
-      status: 'PENDING',
-      subtotal: 5600, // 4*ibuprofen(800) + 6*ors(300)
-      total: 5600,
-      paymentMethod: 'CARD',
-      paymentStatus: 'PENDING',
-      patientPayment: 5600,
-      orderItems: {
-        create: [
-          {
-            medicationId: ibuprofen.id,
-            quantity: 4,
-            price: 800,
-          },
-          {
-            medicationId: ors.id,
-            quantity: 6,
-            price: 300,
-          },
-        ],
-      },
-    },
-  });
+    await prisma.patient.upsert({
+      where: { userId },
+      update: { firstName: p.firstName, lastName: p.lastName, address: p.address },
+      create: {
+        userId,
+        firstName: p.firstName,
+        lastName: p.lastName,
+        phone: '+250788' + Math.floor(Math.random() * 9000000 + 1000000),
+        address: p.address,
+        insuranceProvider: p.insuranceProvider,
+        insuranceCoverage: p.coverage,
+      }
+    });
+  }
 
-  // Order 3: ACCEPTED order for Alice
-  const acceptedOrder = await prisma.order.create({
-    data: {
-      patientId: patient1.id,
-      pharmacyId: pharmacy.id,
-      branchId: mainBranch.id,
-      orderNumber: 'ORD-2026-0003',
-      type: 'PICKUP',
-      status: 'ACCEPTED',
-      subtotal: 10000, // 2*atorvastatin(4500) + 1*amlodipine(2000) - adjusting: 2*4500=9000 + 1*2000=2000 => 11000
-      total: 11000,
-      paymentMethod: 'CARD',
-      paymentStatus: 'PENDING',
-      patientPayment: 11000,
-      orderItems: {
-        create: [
-          {
-            medicationId: atorvastatin.id,
-            quantity: 2,
-            price: 4500,
-          },
-          {
-            medicationId: amlodipine.id,
-            quantity: 1,
-            price: 2000,
-          },
-        ],
-      },
-    },
-  });
+  const pharmId = await getUserId('pharmacist@medplus.com');
+  const medPlusMain = await prisma.branch.findFirst({ where: { name: 'MedPlus Main Branch' } });
 
-  // Order 4: READY_FOR_PICKUP order for Alice, already paid online via MTN MOMO.
-  // Lets the cashier exercise the Verify tab against an existing Flutterwave reference.
-  const readyPaidOrder = await prisma.order.create({
-    data: {
-      patientId: patient1.id,
-      pharmacyId: pharmacy.id,
-      branchId: mainBranch.id,
-      orderNumber: 'ORD-2026-0004',
-      type: 'PICKUP',
-      status: 'READY_FOR_PICKUP',
-      subtotal: 8000, // 2*amoxicillin(2500) + 6*paracetamol(500)
-      total: 8000,
-      paymentMethod: 'MTN_MOMO',
-      paymentStatus: 'COMPLETED',
-      patientPayment: 8000,
-      orderItems: {
-        create: [
-          {
-            medicationId: amoxicillin.id,
-            quantity: 2,
-            price: 2500,
-          },
-          {
-            medicationId: paracetamol.id,
-            quantity: 6,
-            price: 500,
-          },
-        ],
-      },
-    },
-  });
+  if (pharmId && medPlusMain) {
+    await prisma.staff.upsert({
+      where: { userId: pharmId },
+      update: { firstName: 'Samuel', status: 'ACTIVE' },
+      create: {
+        userId: pharmId,
+        branchId: medPlusMain.id,
+        firstName: 'Samuel',
+        lastName: 'Nkurunziza',
+        phone: '+250788100001',
+        status: 'ACTIVE',
+      }
+    });
+  }
 
-  await prisma.payment.create({
-    data: {
-      orderId: readyPaidOrder.id,
-      amount: 8000,
-      paymentMethod: 'MTN_MOMO',
-      status: 'COMPLETED',
-      transactionId: 'TXN-MTN-20260420-002',
-      flutterwaveRef: 'FLW-MOCK-002233',
-      paymentResponse: {
-        status: 'success',
-        message: 'Payment processed successfully',
-        data: { reference: 'FLW-MOCK-002233', amount: 8000, currency: 'RWF' },
-      },
-    },
-  });
-
-  // Order 5: READY_FOR_PICKUP walk-in order for Bob, paying at the counter.
-  // Lets the cashier exercise the Record tab end to end. Uses CARD here because
-  // the PaymentMethod enum does not include CASH; the actual payment method
-  // captured by the Record tab is independent of this order field.
-  await prisma.order.create({
-    data: {
-      patientId: patient2.id,
-      pharmacyId: pharmacy.id,
-      branchId: mainBranch.id,
-      orderNumber: 'ORD-2026-0005',
-      type: 'PICKUP',
-      status: 'READY_FOR_PICKUP',
-      subtotal: 4500, // 3*ibuprofen(800) + 7*ors(300)
-      total: 4500,
-      paymentMethod: 'CARD',
-      paymentStatus: 'PENDING',
-      patientPayment: 4500,
-      orderItems: {
-        create: [
-          {
-            medicationId: ibuprofen.id,
-            quantity: 3,
-            price: 800,
-          },
-          {
-            medicationId: ors.id,
-            quantity: 7,
-            price: 300,
-          },
-        ],
-      },
-    },
-  });
-
-  // Order 6: PREPARING order for Bob, populates the Ready for Pickup tab on the
-  // cashier orders board so the tab is not empty during testing.
-  await prisma.order.create({
-    data: {
-      patientId: patient2.id,
-      pharmacyId: pharmacy.id,
-      branchId: mainBranch.id,
-      orderNumber: 'ORD-2026-0006',
-      type: 'PICKUP',
-      status: 'PREPARING',
-      subtotal: 11000, // 2*metformin(3500) + 2*amlodipine(2000)
-      total: 11000,
-      paymentMethod: 'CARD',
-      paymentStatus: 'PENDING',
-      patientPayment: 11000,
-      orderItems: {
-        create: [
-          {
-            medicationId: metformin.id,
-            quantity: 2,
-            price: 3500,
-          },
-          {
-            medicationId: amlodipine.id,
-            quantity: 2,
-            price: 2000,
-          },
-        ],
-      },
-    },
-  });
-
-  console.log('✅ Orders created.\n');
+  const cashierId = await getUserId('cashier@medplus.com');
+  if (cashierId && medPlusMain) {
+    await prisma.staff.upsert({
+      where: { userId: cashierId },
+      update: { firstName: 'Grace', status: 'ACTIVE' },
+      create: {
+        userId: cashierId,
+        branchId: medPlusMain.id,
+        firstName: 'Grace',
+        lastName: 'Uwimana',
+        phone: '+250788100002',
+        status: 'ACTIVE',
+      }
+    });
+  }
 
   // ==========================================
-  // 9. CART ITEMS (for patient2)
+  // 5. MEDICATIONS & ORDERS
   // ==========================================
-  console.log('🛍️ Creating cart items...');
+  console.log('🛒 Syncing medications & orders...');
 
-  await prisma.cartItem.createMany({
-    data: [
-      {
-        patientId: patient2.id,
-        pharmacyId: pharmacy.id,
-        medicationId: omeprazole.id,
-        quantity: 2,
-      },
-      {
-        patientId: patient2.id,
-        pharmacyId: pharmacy.id,
-        medicationId: paracetamol.id,
-        quantity: 1,
-      },
-    ],
-  });
+  const medId = "30000000-0000-0000-0000-000000000001";
+  if (medPlusMain && medPlusMain.pharmacyId) {
+    await prisma.medication.upsert({
+      where: { id: medId },
+      update: { quantity: 200 },
+      create: {
+        id: medId,
+        pharmacyId: medPlusMain.pharmacyId,
+        branchId: medPlusMain.id,
+        name: 'Amoxicillin 500mg',
+        category: 'Antibiotics',
+        price: 2500,
+        quantity: 200,
+      }
+    });
 
-  console.log('✅ Cart items created.\n');
+    const aliceP = await prisma.patient.findFirst({ where: { firstName: 'Alice' } });
+    const bobP = await prisma.patient.findFirst({ where: { firstName: 'Bob' } });
 
-  // ==========================================
-  // 10. STOCK TRANSFER (main → remera branch)
-  // ==========================================
-  console.log('🔄 Creating stock transfer...');
+    if (aliceP && bobP) {
+      const orders = [
+        { orderNumber: 'ORD-2026-0001', patientId: aliceP.id, status: 'COMPLETED', paymentMethod: 'MTN_MOMO', paymentStatus: 'COMPLETED', patientPayment: 1200 },
+        { orderNumber: 'ORD-2026-0002', patientId: bobP.id, status: 'PENDING', paymentMethod: 'CARD', paymentStatus: 'PENDING', patientPayment: 5600 },
+        { orderNumber: 'ORD-2026-0003', patientId: aliceP.id, status: 'ACCEPTED', paymentMethod: 'CARD', paymentStatus: 'PENDING', patientPayment: 11000 },
+        { orderNumber: 'ORD-2026-0004', patientId: aliceP.id, status: 'READY_FOR_PICKUP', paymentMethod: 'MTN_MOMO', paymentStatus: 'COMPLETED', patientPayment: 1600 },
+        { orderNumber: 'ORD-2026-0005', patientId: bobP.id, status: 'READY_FOR_PICKUP', paymentMethod: 'CASH', paymentStatus: 'PENDING', patientPayment: 4500 },
+        { orderNumber: 'ORD-2026-0006', patientId: bobP.id, status: 'PREPARING', paymentMethod: 'CARD', paymentStatus: 'PENDING', patientPayment: 11000 },
+      ];
 
-  await prisma.stockTransfer.create({
-    data: {
-      fromBranchId: mainBranch.id,
-      toBranchId: secondBranch.id,
-      status: 'COMPLETED',
-      notes: 'Replenishing stock at Remera branch due to high demand.',
-      items: {
-        create: [
-          {
-            medicationId: amoxicillin.id,
-            quantity: 30,
-          },
-          {
-            medicationId: paracetamol.id,
-            quantity: 100,
-          },
-        ],
-      },
-    },
-  });
-
-  await prisma.stockTransfer.create({
-    data: {
-      fromBranchId: mainBranch.id,
-      toBranchId: secondBranch.id,
-      status: 'PENDING',
-      notes: 'Monthly restocking transfer.',
-      items: {
-        create: [
-          {
-            medicationId: ibuprofen.id,
-            quantity: 50,
-          },
-        ],
-      },
-    },
-  });
-
-  console.log('✅ Stock transfers created.\n');
+      for (const o of orders) {
+        await prisma.order.upsert({
+          where: { orderNumber: o.orderNumber },
+          update: { status: o.status as any, paymentMethod: o.paymentMethod as any },
+          create: {
+            ...o as any,
+            pharmacyId: medPlusMain.pharmacyId,
+            branchId: medPlusMain.id,
+            type: 'PICKUP',
+            subtotal: 5000,
+            total: 5000,
+            orderItems: { create: [{ medicationId: medId, quantity: 1, price: 2500 }] }
+          }
+        });
+      }
+    }
+  }
 
   // ==========================================
-  // 11. ATTENDANCE
+  // 6. ATTENDANCE & MISC
   // ==========================================
-  console.log('🕐 Creating attendance records...');
+  console.log('🕐 Syncing attendance & misc...');
 
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
+  const staffG = await prisma.staff.findFirst({ where: { firstName: 'Grace' } });
+  if (staffG && medPlusMain) {
+    const today = new Date();
+    today.setHours(8, 0, 0, 0);
+    
+    await prisma.attendance.upsert({
+      where: { id: "40000000-0000-0000-0000-000000000001" },
+      update: { status: 'COMPLETED' },
+      create: {
+        id: "40000000-0000-0000-0000-000000000001",
+        staffId: staffG.id,
+        branchId: medPlusMain.id,
+        clockInTime: today,
+        status: 'COMPLETED',
+        clockInLocation: { lat: -1.9441, lng: 30.0619, accuracy: 10 },
+      }
+    });
+  }
 
-  // Yesterday - completed attendance for pharmacist
-  const yesterday = new Date(today);
-  yesterday.setDate(yesterday.getDate() - 1);
-
-  const clockIn1 = new Date(yesterday);
-  clockIn1.setHours(8, 2, 0, 0);
-  const clockOut1 = new Date(yesterday);
-  clockOut1.setHours(17, 5, 0, 0);
-
-  await prisma.attendance.create({
-    data: {
-      staffId: pharmacistStaff.id,
-      branchId: mainBranch.id,
-      clockInTime: clockIn1,
-      clockInLocation: { lat: -1.9441, lng: 30.0619, accuracy: 10 },
-      clockInApproved: true,
-      clockInApprovedAt: new Date(clockIn1.getTime() + 5 * 60000),
-      clockInApprovedBy: cashierStaff.id, // approved by another staff
-      clockOutTime: clockOut1,
-      clockOutLocation: { lat: -1.9441, lng: 30.0619, accuracy: 12 },
-      clockOutApproved: true,
-      clockOutApprovedAt: new Date(clockOut1.getTime() + 3 * 60000),
-      clockOutApprovedBy: cashierStaff.id,
-      status: 'COMPLETED',
-      totalHours: 9.05,
-    },
-  });
-
-  // Yesterday - completed attendance for cashier
-  const clockIn2 = new Date(yesterday);
-  clockIn2.setHours(9, 0, 0, 0);
-  const clockOut2 = new Date(yesterday);
-  clockOut2.setHours(18, 10, 0, 0);
-
-  await prisma.attendance.create({
-    data: {
-      staffId: cashierStaff.id,
-      branchId: mainBranch.id,
-      clockInTime: clockIn2,
-      clockInLocation: { lat: -1.9441, lng: 30.0619, accuracy: 8 },
-      clockInApproved: true,
-      clockInApprovedAt: new Date(clockIn2.getTime() + 4 * 60000),
-      clockInApprovedBy: pharmacistStaff.id,
-      clockOutTime: clockOut2,
-      clockOutLocation: { lat: -1.9441, lng: 30.0619, accuracy: 9 },
-      clockOutApproved: true,
-      clockOutApprovedAt: new Date(clockOut2.getTime() + 2 * 60000),
-      clockOutApprovedBy: pharmacistStaff.id,
-      status: 'COMPLETED',
-      totalHours: 9.17,
-    },
-  });
-
-  // Today - pharmacist clocked in, pending approval
-  const clockIn3 = new Date(today);
-  clockIn3.setHours(8, 5, 0, 0);
-
-  await prisma.attendance.create({
-    data: {
-      staffId: pharmacistStaff.id,
-      branchId: mainBranch.id,
-      clockInTime: clockIn3,
-      clockInLocation: { lat: -1.9441, lng: 30.0619, accuracy: 15 },
-      clockInApproved: false,
-      status: 'PENDING',
-    },
-  });
-
-  console.log('✅ Attendance records created.\n');
-
-  // ==========================================
-  // 12. NOTIFICATIONS
-  // ==========================================
-  console.log('🔔 Creating notifications...');
-
-  await prisma.notification.createMany({
-    data: [
-      // Patient notification for completed order
-      {
-        patientId: patient1.id,
-        orderId: completedOrder.id,
-        type: 'ORDER_DELIVERED',
-        title: 'Order Delivered',
-        message: 'Your order ORD-2026-0001 has been delivered successfully. Thank you for choosing MedPlus Pharmacy!',
-        isRead: true,
-      },
-      // Pharmacy notification for order placed
-      {
-        pharmacyId: pharmacy.id,
-        orderId: pendingOrder.id,
-        type: 'ORDER_PLACED',
-        title: 'New Order Received',
-        message: 'A new pickup order ORD-2026-0002 has been placed by Bob Habimana.',
-        isRead: false,
-      },
-      // Patient notification for prescription approved
-      {
-        patientId: patient1.id,
-        type: 'PRESCRIPTION_APPROVED',
-        title: 'Prescription Approved',
-        message: 'Your prescription has been reviewed and approved. You can now proceed to order your medications.',
-        isRead: false,
-      },
-      // Pharmacy notification for low stock
-      {
-        pharmacyId: pharmacy.id,
-        type: 'LOW_STOCK',
-        title: 'Low Stock Alert',
-        message: 'Omeprazole 20mg Capsules at MedPlus Main Branch is running low (8 units remaining, threshold: 10).',
-        isRead: false,
-      },
-      // Patient notification for order accepted
-      {
-        patientId: patient1.id,
-        orderId: acceptedOrder.id,
-        type: 'ORDER_ACCEPTED',
-        title: 'Order Accepted',
-        message: 'Your order ORD-2026-0003 has been accepted and is being processed.',
-        isRead: false,
-      },
-    ],
-  });
-
-  console.log('✅ Notifications created.\n');
-
-  // ==========================================
-  // SUMMARY
-  // ==========================================
-  console.log('='.repeat(60));
-  console.log('🎉 Seed completed successfully!\n');
-  console.log('📌 Test Credentials (all passwords: Test@1234)\n');
-  console.log('Role              | Email');
-  console.log('-'.repeat(55));
-  console.log(`SUPER_ADMIN       | ${superAdminUser.email}`);
-  console.log(`PHARMACY (owner)  | ${pharmacyUser.email}`);
-  console.log(`BRANCH_MANAGER    | ${branchManagerUser.email}`);
-  console.log(`PHARMACIST        | ${pharmacistUser.email}`);
-  console.log(`CASHIER           | ${cashierUser.email}`);
-  console.log(`PATIENT (Alice)   | ${patient1User.email}`);
-  console.log(`PATIENT (Bob)     | ${patient2User.email}`);
-  console.log('');
-  console.log('⚠️  Super admin password:', process.env.SUPER_ADMIN_PASSWORD ?? 'SuperAdminPower@2025');
-  console.log('');
-  console.log('🏥 Pharmacy:     MedPlus Pharmacy (APPROVED)');
-  console.log('🏪 Branches:     Main Branch + Remera Branch (both APPROVED)');
-  console.log(`💊 Medications:  ${medications.length} medications (8 main branch, 2 remera branch)`);
-  console.log('📋 Prescriptions: 1 APPROVED (Alice), 1 PENDING (Bob)');
-  console.log('🛒 Orders:       1 COMPLETED, 1 PENDING, 1 ACCEPTED, 2 READY_FOR_PICKUP, 1 PREPARING');
-  console.log('🔄 Transfers:    1 COMPLETED, 1 PENDING');
-  console.log('🕐 Attendance:   2 COMPLETED (yesterday), 1 PENDING (today)');
-  console.log('='.repeat(60));
+  console.log('\n✅ Nelly\'s branch conflict resolved and updated with Dev branch!');
 }
 
 main()

@@ -1,13 +1,13 @@
 // backend/src/staff/dto/update-staff.dto.ts
 
-import { 
-  IsString, 
+import {
+  IsString,
   IsIn,
-  IsArray, 
-  IsOptional, 
+  IsArray,
+  IsOptional,
   IsDateString,
   MinLength,
-  MaxLength 
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { StaffPermission } from '../../common/constants/staff-permission.enum';
@@ -20,7 +20,7 @@ export class UpdateStaffDto {
   @IsString()
   @MinLength(2)
   @MaxLength(50)
-  @Transform(({ value }) => value?.trim())
+  @Transform(({ value }: { value: string }) => value?.trim())
   firstName?: string;
 
   @ApiProperty({ required: false })
@@ -28,7 +28,7 @@ export class UpdateStaffDto {
   @IsString()
   @MinLength(2)
   @MaxLength(50)
-  @Transform(({ value }) => value?.trim())
+  @Transform(({ value }: { value: string }) => value?.trim())
   lastName?: string;
 
   @ApiProperty({ required: false })
@@ -37,10 +37,10 @@ export class UpdateStaffDto {
   @MaxLength(20)
   phone?: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Update staff permissions',
     isArray: true,
-    required: false 
+    required: false,
   })
   @IsOptional()
   @IsArray()

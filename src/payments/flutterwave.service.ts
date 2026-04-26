@@ -13,14 +13,13 @@ export class FlutterwaveService {
   private readonly encryptionKey: string;
 
   constructor(
-  private configService: ConfigService,
-  private httpService: HttpService,
-) {
-  this.secretKey = this.configService.get('FLUTTERWAVE_SECRET_KEY')!;
-  this.publicKey = this.configService.get('FLUTTERWAVE_PUBLIC_KEY')!;
-  this.encryptionKey = this.configService.get('FLUTTERWAVE_ENCRYPTION_KEY')!;
-}
-
+    private configService: ConfigService,
+    private httpService: HttpService,
+  ) {
+    this.secretKey = this.configService.get('FLUTTERWAVE_SECRET_KEY')!;
+    this.publicKey = this.configService.get('FLUTTERWAVE_PUBLIC_KEY')!;
+    this.encryptionKey = this.configService.get('FLUTTERWAVE_ENCRYPTION_KEY')!;
+  }
 
   // ========================================
   // INITIALIZE PAYMENT
@@ -77,11 +76,14 @@ export class FlutterwaveService {
   async verifyPayment(transactionId: string) {
     try {
       const response = await firstValueFrom(
-        this.httpService.get(`${this.baseUrl}/transactions/${transactionId}/verify`, {
-          headers: {
-            Authorization: `Bearer ${this.secretKey}`,
+        this.httpService.get(
+          `${this.baseUrl}/transactions/${transactionId}/verify`,
+          {
+            headers: {
+              Authorization: `Bearer ${this.secretKey}`,
+            },
           },
-        }),
+        ),
       );
 
       return response.data;
@@ -116,12 +118,16 @@ export class FlutterwaveService {
 
     try {
       const response = await firstValueFrom(
-        this.httpService.post(`${this.baseUrl}/charges?type=mobile_money_rwanda`, payload, {
-          headers: {
-            Authorization: `Bearer ${this.secretKey}`,
-            'Content-Type': 'application/json',
+        this.httpService.post(
+          `${this.baseUrl}/charges?type=mobile_money_rwanda`,
+          payload,
+          {
+            headers: {
+              Authorization: `Bearer ${this.secretKey}`,
+              'Content-Type': 'application/json',
+            },
           },
-        }),
+        ),
       );
 
       return response.data;

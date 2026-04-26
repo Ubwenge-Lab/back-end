@@ -25,7 +25,10 @@ export class NotificationsController {
 
   @Get()
   @ApiOperation({ summary: 'Get user notifications' })
-  getNotifications(@Req() req: any, @Query('userType') userType: 'patient' | 'pharmacy') {
+  getNotifications(
+    @Req() req: any,
+    @Query('userType') userType: 'patient' | 'pharmacy',
+  ) {
     return this.notificationsService.findByUser(req.user.sub, userType);
   }
 
@@ -37,7 +40,10 @@ export class NotificationsController {
 
   @Put('read-all')
   @ApiOperation({ summary: 'Mark all notifications as read' })
-  markAllAsRead(@Req() req: any, @Query('userType') userType: 'patient' | 'pharmacy') {
+  markAllAsRead(
+    @Req() req: any,
+    @Query('userType') userType: 'patient' | 'pharmacy',
+  ) {
     return this.notificationsService.markAllAsRead(req.user.sub, userType);
   }
 }

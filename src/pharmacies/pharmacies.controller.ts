@@ -15,7 +15,12 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth, ApiOkResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiBearerAuth,
+  ApiOkResponse,
+} from '@nestjs/swagger';
 import { PharmaciesService } from './pharmacies.service';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
@@ -23,11 +28,39 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
 import { PharmacyStatsResponseDto } from './dto/stats-response.dto';
+import { TriangulationService } from '../triangulation/triangulation.service';
+import { ParseFloatPipe } from '@nestjs/common';
 
 @ApiTags('Pharmacies')
 @Controller('pharmacies')
 export class PharmaciesController {
-  constructor(private pharmaciesService: PharmaciesService) {}
+  constructor(
+    private pharmaciesService: PharmaciesService,
+    private triangulationService: TriangulationService,
+  ) {}
+
+  // ========================================
+  // PATIENT ENDPOINTS
+  // ========================================
+
+  @Get('nearby')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PATIENT)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Find pharmacies within a radius of the patient' })
+  getNearby(
+    @Query('lat', ParseFloatPipe) lat: number,
+    @Query('lng', ParseFloatPipe) lng: number,
+    @Query('radius', ParseFloatPipe) radius: number,
+    @Req() req: any,
+  ) {
+    return this.triangulationService.getNearbyPharmacies(
+      lat,
+      lng,
+      radius,
+      req.user.sub,
+    );
+  }
 
   // ========================================
   // PUBLIC ENDPOINTS
@@ -37,12 +70,6 @@ export class PharmaciesController {
   @ApiOperation({ summary: 'Get all approved pharmacies (Public)' })
   getApprovedPharmacies() {
     return this.pharmaciesService.getApprovedPharmacies();
-  }
-
-  @Get(':id')
-  @ApiOperation({ summary: 'Get pharmacy by ID (Public)' })
-  getPharmacyById(@Param('id') id: string) {
-    return this.pharmaciesService.findById(id);
   }
 
   // ========================================
@@ -55,7 +82,10 @@ export class PharmaciesController {
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Get pharmacy dashboard statistics' })
-  @ApiOkResponse({ type: PharmacyStatsResponseDto, description: 'Dashboard stats for the authenticated pharmacy' })
+  @ApiOkResponse({
+    type: PharmacyStatsResponseDto,
+    description: 'Dashboard stats for the authenticated pharmacy',
+  })
   getStats(@Req() req: any) {
     return this.pharmaciesService.getStats(req.user.sub);
   }
@@ -85,7 +115,9 @@ export class PharmaciesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get daily revenue for the past 30 days (total + per branch)' })
+  @ApiOperation({
+    summary: 'Get daily revenue for the past 30 days (total + per branch)',
+  })
   getDailyRevenue(@Req() req: any) {
     return this.pharmaciesService.getDailyRevenue(req.user.sub);
   }
@@ -95,7 +127,9 @@ export class PharmaciesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Get weekly revenue for the past 30 days (total + per branch)' })
+  @ApiOperation({
+    summary: 'Get weekly revenue for the past 30 days (total + per branch)',
+  })
   getWeeklyRevenue(@Req() req: any) {
     return this.pharmaciesService.getWeeklyRevenue(req.user.sub);
   }
@@ -124,7 +158,10 @@ export class PharmaciesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Update pharmacy profile (critical changes require admin approval)' })
+  @ApiOperation({
+    summary:
+      'Update pharmacy profile (critical changes require admin approval)',
+  })
   updateProfile(@Req() req: any, @Body() dto: UpdatePharmacyDto) {
     return this.pharmaciesService.updateProfile(req.user.sub, dto);
   }
@@ -134,7 +171,10 @@ export class PharmaciesController {
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PHARMACY)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Resubmit pharmacy application with updated documents (for rejected pharmacies)' })
+  @ApiOperation({
+    summary:
+      'Resubmit pharmacy application with updated documents (for rejected pharmacies)',
+  })
   resubmitApplication(@Req() req: any, @Body() dto: UpdatePharmacyDto) {
     return this.pharmaciesService.resubmitApplication(req.user.sub, dto);
   }
@@ -205,6 +245,18 @@ export class PharmaciesController {
     return this.pharmaciesService.getAllPharmacies(status);
   }
 
+  @Get('locations')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.SUPER_ADMIN, Role.PATIENT)
+  @ApiBearerAuth()
+  @ApiOperation({
+    summary:
+      'Get all pharmacy locations for map triangulation (Super Admin only)',
+  })
+  getPharmacyLocations() {
+    return this.pharmaciesService.getPharmacyLocations();
+  }
+
   @Post('admin/:id/approve')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.SUPER_ADMIN)
@@ -215,6 +267,22 @@ export class PharmaciesController {
     @Param('id') id: string,
     @Body() body: { approved: boolean; rejectionReason?: string },
   ) {
-    return this.pharmaciesService.approvePharmacy(id, body.approved, body.rejectionReason);
+    return this.pharmaciesService.approvePharmacy(
+      id,
+      body.approved,
+      body.rejectionReason,
+    );
   }
+
+
+  @Get(':id')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PATIENT, Role.SUPER_ADMIN) // Accessible to Patient and Super Admin
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Get pharmacy detail for map sidebar' })
+  async getPharmacyById(@Param('id') id: string) {
+    return this.pharmaciesService.getPharmacyDetails(id);
+  }
+
+
 }

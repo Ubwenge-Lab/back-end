@@ -21,8 +21,10 @@ export class EmailService {
   }
 
   private getFrom(): string {
-    const name = this.configService.get('RESEND_FROM_NAME') || 'Evuze Healthcare';
-    const email = this.configService.get('RESEND_FROM_EMAIL') || 'noreply@ubwengelab.rw';
+    const name =
+      this.configService.get('RESEND_FROM_NAME') || 'Evuze Healthcare';
+    const email =
+      this.configService.get('RESEND_FROM_EMAIL') || 'noreply@ubwengelab.rw';
     return `${name} <${email}>`;
   }
 
@@ -94,12 +96,19 @@ export class EmailService {
     `);
 
     try {
-      await this.resend.emails.send({ to: email, from: this.getFrom(), subject: '🔐 Verify Your Evuze Account', html });
+      await this.resend.emails.send({
+        to: email,
+        from: this.getFrom(),
+        subject: '🔐 Verify Your Evuze Account',
+        html,
+      });
       console.log(`✅ Verification email sent to ${email}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
       if (this.configService.get('NODE_ENV') === 'production') {
-        throw new InternalServerErrorException('Failed to send verification email');
+        throw new InternalServerErrorException(
+          'Failed to send verification email',
+        );
       }
     }
   }
@@ -134,12 +143,19 @@ export class EmailService {
     `);
 
     try {
-      await this.resend.emails.send({ to: email, from: this.getFrom(), subject: '🔑 Reset Your Evuze Password', html });
+      await this.resend.emails.send({
+        to: email,
+        from: this.getFrom(),
+        subject: '🔑 Reset Your Evuze Password',
+        html,
+      });
       console.log(`✅ Password reset email sent to ${email}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
       if (this.configService.get('NODE_ENV') === 'production') {
-        throw new InternalServerErrorException('Failed to send password reset email');
+        throw new InternalServerErrorException(
+          'Failed to send password reset email',
+        );
       }
     }
   }
@@ -161,8 +177,13 @@ export class EmailService {
     }
 
     const statusColors: Record<string, string> = {
-      PENDING: '#f59e0b', ACCEPTED: '#3b82f6', PREPARING: '#8b5cf6',
-      READY: '#10b981', DELIVERED: '#10b981', COMPLETED: '#10b981', CANCELLED: '#ef4444',
+      PENDING: '#f59e0b',
+      ACCEPTED: '#3b82f6',
+      PREPARING: '#8b5cf6',
+      READY: '#10b981',
+      DELIVERED: '#10b981',
+      COMPLETED: '#10b981',
+      CANCELLED: '#ef4444',
     };
     const color = statusColors[data.status.toUpperCase()] || '#667eea';
 
@@ -194,7 +215,12 @@ export class EmailService {
     `);
 
     try {
-      await this.resend.emails.send({ to: data.email, from: this.getFrom(), subject: `📦 Order #${data.orderNumber} — ${data.status}`, html });
+      await this.resend.emails.send({
+        to: data.email,
+        from: this.getFrom(),
+        subject: `📦 Order #${data.orderNumber} — ${data.status}`,
+        html,
+      });
       console.log(`✅ Order notification sent to ${data.email}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
@@ -205,11 +231,17 @@ export class EmailService {
   // 4. PHARMACY APPROVAL / REJECTION
   // ========================================
 
-  async sendPharmacyApproval(email: string, pharmacyName: string, approved: boolean, reason?: string) {
+  async sendPharmacyApproval(
+    email: string,
+    pharmacyName: string,
+    approved: boolean,
+    reason?: string,
+  ) {
     if (!this.resend) return;
 
-    const html = this.baseTemplate(approved
-      ? `<div style="text-align:center;margin:0 0 28px;">
+    const html = this.baseTemplate(
+      approved
+        ? `<div style="text-align:center;margin:0 0 28px;">
            <div style="display:inline-block;background:#d1fae5;border-radius:50%;width:72px;height:72px;line-height:72px;font-size:36px;">✅</div>
          </div>
          <h2 style="margin:0 0 8px;color:#065f46;font-size:22px;text-align:center;">Pharmacy Approved!</h2>
@@ -220,28 +252,35 @@ export class EmailService {
             style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
            Go to Dashboard →
          </a>`
-      : `<div style="text-align:center;margin:0 0 28px;">
+        : `<div style="text-align:center;margin:0 0 28px;">
            <div style="display:inline-block;background:#fee2e2;border-radius:50%;width:72px;height:72px;line-height:72px;font-size:36px;">⚠️</div>
          </div>
          <h2 style="margin:0 0 8px;color:#991b1b;font-size:22px;text-align:center;">Application Needs Attention</h2>
          <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;text-align:center;">
            Your pharmacy application for <strong>${pharmacyName}</strong> could not be approved at this time.
          </p>
-         ${reason ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+         ${
+           reason
+             ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
            <tr><td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
              <p style="margin:0 0 4px;color:#dc2626;font-size:12px;font-weight:700;text-transform:uppercase;">Reason</p>
              <p style="margin:0;color:#555;font-size:14px;">${reason}</p>
-           </td></tr></table>` : ''}
+           </td></tr></table>`
+             : ''
+         }
          <a href="${this.configService.get('FRONTEND_URL')}/login"
             style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#0a1628 0%,#0d9488 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
            Update Application →
-         </a>`
+         </a>`,
     );
 
     try {
       await this.resend.emails.send({
-        to: email, from: this.getFrom(),
-        subject: approved ? '✅ Pharmacy Application Approved — Evuze' : '⚠️ Pharmacy Application Update — Evuze',
+        to: email,
+        from: this.getFrom(),
+        subject: approved
+          ? '✅ Pharmacy Application Approved — Evuze'
+          : '⚠️ Pharmacy Application Update — Evuze',
         html,
       });
       console.log(`✅ Pharmacy approval email sent to ${email}`);
@@ -254,11 +293,17 @@ export class EmailService {
   // 5. PHARMACY PROFILE UPDATE NOTIFICATION
   // ========================================
 
-  async sendPharmacyUpdateNotification(email: string, pharmacyName: string, approved: boolean, reason?: string) {
+  async sendPharmacyUpdateNotification(
+    email: string,
+    pharmacyName: string,
+    approved: boolean,
+    reason?: string,
+  ) {
     if (!this.resend) return;
 
-    const html = this.baseTemplate(approved
-      ? `<h2 style="margin:0 0 8px;color:#065f46;font-size:22px;">Profile Update Approved ✅</h2>
+    const html = this.baseTemplate(
+      approved
+        ? `<h2 style="margin:0 0 8px;color:#065f46;font-size:22px;">Profile Update Approved ✅</h2>
          <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
            The profile update for <strong>${pharmacyName}</strong> has been approved. Your changes are now live.
          </p>
@@ -266,25 +311,32 @@ export class EmailService {
             style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
            View Your Profile →
          </a>`
-      : `<h2 style="margin:0 0 8px;color:#991b1b;font-size:22px;">Profile Update Needs Revision</h2>
+        : `<h2 style="margin:0 0 8px;color:#991b1b;font-size:22px;">Profile Update Needs Revision</h2>
          <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
            Your profile update for <strong>${pharmacyName}</strong> requires changes before it can go live.
          </p>
-         ${reason ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+         ${
+           reason
+             ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
            <tr><td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
              <p style="margin:0 0 4px;color:#dc2626;font-size:12px;font-weight:700;text-transform:uppercase;">Reason</p>
              <p style="margin:0;color:#555;font-size:14px;">${reason}</p>
-           </td></tr></table>` : ''}
+           </td></tr></table>`
+             : ''
+         }
          <a href="${this.configService.get('FRONTEND_URL')}/pharmacy/profile"
             style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
            Update Your Profile →
-         </a>`
+         </a>`,
     );
 
     try {
       await this.resend.emails.send({
-        to: email, from: this.getFrom(),
-        subject: approved ? '✅ Profile Update Approved — Evuze' : '⚠️ Profile Update Needs Revision — Evuze',
+        to: email,
+        from: this.getFrom(),
+        subject: approved
+          ? '✅ Profile Update Approved — Evuze'
+          : '⚠️ Profile Update Needs Revision — Evuze',
         html,
       });
       console.log(`✅ Pharmacy update notification sent to ${email}`);
@@ -297,7 +349,11 @@ export class EmailService {
   // 6. BRANCH MANAGER CREDENTIALS
   // ========================================
 
-  async sendBranchCredentials(email: string, tempPassword: string, pharmacyName: string) {
+  async sendBranchCredentials(
+    email: string,
+    tempPassword: string,
+    pharmacyName: string,
+  ) {
     if (!this.resend) {
       console.warn('Resend not configured - skipping email');
       return;
@@ -343,7 +399,12 @@ export class EmailService {
     `);
 
     try {
-      await this.resend.emails.send({ to: email, from: this.getFrom(), subject: `🏪 Branch Manager Account — ${pharmacyName}`, html });
+      await this.resend.emails.send({
+        to: email,
+        from: this.getFrom(),
+        subject: `🏪 Branch Manager Account — ${pharmacyName}`,
+        html,
+      });
       console.log(`Branch credentials email sent to ${email}`);
     } catch (error) {
       console.error('Resend error:', error.message);
@@ -354,11 +415,17 @@ export class EmailService {
   // 7A. BRANCH APPROVAL / REJECTION
   // ========================================
 
-  async sendBranchApproval(email: string, branchName: string, approved: boolean, reason?: string) {
+  async sendBranchApproval(
+    email: string,
+    branchName: string,
+    approved: boolean,
+    reason?: string,
+  ) {
     if (!this.resend) return;
 
-    const html = this.baseTemplate(approved
-      ? `<h2 style="margin:0 0 8px;color:#065f46;font-size:22px;">Branch Approved ✅</h2>
+    const html = this.baseTemplate(
+      approved
+        ? `<h2 style="margin:0 0 8px;color:#065f46;font-size:22px;">Branch Approved ✅</h2>
          <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
            Great news! <strong>${branchName}</strong> has been approved and is now active on Evuze Healthcare.
          </p>
@@ -366,22 +433,29 @@ export class EmailService {
             style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#10b981 0%,#059669 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
            Go to Dashboard →
          </a>`
-      : `<h2 style="margin:0 0 8px;color:#991b1b;font-size:22px;">Branch Application Update</h2>
+        : `<h2 style="margin:0 0 8px;color:#991b1b;font-size:22px;">Branch Application Update</h2>
          <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
            The branch application for <strong>${branchName}</strong> requires attention.
          </p>
-         ${reason ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+         ${
+           reason
+             ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
            <tr><td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
              <p style="margin:0 0 4px;color:#dc2626;font-size:12px;font-weight:700;text-transform:uppercase;">Reason</p>
              <p style="margin:0;color:#555;font-size:14px;">${reason}</p>
-           </td></tr></table>` : ''}
-         <p style="margin:0;color:#999;font-size:13px;">Please review and address the issues above.</p>`
+           </td></tr></table>`
+             : ''
+         }
+         <p style="margin:0;color:#999;font-size:13px;">Please review and address the issues above.</p>`,
     );
 
     try {
       await this.resend.emails.send({
-        to: email, from: this.getFrom(),
-        subject: approved ? `✅ Branch Approved — ${branchName}` : `⚠️ Branch Application Update — ${branchName}`,
+        to: email,
+        from: this.getFrom(),
+        subject: approved
+          ? `✅ Branch Approved — ${branchName}`
+          : `⚠️ Branch Application Update — ${branchName}`,
         html,
       });
     } catch (error) {
@@ -406,7 +480,11 @@ export class EmailService {
     }
 
     const loginUrl = `${this.configService.get('FRONTEND_URL')}/login`;
-    const roleEmojis: Record<string, string> = { PHARMACIST: '💊', CASHIER: '💳', BRANCH_MANAGER: '🏪' };
+    const roleEmojis: Record<string, string> = {
+      PHARMACIST: '💊',
+      CASHIER: '💳',
+      BRANCH_MANAGER: '🏪',
+    };
     const emoji = roleEmojis[role.toUpperCase()] || '👤';
 
     console.log('==========================================');
@@ -468,12 +546,19 @@ export class EmailService {
     `);
 
     try {
-      await this.resend.emails.send({ to: email, from: this.getFrom(), subject: `${emoji} Your Staff Account — ${pharmacyName}`, html });
+      await this.resend.emails.send({
+        to: email,
+        from: this.getFrom(),
+        subject: `${emoji} Your Staff Account — ${pharmacyName}`,
+        html,
+      });
       console.log(`✅ Staff credentials email sent to ${email}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
       if (this.configService.get('NODE_ENV') === 'production') {
-        throw new InternalServerErrorException('Failed to send staff credentials email');
+        throw new InternalServerErrorException(
+          'Failed to send staff credentials email',
+        );
       }
     }
   }

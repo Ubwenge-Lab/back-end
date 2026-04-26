@@ -1,15 +1,15 @@
 // backend/src/staff/dto/create-staff.dto.ts
 
-import { 
-  IsEmail, 
-  IsNotEmpty, 
-  IsString, 
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
   IsIn,
-  IsArray, 
-  IsOptional, 
+  IsArray,
+  IsOptional,
   IsDateString,
   MinLength,
-  MaxLength 
+  MaxLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { StaffPermission } from '../../common/constants/staff-permission.enum';
@@ -21,7 +21,7 @@ export class CreateStaffDto {
   @IsString()
   @MinLength(2)
   @MaxLength(50)
-  @Transform(({ value }) => value?.trim())
+  @Transform(({ value }: { value: string }) => value?.trim())
   firstName: string;
 
   @ApiProperty({ example: 'Doe' })
@@ -29,13 +29,13 @@ export class CreateStaffDto {
   @IsString()
   @MinLength(2)
   @MaxLength(50)
-  @Transform(({ value }) => value?.trim())
+  @Transform(({ value }: { value: string }) => value?.trim())
   lastName: string;
 
   @ApiProperty({ example: 'staff@pharmacy.com' })
   @IsNotEmpty()
   @IsEmail()
-  @Transform(({ value }) => value?.toLowerCase().trim())
+  @Transform(({ value }: { value: string }) => value?.toLowerCase().trim())
   email: string;
 
   @ApiProperty({ example: '+250788123456', required: false })
@@ -44,15 +44,18 @@ export class CreateStaffDto {
   @MaxLength(20)
   phone?: string;
 
-  @ApiProperty({ enum: ['PHARMACIST', 'CASHIER', 'NURSE'], example: 'PHARMACIST' })
+  @ApiProperty({
+    enum: ['PHARMACIST', 'CASHIER', 'NURSE'],
+    example: 'PHARMACIST',
+  })
   @IsNotEmpty()
   @IsIn(['PHARMACIST', 'CASHIER', 'NURSE'])
   role: 'PHARMACIST' | 'CASHIER' | 'NURSE';
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Array of permission strings',
     example: ['VIEW_ORDERS', 'ACCEPT_ORDERS', 'VIEW_INVENTORY'],
-    isArray: true 
+    isArray: true,
   })
   @IsArray()
   @IsIn(Object.values(StaffPermission), { each: true })
@@ -75,10 +78,10 @@ export class CreateStaffDto {
   @IsDateString()
   dateOfBirth?: string;
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Working hours schedule in JSON format',
     example: { monday: '08:00-17:00', tuesday: '08:00-17:00' },
-    required: false 
+    required: false,
   })
   @IsOptional()
   workingHours?: any;

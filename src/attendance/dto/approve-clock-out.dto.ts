@@ -4,9 +4,9 @@ import { IsOptional, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ApproveClockOutDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Optional notes from manager',
-    required: false 
+    required: false,
   })
   @IsOptional()
   @IsString()

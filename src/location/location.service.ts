@@ -16,7 +16,9 @@ export class LocationService {
    * Translates a raw text address into coordinates using OpenStreetMap Nominatim.
    * Returns null if it fails or if the address is not found/legit.
    */
-  async geocodeAddress(address: string): Promise<{ latitude: number; longitude: number } | null> {
+  async geocodeAddress(
+    address: string,
+  ): Promise<{ latitude: number; longitude: number } | null> {
     if (!address) return null;
 
     try {
@@ -41,11 +43,14 @@ export class LocationService {
           longitude: parseFloat(data[0].lon),
         };
       }
-      
+
       this.logger.warn(`No valid coordinates found for address: ${address}`);
       return null;
     } catch (error) {
-      this.logger.error(`Geocoding error for address ${address}:`, error.message);
+      this.logger.error(
+        `Geocoding error for address ${address}:`,
+        error.message,
+      );
       return null;
     }
   }
@@ -62,11 +67,18 @@ export class LocationService {
     activeLon?: number,
   ): Promise<{ latitude: number; longitude: number } | null> {
     // 1. If active coordinates exist and are valid numbers, trust them immediately
-    if (activeLat !== undefined && activeLon !== undefined && !isNaN(activeLat) && !isNaN(activeLon)) {
+    if (
+      activeLat !== undefined &&
+      activeLon !== undefined &&
+      !isNaN(activeLat) &&
+      !isNaN(activeLon)
+    ) {
       return { latitude: activeLat, longitude: activeLon };
     }
 
-    this.logger.log(`Active coordinates missing for User ${userId}. Falling back to registered address.`);
+    this.logger.log(
+      `Active coordinates missing for User ${userId}. Falling back to registered address.`,
+    );
 
     // 2. Lookup the user's registered address from the database based on role
     let registeredAddress: string | null = null;
@@ -106,7 +118,9 @@ export class LocationService {
     }
 
     if (!fallbackCoords) {
-      this.logger.warn(`Verification failed: User ${userId} has no active coordinates and no valid registered address.`);
+      this.logger.warn(
+        `Verification failed: User ${userId} has no active coordinates and no valid registered address.`,
+      );
       // Return null to signify that triangulation/delivery cannot be fulfilled
       return null;
     }

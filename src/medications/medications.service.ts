@@ -1,11 +1,21 @@
 // backend/src/medications/medications.service.ts
 
-import { Injectable, NotFoundException, ForbiddenException, ConflictException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PharmaciesService } from '../pharmacies/pharmacies.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StaffService } from '../staff/staff.service';
-import { CreateMedicationDto, UpdateMedicationDto, SearchMedicationsDto } from './dto';
+import {
+  CreateMedicationDto,
+  UpdateMedicationDto,
+  SearchMedicationsDto,
+} from './dto';
 
 @Injectable()
 export class MedicationsService {
@@ -17,28 +27,52 @@ export class MedicationsService {
   ) {}
 
   // Helper to resolve Pharmacy and Branch for Owners, Managers, and Staff
-  async resolvePharmacyAndBranch(userId: string): Promise<{ pharmacyId: string; branchId: string | null; isStaffOrManager: boolean }> {
+  async resolvePharmacyAndBranch(userId: string): Promise<{
+    pharmacyId: string;
+    branchId: string | null;
+    isStaffOrManager: boolean;
+  }> {
     try {
       const pharmacy = await this.pharmaciesService.findByUserId(userId);
-      return { pharmacyId: pharmacy.id, branchId: null, isStaffOrManager: false };
+      return {
+        pharmacyId: pharmacy.id,
+        branchId: null,
+        isStaffOrManager: false,
+      };
     } catch {}
 
-    const managerBranch = await this.prisma.branch.findUnique({ where: { managerId: userId } });
+    const managerBranch = await this.prisma.branch.findUnique({
+      where: { managerId: userId },
+    });
     if (managerBranch) {
-      return { pharmacyId: managerBranch.pharmacyId, branchId: managerBranch.id, isStaffOrManager: true };
+      return {
+        pharmacyId: managerBranch.pharmacyId,
+        branchId: managerBranch.id,
+        isStaffOrManager: true,
+      };
     }
 
     try {
       const staff = await this.staffService.findByUserId(userId);
-      return { pharmacyId: staff.branch.pharmacyId, branchId: staff.branch.id, isStaffOrManager: true };
+      return {
+        pharmacyId: staff.branch.pharmacyId,
+        branchId: staff.branch.id,
+        isStaffOrManager: true,
+      };
     } catch {
-      throw new ForbiddenException('User is not authorized to access medications');
+      throw new ForbiddenException(
+        'User is not authorized to access medications',
+      );
     }
   }
 
   // Create medication (Pharmacy, Manager, and Staff)
   async create(userId: string, dto: CreateMedicationDto) {
-    const { pharmacyId, branchId: staffBranchId, isStaffOrManager } = await this.resolvePharmacyAndBranch(userId);
+    const {
+      pharmacyId,
+      branchId: staffBranchId,
+      isStaffOrManager,
+    } = await this.resolvePharmacyAndBranch(userId);
 
     // FIX: Verify branch belongs to pharmacy
     const branch = await this.prisma.branch.findFirst({
@@ -50,11 +84,15 @@ export class MedicationsService {
     });
 
     if (!branch) {
-      throw new BadRequestException('Invalid branch or branch does not belong to your pharmacy');
+      throw new BadRequestException(
+        'Invalid branch or branch does not belong to your pharmacy',
+      );
     }
 
     if (isStaffOrManager && staffBranchId !== branch.id) {
-      throw new ForbiddenException('You can only create medications for your own branch');
+      throw new ForbiddenException(
+        'You can only create medications for your own branch',
+      );
     }
 
     // Check if medication with same name already exists for this branch
@@ -62,9 +100,9 @@ export class MedicationsService {
       where: {
         branchId: dto.branchId,
         OR: [
-          { name: {equals:dto.name, mode:'insensitive'}},
-          {chemicalName: {equals: dto.chemicalName, mode:'insensitive'}}
-        ]
+          { name: { equals: dto.name, mode: 'insensitive' } },
+          { chemicalName: { equals: dto.chemicalName, mode: 'insensitive' } },
+        ],
       },
     });
 
@@ -81,7 +119,8 @@ export class MedicationsService {
           chemicalName: dto.chemicalName ?? existingMedication.chemicalName,
           description: dto.description ?? existingMedication.description,
           category: dto.category ?? existingMedication.category,
-          lowStockThreshold: dto.lowStockThreshold ?? existingMedication.lowStockThreshold,
+          lowStockThreshold:
+            dto.lowStockThreshold ?? existingMedication.lowStockThreshold,
           imageUrl: dto.imageUrl ?? existingMedication.imageUrl,
         },
         include: {
@@ -111,7 +150,9 @@ export class MedicationsService {
     return this.prisma.medication.create({
       data: {
         name: registryData ? registryData.brandName : dto.name,
-        chemicalName: registryData ? registryData.genericName : dto.chemicalName,
+        chemicalName: registryData
+          ? registryData.genericName
+          : dto.chemicalName,
         description: registryData
           ? `${registryData.dosageForm} - ${registryData.dosageStrength}. Manufactured by ${registryData.manufacturerName}.`
           : dto.description,
@@ -151,7 +192,8 @@ export class MedicationsService {
 
   // Get all medications for a pharmacy by user ID
   async findByPharmacyUserId(userId: string) {
-    const { pharmacyId, branchId } = await this.resolvePharmacyAndBranch(userId);
+    const { pharmacyId, branchId } =
+      await this.resolvePharmacyAndBranch(userId);
     if (branchId) {
       return this.findByBranch(branchId);
     }
@@ -194,22 +236,30 @@ export class MedicationsService {
   // Update medication
   async update(id: string, userId: string, dto: UpdateMedicationDto) {
     const medication = await this.findById(id);
-    const { pharmacyId, branchId: staffBranchId, isStaffOrManager } = await this.resolvePharmacyAndBranch(userId);
+    const {
+      pharmacyId,
+      branchId: staffBranchId,
+      isStaffOrManager,
+    } = await this.resolvePharmacyAndBranch(userId);
 
     if (medication.pharmacyId !== pharmacyId) {
       throw new ForbiddenException('You can only update your own medications');
     }
-    
+
     if (isStaffOrManager && medication.branchId !== staffBranchId) {
-      throw new ForbiddenException('You can only update medications in your own branch');
+      throw new ForbiddenException(
+        'You can only update medications in your own branch',
+      );
     }
 
     // If updating branchId, verify it belongs to pharmacy
     if (dto.branchId && dto.branchId !== medication.branchId) {
       if (isStaffOrManager) {
-        throw new ForbiddenException('Staff members cannot move medications between branches');
+        throw new ForbiddenException(
+          'Staff members cannot move medications between branches',
+        );
       }
-    
+
       const branch = await this.prisma.branch.findFirst({
         where: {
           id: dto.branchId,
@@ -219,7 +269,9 @@ export class MedicationsService {
       });
 
       if (!branch) {
-        throw new BadRequestException('Invalid branch or branch does not belong to your pharmacy');
+        throw new BadRequestException(
+          'Invalid branch or branch does not belong to your pharmacy',
+        );
       }
     }
 
@@ -265,14 +317,20 @@ export class MedicationsService {
   // Delete medication
   async delete(id: string, userId: string) {
     const medication = await this.findById(id);
-    const { pharmacyId, branchId: staffBranchId, isStaffOrManager } = await this.resolvePharmacyAndBranch(userId);
+    const {
+      pharmacyId,
+      branchId: staffBranchId,
+      isStaffOrManager,
+    } = await this.resolvePharmacyAndBranch(userId);
 
     if (medication.pharmacyId !== pharmacyId) {
       throw new ForbiddenException('You can only delete your own medications');
     }
 
     if (isStaffOrManager && medication.branchId !== staffBranchId) {
-      throw new ForbiddenException('You can only delete medications in your own branch');
+      throw new ForbiddenException(
+        'You can only delete medications in your own branch',
+      );
     }
 
     await this.prisma.medication.delete({
@@ -358,7 +416,8 @@ export class MedicationsService {
 
   // Get low stock medications for a pharmacy
   async getLowStock(userId: string) {
-    const { pharmacyId, branchId } = await this.resolvePharmacyAndBranch(userId);
+    const { pharmacyId, branchId } =
+      await this.resolvePharmacyAndBranch(userId);
 
     // Use raw query to compare quantity against lowStockThreshold column
     let lowStockIds;
@@ -395,7 +454,8 @@ export class MedicationsService {
 
   // Get out of stock medications
   async getOutOfStock(userId: string) {
-    const { pharmacyId, branchId } = await this.resolvePharmacyAndBranch(userId);
+    const { pharmacyId, branchId } =
+      await this.resolvePharmacyAndBranch(userId);
 
     const where: any = {
       pharmacyId,
@@ -447,7 +507,10 @@ export class MedicationsService {
     });
 
     // Send low-stock notification to pharmacy owner
-    if (updated.quantity <= medication.lowStockThreshold && updated.quantity > 0) {
+    if (
+      updated.quantity <= medication.lowStockThreshold &&
+      updated.quantity > 0
+    ) {
       try {
         await this.notificationsService.create({
           pharmacyId: medication.pharmacy.id,

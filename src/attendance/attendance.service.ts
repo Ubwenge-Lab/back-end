@@ -1,15 +1,22 @@
 // backend/src/attendance/attendance.service.ts
 
-import { 
-  Injectable, 
-  NotFoundException, 
-  ForbiddenException, 
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
   BadRequestException,
-  ConflictException
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { AttendanceStatus } from '@prisma/client';
-import { ClockInDto, ClockOutDto, ApproveClockInDto, RejectClockInDto, ApproveClockOutDto, RejectClockOutDto } from './dto';
+import {
+  ClockInDto,
+  ClockOutDto,
+  ApproveClockInDto,
+  RejectClockInDto,
+  ApproveClockOutDto,
+  RejectClockOutDto,
+} from './dto';
 
 @Injectable()
 export class AttendanceService {
@@ -311,7 +318,9 @@ export class AttendanceService {
     }
 
     if (attendance.branchId !== branch.id) {
-      throw new ForbiddenException('This attendance record belongs to another branch');
+      throw new ForbiddenException(
+        'This attendance record belongs to another branch',
+      );
     }
 
     if (attendance.status !== AttendanceStatus.PENDING) {
@@ -373,7 +382,9 @@ export class AttendanceService {
     }
 
     if (attendance.branchId !== branch.id) {
-      throw new ForbiddenException('This attendance record belongs to another branch');
+      throw new ForbiddenException(
+        'This attendance record belongs to another branch',
+      );
     }
 
     if (attendance.status !== AttendanceStatus.PENDING) {
@@ -428,11 +439,15 @@ export class AttendanceService {
     }
 
     if (attendance.branchId !== branch.id) {
-      throw new ForbiddenException('This attendance record belongs to another branch');
+      throw new ForbiddenException(
+        'This attendance record belongs to another branch',
+      );
     }
 
     if (attendance.status !== AttendanceStatus.CLOCKED_OUT) {
-      throw new BadRequestException('This clock-out has already been processed');
+      throw new BadRequestException(
+        'This clock-out has already been processed',
+      );
     }
 
     if (!attendance.clockOutTime) {
@@ -442,7 +457,8 @@ export class AttendanceService {
     // Calculate total hours
     const clockInTime = new Date(attendance.clockInTime);
     const clockOutTime = new Date(attendance.clockOutTime);
-    const totalHours = (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
+    const totalHours =
+      (clockOutTime.getTime() - clockInTime.getTime()) / (1000 * 60 * 60);
 
     const updated = await this.prisma.attendance.update({
       where: { id: attendanceId },
@@ -506,11 +522,15 @@ export class AttendanceService {
     }
 
     if (attendance.branchId !== branch.id) {
-      throw new ForbiddenException('This attendance record belongs to another branch');
+      throw new ForbiddenException(
+        'This attendance record belongs to another branch',
+      );
     }
 
     if (attendance.status !== AttendanceStatus.CLOCKED_OUT) {
-      throw new BadRequestException('This clock-out has already been processed');
+      throw new BadRequestException(
+        'This clock-out has already been processed',
+      );
     }
 
     // Reset clock-out, allow staff to clock out again
@@ -608,17 +628,17 @@ export class AttendanceService {
 
     const [total, pending, approved, completed, rejected] = await Promise.all([
       this.prisma.attendance.count({ where }),
-      this.prisma.attendance.count({ 
-        where: { ...where, status: AttendanceStatus.PENDING } 
+      this.prisma.attendance.count({
+        where: { ...where, status: AttendanceStatus.PENDING },
       }),
-      this.prisma.attendance.count({ 
-        where: { ...where, status: AttendanceStatus.APPROVED } 
+      this.prisma.attendance.count({
+        where: { ...where, status: AttendanceStatus.APPROVED },
       }),
-      this.prisma.attendance.count({ 
-        where: { ...where, status: AttendanceStatus.COMPLETED } 
+      this.prisma.attendance.count({
+        where: { ...where, status: AttendanceStatus.COMPLETED },
       }),
-      this.prisma.attendance.count({ 
-        where: { ...where, status: AttendanceStatus.REJECTED } 
+      this.prisma.attendance.count({
+        where: { ...where, status: AttendanceStatus.REJECTED },
       }),
     ]);
 
@@ -647,7 +667,9 @@ export class AttendanceService {
     });
 
     if (!branch) {
-      throw new ForbiddenException('Only branch managers can perform this action');
+      throw new ForbiddenException(
+        'Only branch managers can perform this action',
+      );
     }
 
     return branch;

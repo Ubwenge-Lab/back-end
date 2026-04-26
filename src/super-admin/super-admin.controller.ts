@@ -17,7 +17,12 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
-import { ApprovePharmacyDto, RejectPharmacyDto, RejectBranchDto } from './dto';
+import {
+  ApprovePharmacyDto,
+  RejectPharmacyDto,
+  RejectBranchDto,
+  VerifyLocationDto,
+} from './dto';
 
 @ApiTags('Super Admin')
 @Controller('super-admin')
@@ -25,7 +30,7 @@ import { ApprovePharmacyDto, RejectPharmacyDto, RejectBranchDto } from './dto';
 @Roles(Role.SUPER_ADMIN)
 @ApiBearerAuth()
 export class SuperAdminController {
-  constructor(private superAdminService: SuperAdminService) { }
+  constructor(private superAdminService: SuperAdminService) {}
 
   @Get('analytics')
   @ApiOperation({ summary: 'Get platform analytics' })
@@ -43,6 +48,15 @@ export class SuperAdminController {
   @ApiOperation({ summary: 'Get all pharmacies' })
   getAllPharmacies(@Query('status') status?: string) {
     return this.superAdminService.getAllPharmacies(status);
+  }
+
+  @Get('pharmacies/unverified-locations')
+  @ApiOperation({
+    summary:
+      'Get pharmacies with coordinates that are not yet location-verified',
+  })
+  getUnverifiedLocations() {
+    return this.superAdminService.getUnverifiedLocations();
   }
 
   @Get('pharmacies/:id')
@@ -67,7 +81,10 @@ export class SuperAdminController {
   // PATCH method for frontend compatibility
   @Patch('pharmacies/:id/approve')
   @ApiOperation({ summary: 'Approve pharmacy (PATCH)' })
-  patchApprovePharmacy(@Param('id') id: string, @Body() dto: ApprovePharmacyDto) {
+  patchApprovePharmacy(
+    @Param('id') id: string,
+    @Body() dto: ApprovePharmacyDto,
+  ) {
     return this.superAdminService.approvePharmacy(id, dto);
   }
 
@@ -115,6 +132,15 @@ export class SuperAdminController {
       startDate ? new Date(startDate) : undefined,
       endDate ? new Date(endDate) : undefined,
     );
+  }
+
+  @Patch('pharmacies/:id/verify-location')
+  @ApiOperation({ summary: 'Verify or flag pharmacy location coordinates' })
+  verifyPharmacyLocation(
+    @Param('id') id: string,
+    @Body() dto: VerifyLocationDto,
+  ) {
+    return this.superAdminService.verifyPharmacyLocation(id, dto);
   }
 
   @Get('branches/pending')

@@ -1,15 +1,27 @@
 // backend/src/pharmacies/dto/update-pharmacy.dto.ts
 
-import { IsString, IsOptional, IsNumber, IsObject, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsNumber,
+  IsObject,
+  IsDateString,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class UpdatePharmacyDto {
-  @ApiProperty({ required: false, description: 'Pharmacy business name (requires admin approval)' })
+  @ApiProperty({
+    required: false,
+    description: 'Pharmacy business name (requires admin approval)',
+  })
   @IsString()
   @IsOptional()
   name?: string;
 
-  @ApiProperty({ required: false, description: 'Representative name (requires admin approval)' })
+  @ApiProperty({
+    required: false,
+    description: 'Representative name (requires admin approval)',
+  })
   @IsString()
   @IsOptional()
   representativeName?: string;
@@ -34,17 +46,26 @@ export class UpdatePharmacyDto {
   @IsOptional()
   longitude?: number;
 
-  @ApiProperty({ required: false, description: 'Date of incorporation (requires admin approval)' })
+  @ApiProperty({
+    required: false,
+    description: 'Date of incorporation (requires admin approval)',
+  })
   @IsDateString()
   @IsOptional()
   dateOfIncorporation?: string;
 
-  @ApiProperty({ required: false, description: 'RDB Certificate (requires admin approval)' })
+  @ApiProperty({
+    required: false,
+    description: 'RDB Certificate (requires admin approval)',
+  })
   @IsString()
   @IsOptional()
   rdbCertificate?: string;
 
-  @ApiProperty({ required: false, description: 'Pharmacy License (requires admin approval)' })
+  @ApiProperty({
+    required: false,
+    description: 'Pharmacy License (requires admin approval)',
+  })
   @IsString()
   @IsOptional()
   pharmacyLicense?: string;
@@ -54,7 +75,10 @@ export class UpdatePharmacyDto {
   @IsOptional()
   deliveryZones?: any;
 
-  @ApiProperty({ required: false, description: 'JSON object of operating hours' })
+  @ApiProperty({
+    required: false,
+    description: 'JSON object of operating hours',
+  })
   @IsObject()
   @IsOptional()
   operatingHours?: any;

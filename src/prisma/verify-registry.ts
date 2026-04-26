@@ -29,26 +29,33 @@ async function main() {
 
   if (searchResults.length > 0) {
     console.log(`✅ Found ${searchResults.length} matches. Examples:`);
-    searchResults.forEach(m => console.log(`   - ${m.brandName} (${m.genericName}) [${m.dosageStrength}]`));
+    searchResults.forEach((m) =>
+      console.log(
+        `   - ${m.brandName} (${m.genericName}) [${m.dosageStrength}]`,
+      ),
+    );
   } else {
     console.log(`⚠️ No matches for "${query}". Trying random sample...`);
   }
 
   // 3. Random Sample
   console.log('\n🎲 Random 5 Records:');
-  const allIds = await prisma.medicationRegistry.findMany({ select: { id: true }, take: 100 });
+  const allIds = await prisma.medicationRegistry.findMany({
+    select: { id: true },
+    take: 100,
+  });
 
   // Pick 5 random
   const randomIds = allIds
     .sort(() => 0.5 - Math.random())
     .slice(0, 5)
-    .map(i => i.id);
+    .map((i) => i.id);
 
   const randomRecords = await prisma.medicationRegistry.findMany({
     where: { id: { in: randomIds } },
   });
 
-  randomRecords.forEach(r => {
+  randomRecords.forEach((r) => {
     console.log(`
     --------------------------------------------------
     🆔 Registration No: ${r.registrationNumber}
@@ -58,9 +65,8 @@ async function main() {
     📅 Expiry: ${r.expiryDate ? r.expiryDate.toISOString().split('T')[0] : 'N/A'}
     --------------------------------------------------`);
   });
-
 }
 
 main()
-  .catch(e => console.error(e))
+  .catch((e) => console.error(e))
   .finally(async () => await prisma.$disconnect());
