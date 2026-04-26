@@ -379,6 +379,7 @@ model Payment {
   status                PaymentStatus @default(PENDING)
   transactionId         String?       @unique
   flutterwaveRef        String?       @unique
+  receiptNumber         String?       @unique
   insuranceProvider     String?
   insurancePolicyNumber String?
   insuranceCoverage     Float?

@@ -22,6 +22,7 @@ import {
   VerifyPaymentDto,
   MobileMoneyPaymentDto,
   CheckoutDto,
+  RecordPaymentDto,
 } from './dto';
 
 @ApiTags('Payments')
@@ -78,5 +79,16 @@ export class PaymentsController {
   })
   checkout(@Req() req: any, @Body() dto: CheckoutDto) {
     return this.paymentsService.checkout(req.user.sub, dto);
+  }
+
+  @Post('record')
+  @Roles(Role.CASHIER, Role.PHARMACIST, Role.BRANCH_MANAGER)
+  @ApiOperation({
+    summary: 'Record in-person payment collection',
+    description:
+      'Records cash, card, or manual MoMo payments collected at the counter. Creates a completed payment and updates order status atomically.',
+  })
+  recordPayment(@Req() req: any, @Body() dto: RecordPaymentDto) {
+    return this.paymentsService.recordPayment(req.user.sub, dto);
   }
 }

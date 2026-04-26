@@ -14,6 +14,7 @@ import {
   VerifyPaymentDto,
   MobileMoneyPaymentDto,
   CheckoutDto,
+  RecordPaymentDto,
 } from './dto';
 import { MtnCallbackDto } from './dto/mtn-callback.dto';
 import { CreateOrderDto } from '../orders/dto';
@@ -517,6 +518,159 @@ export class PaymentsService {
         patientPayment: order.patientPayment,
       },
       payment: paymentResult,
+    };
+  }
+
+  // ========================================
+  // RECORD IN-PERSON PAYMENT
+  // ========================================
+
+  async recordPayment(staffUserId: string, dto: RecordPaymentDto) {
+    // Find staff member to get their branch
+    const staff = await this.prisma.staff.findUnique({
+      where: { userId: staffUserId },
+      include: { branch: true },
+    });
+
+    if (!staff) {
+      throw new NotFoundException('Staff member not found');
+    }
+
+    // Find the order and validate it belongs to staff's branch
+    const order = await this.prisma.order.findUnique({
+      where: { id: dto.orderId },
+      include: {
+        patient: true,
+        pharmacy: true,
+        branch: true,
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.branchId !== staff.branchId) {
+      throw new NotFoundException('Order does not belong to your branch');
+    }
+
+    // Validate order status
+    if (order.status === 'CANCELLED') {
+      throw new BadRequestException(
+        'Cannot record payment for cancelled order',
+      );
+    }
+
+    if (order.paymentStatus === 'COMPLETED') {
+      throw new BadRequestException('Order already paid');
+    }
+
+    // Validate amount - no partial payments
+    if (dto.amountReceived < order.total) {
+      throw new BadRequestException(
+        'Amount received is less than order total. Partial payments are not allowed.',
+      );
+    }
+
+    // Validate insurance fields if method is INSURANCE
+    if (dto.method === 'INSURANCE') {
+      if (!dto.insuranceProvider || !dto.insurancePolicyNumber) {
+        throw new BadRequestException(
+          'Insurance provider and policy number are required for insurance payments',
+        );
+      }
+    }
+
+    // Generate receipt number (sequential per branch)
+    const lastPayment = await this.prisma.payment.findFirst({
+      where: {
+        order: {
+          branchId: staff.branchId,
+        },
+        receiptNumber: {
+          not: null,
+        },
+      },
+      orderBy: {
+        createdAt: 'desc',
+      },
+    });
+
+    let receiptNumber = 'RCP-000001'; // Default for first receipt
+    if (lastPayment?.receiptNumber) {
+      // Extract the number from the last receipt (RCP-XXXXXX)
+      const lastNumber = parseInt(
+        lastPayment.receiptNumber.replace('RCP-', ''),
+        10,
+      );
+      const nextNumber = lastNumber + 1;
+      receiptNumber = `RCP-${nextNumber.toString().padStart(6, '0')}`;
+    }
+
+    // Run all operations in a transaction
+    const result = await this.prisma.$transaction(async (tx) => {
+      // Create payment record
+      const payment = await tx.payment.create({
+        data: {
+          orderId: order.id,
+          amount: dto.amountReceived,
+          paymentMethod: dto.method,
+          status: 'COMPLETED',
+          receiptNumber,
+          insuranceProvider: dto.insuranceProvider,
+          insurancePolicyNumber: dto.insurancePolicyNumber,
+          insuranceCoverage:
+            dto.method === 'INSURANCE' ? order.insuranceCoverage : null,
+          insuranceVerified: dto.method === 'INSURANCE',
+        },
+      });
+
+      // Update order payment status
+      await tx.order.update({
+        where: { id: order.id },
+        data: {
+          paymentStatus: 'COMPLETED',
+        },
+      });
+
+      return payment;
+    });
+
+    // Handle payment success (stock reduction, etc.)
+    await this.ordersService.handlePaymentSuccess(order.id);
+
+    // Send notifications
+    await this.notificationsService.create({
+      patientId: order.patientId,
+      orderId: order.id,
+      type: 'ORDER_PLACED',
+      title: 'Payment Recorded',
+      message: `Payment of ${dto.amountReceived} RWF recorded for order #${order.orderNumber}. Receipt: ${receiptNumber}`,
+    });
+
+    await this.notificationsService.create({
+      pharmacyId: order.pharmacyId,
+      orderId: order.id,
+      type: 'ORDER_PLACED',
+      title: 'Payment Received',
+      message: `Payment recorded for order #${order.orderNumber}. Receipt: ${receiptNumber}`,
+    });
+
+    return {
+      success: true,
+      payment: {
+        id: result.id,
+        amount: result.amount,
+        paymentMethod: result.paymentMethod,
+        receiptNumber: result.receiptNumber,
+        createdAt: result.createdAt,
+      },
+      order: {
+        id: order.id,
+        orderNumber: order.orderNumber,
+        total: order.total,
+        paymentStatus: 'COMPLETED',
+      },
     };
   }
 }
