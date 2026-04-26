@@ -722,8 +722,10 @@ async function main() {
     },
   });
 
-  // Order 5: READY_FOR_PICKUP walk-in order for Bob, will pay cash at the counter.
-  // Lets the cashier exercise the Record tab end to end.
+  // Order 5: READY_FOR_PICKUP walk-in order for Bob, paying at the counter.
+  // Lets the cashier exercise the Record tab end to end. Uses CARD here because
+  // the PaymentMethod enum does not include CASH; the actual payment method
+  // captured by the Record tab is independent of this order field.
   await prisma.order.create({
     data: {
       patientId: patient2.id,
@@ -734,7 +736,7 @@ async function main() {
       status: 'READY_FOR_PICKUP',
       subtotal: 4500, // 3*ibuprofen(800) + 7*ors(300)
       total: 4500,
-      paymentMethod: 'CASH',
+      paymentMethod: 'CARD',
       paymentStatus: 'PENDING',
       patientPayment: 4500,
       orderItems: {
