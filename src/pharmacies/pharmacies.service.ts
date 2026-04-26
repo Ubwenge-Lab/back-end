@@ -1,7 +1,12 @@
 // backend/src/pharmacies/pharmacies.service.ts
 // COMPLETE VERSION - With Stats, Analytics, and Patients Viewing
 
-import { Injectable, NotFoundException, BadRequestException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  BadRequestException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
 import { EmailService } from '../notifications/email.service';
@@ -22,38 +27,46 @@ export class PharmaciesService {
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
+    const endOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
 
-  // total branches adn total employees
+    // total branches adn total employees
     const [totalBranches, totalEmployees] = await Promise.all([
-        this.prisma.branch.count({
-            where: { pharmacyId: pharmacy.id },
-        }),
-        this.prisma.staff.count({
-            where: {
-                branch: { pharmacyId: pharmacy.id },
-                status: 'ACTIVE',
-            },
-        }),
+      this.prisma.branch.count({
+        where: { pharmacyId: pharmacy.id },
+      }),
+      this.prisma.staff.count({
+        where: {
+          branch: { pharmacyId: pharmacy.id },
+          status: 'ACTIVE',
+        },
+      }),
     ]);
 
     // Revenue total
     const [monthlyRevenueResult, totalRevenueResult] = await Promise.all([
-        this.prisma.order.aggregate({
-            where: {
-                pharmacyId: pharmacy.id,
-                status: 'COMPLETED',
-                createdAt: { gte: startOfMonth, lte: endOfMonth },
-            },
-            _sum: { total: true },
-        }),
-        this.prisma.order.aggregate({
-            where: {
-                pharmacyId: pharmacy.id,
-                status: 'COMPLETED',
-            },
-            _sum: { total: true },
-        }),
+      this.prisma.order.aggregate({
+        where: {
+          pharmacyId: pharmacy.id,
+          status: 'COMPLETED',
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
+        },
+        _sum: { total: true },
+      }),
+      this.prisma.order.aggregate({
+        where: {
+          pharmacyId: pharmacy.id,
+          status: 'COMPLETED',
+        },
+        _sum: { total: true },
+      }),
     ]);
 
     const monthlyRevenue = monthlyRevenueResult._sum.total ?? 0;
@@ -61,166 +74,201 @@ export class PharmaciesService {
 
     // Revenue overtime (last 6 months)
     const revenueOverTime = await Promise.all(
-        Array.from({ length: 6 }, (_, i) => {
-            const date = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-            const start = new Date(date.getFullYear(), date.getMonth(), 1);
-            const end = new Date(date.getFullYear(), date.getMonth() + 1, 0, 23, 59, 59, 999);
-            return this.prisma.order
-                .aggregate({
-                    where: {
-                        pharmacyId: pharmacy.id,
-                        status: 'COMPLETED',
-                        createdAt: { gte: start, lte: end },
-                    },
-                    _sum: { total: true },
-                })
-                .then((result) => ({
-                    month: date.toLocaleString('default', { month: 'short' }),
-                    revenue: result._sum.total ?? 0,
-                }));
-        }),
+      Array.from({ length: 6 }, (_, i) => {
+        const date = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
+        const start = new Date(date.getFullYear(), date.getMonth(), 1);
+        const end = new Date(
+          date.getFullYear(),
+          date.getMonth() + 1,
+          0,
+          23,
+          59,
+          59,
+          999,
+        );
+        return this.prisma.order
+          .aggregate({
+            where: {
+              pharmacyId: pharmacy.id,
+              status: 'COMPLETED',
+              createdAt: { gte: start, lte: end },
+            },
+            _sum: { total: true },
+          })
+          .then((result) => ({
+            month: date.toLocaleString('default', { month: 'short' }),
+            revenue: result._sum.total ?? 0,
+          }));
+      }),
     );
 
     // Revenue by branch
     const branches = await this.prisma.branch.findMany({
-        where: { pharmacyId: pharmacy.id },
-        select: { id: true, name: true },
+      where: { pharmacyId: pharmacy.id },
+      select: { id: true, name: true },
     });
 
     const revenueByBranch = await Promise.all(
-        branches.map(async (branch) => {
-            const result = await this.prisma.order.aggregate({
-                where: {
-                    branchId: branch.id,
-                    status: 'COMPLETED',
-                    createdAt: { gte: startOfMonth, lte: endOfMonth },
-                },
-                _sum: { total: true },
-            });
-            return { name: branch.name, revenue: result._sum.total ?? 0 };
-        }),
+      branches.map(async (branch) => {
+        const result = await this.prisma.order.aggregate({
+          where: {
+            branchId: branch.id,
+            status: 'COMPLETED',
+            createdAt: { gte: startOfMonth, lte: endOfMonth },
+          },
+          _sum: { total: true },
+        });
+        return { name: branch.name, revenue: result._sum.total ?? 0 };
+      }),
     );
 
     // medication count per branch
     const inventoryDistribution = await Promise.all(
-        branches.map(async (branch) => {
-            const value = await this.prisma.medication.count({
-                where: { branchId: branch.id },
-            });
-            return { name: branch.name, value };
-        }),
+      branches.map(async (branch) => {
+        const value = await this.prisma.medication.count({
+          where: { branchId: branch.id },
+        });
+        return { name: branch.name, value };
+      }),
     );
 
     // low stock alerts
     const lowStockMeds = await this.prisma.medication.findMany({
-        where: {
-            pharmacyId: pharmacy.id,
-            quantity: { lte: 10, gt: 0 },
-        },
-        select: { name: true, quantity: true, branch: { select: { name: true } } },
+      where: {
+        pharmacyId: pharmacy.id,
+        quantity: { lte: 10, gt: 0 },
+      },
+      select: {
+        name: true,
+        quantity: true,
+        branch: { select: { name: true } },
+      },
     });
 
     const pendingBranches = await this.prisma.branch.count({
-        where: {
-            pharmacyId: pharmacy.id,
-            branchStatus: 'PENDING',
-        },
+      where: {
+        pharmacyId: pharmacy.id,
+        branchStatus: 'PENDING',
+      },
     });
 
-    const alerts: { branch: string; msg: string; level: 'warning' | 'info'; meds?: { name: string; quantity: number }[] }[] = [];
+    const alerts: {
+      branch: string;
+      msg: string;
+      level: 'warning' | 'info';
+      meds?: { name: string; quantity: number }[];
+    }[] = [];
 
-    // group low stock meds by branch
-    const lowStockByBranch = lowStockMeds.reduce((acc, med) => {
-        const branchName = med.branch.name;
-        if (!acc[branchName]) acc[branchName] = [];
-        acc[branchName].push({ name: med.name, quantity: med.quantity });
-        return acc;
-    }, {} as Record<string, { name: string; quantity: number }[]>);
+    const lowStockByBranch: Record<
+      string,
+      { name: string; quantity: number }[]
+    > = lowStockMeds.reduce((acc, med) => {
+      const branchName = med.branch.name;
+      if (!acc[branchName]) acc[branchName] = [];
+      acc[branchName].push({ name: med.name, quantity: med.quantity });
+      return acc;
+    }, {});
 
     for (const [branchName, meds] of Object.entries(lowStockByBranch)) {
-        alerts.push({
-            branch: branchName,
-            msg: `Low stock: ${meds.length} medication${meds.length > 1 ? 's' : ''} below threshold`,
-            level: 'warning',
-            meds,
-        });
+      alerts.push({
+        branch: branchName,
+        msg: `Low stock: ${meds.length} medication${meds.length > 1 ? 's' : ''} below threshold`,
+        level: 'warning',
+        meds,
+      });
     }
 
     if (pendingBranches > 0) {
-        alerts.push({
-            branch: 'Branch Management',
-            msg: `${pendingBranches} branch${pendingBranches > 1 ? 'es' : ''} pending approval`,
-            level: 'info',
-        });
+      alerts.push({
+        branch: 'Branch Management',
+        msg: `${pendingBranches} branch${pendingBranches > 1 ? 'es' : ''} pending approval`,
+        level: 'info',
+      });
     }
 
     return {
-        totalBranches,
-        totalEmployees,
-        monthlyRevenue,
-        totalRevenue,
-        revenueOverTime,
-        revenueByBranch,
-        inventoryDistribution,
-        alerts,
+      totalBranches,
+      totalEmployees,
+      monthlyRevenue,
+      totalRevenue,
+      revenueOverTime,
+      revenueByBranch,
+      inventoryDistribution,
+      alerts,
     };
-}
+  }
 
   async getBranchStats(managerUserId: string) {
     const branch = await this.prisma.branch.findUnique({
-      where: { managerId: managerUserId }
+      where: { managerId: managerUserId },
     });
 
     if (!branch) {
-      throw new ForbiddenException('Only branch managers can access branch stats');
+      throw new ForbiddenException(
+        'Only branch managers can access branch stats',
+      );
     }
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
-    
+    const endOfMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() + 1,
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
+
     // For attendance (today)
     const startOfDay = new Date();
     startOfDay.setHours(0, 0, 0, 0);
     const endOfDay = new Date();
     endOfDay.setHours(23, 59, 59, 999);
 
-    const [orderCount, revenueResult, lowStockCount, staffCount, attendanceCount] = await Promise.all([
+    const [
+      orderCount,
+      revenueResult,
+      lowStockCount,
+      staffCount,
+      attendanceCount,
+    ] = await Promise.all([
       // 1. Order Count this month
       this.prisma.order.count({
         where: {
           branchId: branch.id,
-          createdAt: { gte: startOfMonth, lte: endOfMonth }
-        }
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
+        },
       }),
       // 2. Revenue this month
       this.prisma.order.aggregate({
         where: {
           branchId: branch.id,
           status: 'COMPLETED',
-          createdAt: { gte: startOfMonth, lte: endOfMonth }
+          createdAt: { gte: startOfMonth, lte: endOfMonth },
         },
-        _sum: { total: true }
+        _sum: { total: true },
       }),
       // 3. Low stock medications
       this.prisma.medication.count({
         where: {
           branchId: branch.id,
-          quantity: { lte: 10, gt: 0 }
-        }
+          quantity: { lte: 10, gt: 0 },
+        },
       }),
       // 4. Staff count
       this.prisma.staff.count({
-        where: { branchId: branch.id, status: 'ACTIVE' }
+        where: { branchId: branch.id, status: 'ACTIVE' },
       }),
       // 5. Attendance Summary (Present today)
       this.prisma.attendance.count({
         where: {
           staff: { branchId: branch.id },
           clockInTime: { gte: startOfDay, lte: endOfDay },
-          status: 'APPROVED'
-        }
-      })
+          status: 'APPROVED',
+        },
+      }),
     ]);
 
     return {
@@ -228,7 +276,7 @@ export class PharmaciesService {
       revenue: revenueResult._sum.total ?? 0,
       lowStockCount,
       staffCount,
-      attendanceCount
+      attendanceCount,
     };
   }
 
@@ -257,7 +305,10 @@ export class PharmaciesService {
       d.setDate(thirtyDaysAgo.getDate() + i);
       days.push({
         date: d.toISOString().split('T')[0],
-        label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        label: d.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        }),
       });
     }
 
@@ -265,7 +316,7 @@ export class PharmaciesService {
     const dailyTotal = await Promise.all(
       days.map(async ({ date, label }) => {
         const start = new Date(date + 'T00:00:00.000Z');
-        const end   = new Date(date + 'T23:59:59.999Z');
+        const end = new Date(date + 'T23:59:59.999Z');
         const result = await this.prisma.order.aggregate({
           where: {
             pharmacyId: pharmacy.id,
@@ -284,7 +335,7 @@ export class PharmaciesService {
         const data = await Promise.all(
           days.map(async ({ date, label }) => {
             const start = new Date(date + 'T00:00:00.000Z');
-            const end   = new Date(date + 'T23:59:59.999Z');
+            const end = new Date(date + 'T23:59:59.999Z');
             const result = await this.prisma.order.aggregate({
               where: {
                 branchId: branch.id,
@@ -301,7 +352,7 @@ export class PharmaciesService {
     );
 
     return {
-      days: days.map(d => d.label),
+      days: days.map((d) => d.label),
       dailyTotal,
       branchDaily,
     };
@@ -373,7 +424,7 @@ export class PharmaciesService {
     );
 
     return {
-      weeks: weeks.map(w => w.label),
+      weeks: weeks.map((w) => w.label),
       weeklyTotal,
       branchWeekly,
     };
@@ -387,8 +438,16 @@ export class PharmaciesService {
     const pharmacy = await this.findByUserId(userId);
 
     const now = new Date();
-    const lastMonth = new Date(now.getFullYear(), now.getMonth() - 1, now.getDate());
-    const twoMonthsAgo = new Date(now.getFullYear(), now.getMonth() - 2, now.getDate());
+    const lastMonth = new Date(
+      now.getFullYear(),
+      now.getMonth() - 1,
+      now.getDate(),
+    );
+    const twoMonthsAgo = new Date(
+      now.getFullYear(),
+      now.getMonth() - 2,
+      now.getDate(),
+    );
 
     // Fetch all orders
     const allOrders = await this.prisma.order.findMany({
@@ -402,43 +461,59 @@ export class PharmaciesService {
     });
 
     // Current month orders
-    const thisMonthOrders = allOrders.filter(o => new Date(o.createdAt) >= lastMonth);
-    const previousMonthOrders = allOrders.filter(o =>
-      new Date(o.createdAt) >= twoMonthsAgo &&
-      new Date(o.createdAt) < lastMonth
+    const thisMonthOrders = allOrders.filter(
+      (o) => new Date(o.createdAt) >= lastMonth,
+    );
+    const previousMonthOrders = allOrders.filter(
+      (o) =>
+        new Date(o.createdAt) >= twoMonthsAgo &&
+        new Date(o.createdAt) < lastMonth,
     );
 
     // Calculate revenue
     const totalRevenue = thisMonthOrders.reduce((sum, o) => sum + o.total, 0);
-    const prevRevenue = previousMonthOrders.reduce((sum, o) => sum + o.total, 0);
-    const revenueChange = prevRevenue > 0
-      ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100)
-      : 0;
+    const prevRevenue = previousMonthOrders.reduce(
+      (sum, o) => sum + o.total,
+      0,
+    );
+    const revenueChange =
+      prevRevenue > 0
+        ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100)
+        : 0;
 
     // Calculate orders
     const totalOrders = thisMonthOrders.length;
     const prevOrders = previousMonthOrders.length;
-    const ordersChange = prevOrders > 0
-      ? Math.round(((totalOrders - prevOrders) / prevOrders) * 100)
-      : 0;
+    const ordersChange =
+      prevOrders > 0
+        ? Math.round(((totalOrders - prevOrders) / prevOrders) * 100)
+        : 0;
 
     // Calculate average order value
-    const avgOrderValue = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
-    const prevAvgOrderValue = prevOrders > 0 ? Math.round(prevRevenue / prevOrders) : 0;
-    const avgValueChange = prevAvgOrderValue > 0
-      ? Math.round(((avgOrderValue - prevAvgOrderValue) / prevAvgOrderValue) * 100)
-      : 0;
+    const avgOrderValue =
+      totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+    const prevAvgOrderValue =
+      prevOrders > 0 ? Math.round(prevRevenue / prevOrders) : 0;
+    const avgValueChange =
+      prevAvgOrderValue > 0
+        ? Math.round(
+            ((avgOrderValue - prevAvgOrderValue) / prevAvgOrderValue) * 100,
+          )
+        : 0;
 
     // Calculate items sold
-    const itemsSold = thisMonthOrders.reduce((sum, o) =>
-      sum + o.orderItems.reduce((s, i) => s + i.quantity, 0), 0
+    const itemsSold = thisMonthOrders.reduce(
+      (sum, o) => sum + o.orderItems.reduce((s, i) => s + i.quantity, 0),
+      0,
     );
-    const prevItemsSold = previousMonthOrders.reduce((sum, o) =>
-      sum + o.orderItems.reduce((s, i) => s + i.quantity, 0), 0
+    const prevItemsSold = previousMonthOrders.reduce(
+      (sum, o) => sum + o.orderItems.reduce((s, i) => s + i.quantity, 0),
+      0,
     );
-    const itemsChange = prevItemsSold > 0
-      ? Math.round(((itemsSold - prevItemsSold) / prevItemsSold) * 100)
-      : 0;
+    const itemsChange =
+      prevItemsSold > 0
+        ? Math.round(((itemsSold - prevItemsSold) / prevItemsSold) * 100)
+        : 0;
 
     return {
       totalRevenue,
@@ -509,8 +584,11 @@ export class PharmaciesService {
     }
 
     // Convert map to array and sort by last order date
-    const patients = Array.from(patientMap.values())
-      .sort((a, b) => new Date(b.lastOrderDate).getTime() - new Date(a.lastOrderDate).getTime());
+    const patients = Array.from(patientMap.values()).sort(
+      (a, b) =>
+        new Date(b.lastOrderDate).getTime() -
+        new Date(a.lastOrderDate).getTime(),
+    );
 
     return {
       totalPatients: patients.length,
@@ -625,7 +703,9 @@ export class PharmaciesService {
 
     // Only approved pharmacies can update profile
     if (pharmacy.status !== 'APPROVED') {
-      throw new ForbiddenException('Only approved pharmacies can update their profile');
+      throw new ForbiddenException(
+        'Only approved pharmacies can update their profile',
+      );
     }
 
     // Critical fields that require admin re-approval
@@ -637,7 +717,9 @@ export class PharmaciesService {
       'dateOfIncorporation',
     ];
 
-    const hasCriticalChanges = criticalFields.some(field => dto[field] !== undefined);
+    const hasCriticalChanges = criticalFields.some(
+      (field) => dto[field] !== undefined,
+    );
 
     if (hasCriticalChanges) {
       const updatedPharmacy = await this.prisma.pharmacy.update({
@@ -655,7 +737,8 @@ export class PharmaciesService {
       await this.notifySuperAdminsPharmacyUpdate(pharmacy.id, pharmacy.name);
 
       return {
-        message: 'Profile update submitted for admin approval. Critical changes require verification.',
+        message:
+          'Profile update submitted for admin approval. Critical changes require verification.',
         pharmacy: updatedPharmacy,
         requiresApproval: true,
       };
@@ -693,7 +776,9 @@ export class PharmaciesService {
     }
 
     if (pharmacy.status !== 'REJECTED') {
-      throw new ForbiddenException('Only rejected pharmacies can resubmit their application');
+      throw new ForbiddenException(
+        'Only rejected pharmacies can resubmit their application',
+      );
     }
 
     const updatedPharmacy = await this.prisma.pharmacy.update({
@@ -709,10 +794,14 @@ export class PharmaciesService {
       },
     });
 
-    await this.notifySuperAdminsPharmacyResubmission(pharmacy.id, pharmacy.name);
+    await this.notifySuperAdminsPharmacyResubmission(
+      pharmacy.id,
+      pharmacy.name,
+    );
 
     return {
-      message: 'Application resubmitted successfully. Your pharmacy will be reviewed by our admin team.',
+      message:
+        'Application resubmitted successfully. Your pharmacy will be reviewed by our admin team.',
       pharmacy: updatedPharmacy,
     };
   }
@@ -737,7 +826,11 @@ export class PharmaciesService {
   // ADMIN: APPROVE PHARMACY OR PROFILE UPDATE
   // ========================================
 
-  async approvePharmacy(pharmacyId: string, approved: boolean, rejectionReason?: string) {
+  async approvePharmacy(
+    pharmacyId: string,
+    approved: boolean,
+    rejectionReason?: string,
+  ) {
     const pharmacy = await this.prisma.pharmacy.findUnique({
       where: { id: pharmacyId },
       include: { user: true },
@@ -828,7 +921,10 @@ export class PharmaciesService {
   // HELPER METHODS
   // ========================================
 
-  private async notifySuperAdminsPharmacyUpdate(pharmacyId: string, pharmacyName: string) {
+  private async notifySuperAdminsPharmacyUpdate(
+    pharmacyId: string,
+    pharmacyName: string,
+  ) {
     const superAdmins = await this.prisma.user.findMany({
       where: { role: 'SUPER_ADMIN' },
     });
@@ -844,7 +940,10 @@ export class PharmaciesService {
     }
   }
 
-  private async notifySuperAdminsPharmacyResubmission(pharmacyId: string, pharmacyName: string) {
+  private async notifySuperAdminsPharmacyResubmission(
+    pharmacyId: string,
+    pharmacyName: string,
+  ) {
     const superAdmins = await this.prisma.user.findMany({
       where: { role: 'SUPER_ADMIN' },
     });
@@ -860,7 +959,12 @@ export class PharmaciesService {
     }
   }
 
-  calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  calculateDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
     const R = 6371;
     const dLat = this.deg2rad(lat2 - lat1);
     const dLon = this.deg2rad(lon2 - lon1);

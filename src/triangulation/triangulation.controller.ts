@@ -1,10 +1,18 @@
-import { Controller, Get, Query, ParseFloatPipe, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Query,
+  ParseFloatPipe,
+  UseGuards,
+  Req,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { TriangulationService } from './triangulation.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
+import { Request } from 'express';
 
 @ApiTags('Triangulation')
 @Controller('triangulation')
@@ -17,7 +25,9 @@ export class TriangulationController {
    * Access: PATIENTS and ADMINS
    */
   @Get('nearby')
-  @ApiOperation({ summary: 'Find nearest branches based on patient coordinates' })
+  @ApiOperation({
+    summary: 'Find nearest branches based on patient coordinates',
+  })
   async findNearby(
     @Query('lat', ParseFloatPipe) lat: number,
     @Query('lng', ParseFloatPipe) lng: number,
@@ -34,5 +44,43 @@ export class TriangulationController {
   @ApiOperation({ summary: 'Get all pharmacy and branch coordinates globally' })
   getGlobalCoordinates() {
     return this.triangulationService.getGlobalCoordinates();
+  }
+
+  /**
+   * PHARMACY OWNER: View only their branches
+   * Access: PHARMACY
+   */
+  @Get('owner')
+  @Roles(Role.PHARMACY)
+  @ApiOperation({
+    summary: "Get triangulation data for pharmacy owner's branches",
+  })
+  async getOwnerBranches(@Req() req: Request) {
+    const user = req.user as any;
+    const pharmacy = await this.triangulationService[
+      'prisma'
+    ].pharmacy.findUnique({
+      where: { userId: user.sub },
+      select: { id: true },
+    });
+    if (!pharmacy) {
+      throw new Error('Pharmacy not found');
+    }
+    return this.triangulationService.getOwnerBranches(pharmacy.id);
+  }
+
+  /**
+   * BRANCH MANAGER: Triangulate against sister branches
+   * Access: BRANCH_MANAGER
+   */
+  @Get('manager')
+  @Roles(Role.BRANCH_MANAGER)
+  @ApiOperation({
+    summary:
+      "Get triangulation data for branch manager's branch against sister branches",
+  })
+  async getManagerTriangulation(@Req() req: Request) {
+    const user = req.user as any;
+    return this.triangulationService.getManagerTriangulation(user.sub);
   }
 }
