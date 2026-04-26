@@ -168,7 +168,9 @@ export class BranchesService {
     });
 
     if (!branch) {
-      throw new ForbiddenException('Only branch managers can access sibling branches');
+      throw new ForbiddenException(
+        'Only branch managers can access sibling branches',
+      );
     }
 
     return this.prisma.branch.findMany({

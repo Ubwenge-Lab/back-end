@@ -3,6 +3,9 @@
 /node_modules
 /build
 
+# TypeScript build artifacts
+tsconfig.build.tsbuildinfo
+
 # Logs
 logs
 *.log
@@ -15,9 +18,11 @@ lerna-debug.log*
 # OS
 .DS_Store
 
-# Tests
+# Tests & test output
 /coverage
 /.nyc_output
+e2e_output.txt
+/tests/
 
 # IDEs and editors
 /.idea
@@ -41,6 +46,7 @@ lerna-debug.log*
 .env.test.local
 .env.production.local
 .env.local
+env
 
 # temp directory
 .temp
@@ -57,3 +63,26 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Test scripts
 scripts/
+scratch/
+src/prisma/backup-data.ts
+src/prisma/data-backup.json
+src/prisma/test-conn.ts
+get_exact_ids.ts
+get_ids.ts
+test_checkout.ts
+# Beads issue tracker & Dolt (local dev tools — keep off GitHub)
+.beads/
+.dolt/
+*.db
+.beads-credential-key
+
+# AI assistant memory files (local only — keep off GitHub)
+.claude/
+CLAUDE.md
+
+# Security audit reports (sensitive, not project source)
+SECURITY_AUDIT.md
+/reports/
+
+# Seed data (large local data files - place manually before seeding)
+medication_registry.csv

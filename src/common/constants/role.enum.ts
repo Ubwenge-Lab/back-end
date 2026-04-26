@@ -7,5 +7,5 @@ export enum Role {
   BRANCH_MANAGER = 'BRANCH_MANAGER',
   PHARMACIST = 'PHARMACIST',
   CASHIER = 'CASHIER',
-  NURSE = 'NURSE', 
+  NURSE = 'NURSE',
 }

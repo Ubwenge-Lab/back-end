@@ -10,7 +10,10 @@ export class MapDataQueryDto {
   })
   @IsOptional()
   @IsIn(['live', 'fixed', 'all'])
-  @Transform(({ value }) => value ?? 'all')
+  @Transform(
+    ({ value }: { value: 'live' | 'fixed' | 'all' | undefined }) =>
+      value ?? 'all',
+  )
   view?: 'live' | 'fixed' | 'all';
 
   @ApiPropertyOptional({
@@ -20,6 +23,12 @@ export class MapDataQueryDto {
   })
   @IsOptional()
   @IsIn(['Gasabo', 'Kicukiro', 'Nyarugenge', 'Other', 'all'])
-  @Transform(({ value }) => value ?? 'all')
+  @Transform(
+    ({
+      value,
+    }: {
+      value: 'Gasabo' | 'Kicukiro' | 'Nyarugenge' | 'Other' | 'all' | undefined;
+    }) => value ?? 'all',
+  )
   district?: 'Gasabo' | 'Kicukiro' | 'Nyarugenge' | 'Other' | 'all';
 }

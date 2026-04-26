@@ -5,7 +5,11 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService } from '../notifications/email.service';
-import { ApprovePharmacyDto, RejectPharmacyDto, VerifyLocationDto } from './dto';
+import {
+  ApprovePharmacyDto,
+  RejectPharmacyDto,
+  VerifyLocationDto,
+} from './dto';
 
 @Injectable()
 export class SuperAdminService {
@@ -13,7 +17,7 @@ export class SuperAdminService {
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
     private emailService: EmailService,
-  ) { }
+  ) {}
 
   // ========================================
   // GET PLATFORM ANALYTICS
@@ -140,7 +144,10 @@ export class SuperAdminService {
   // GET PHARMACY DOCUMENT (NEW)
   // ========================================
 
-  async getPharmacyDocument(pharmacyId: string, documentType: 'rdb' | 'license') {
+  async getPharmacyDocument(
+    pharmacyId: string,
+    documentType: 'rdb' | 'license',
+  ) {
     const pharmacy = await this.prisma.pharmacy.findUnique({
       where: { id: pharmacyId },
       select: {
@@ -154,17 +161,21 @@ export class SuperAdminService {
       throw new NotFoundException('Pharmacy not found');
     }
 
-    const documentUrl = documentType === 'rdb'
-      ? pharmacy.rdbCertificate
-      : pharmacy.pharmacyLicense;
+    const documentUrl =
+      documentType === 'rdb'
+        ? pharmacy.rdbCertificate
+        : pharmacy.pharmacyLicense;
 
     if (!documentUrl) {
-      throw new NotFoundException(`${documentType === 'rdb' ? 'RDB Certificate' : 'Pharmacy License'} not found`);
+      throw new NotFoundException(
+        `${documentType === 'rdb' ? 'RDB Certificate' : 'Pharmacy License'} not found`,
+      );
     }
 
     return {
       pharmacyName: pharmacy.name,
-      documentType: documentType === 'rdb' ? 'RDB Certificate' : 'Pharmacy License',
+      documentType:
+        documentType === 'rdb' ? 'RDB Certificate' : 'Pharmacy License',
       documentUrl,
     };
   }
@@ -409,7 +420,9 @@ export class SuperAdminService {
         branchManagerEmail: true,
         pharmacyLicense: true,
         createdAt: true,
-        pharmacy: { select: { id: true, name: true, representativeName: true } },
+        pharmacy: {
+          select: { id: true, name: true, representativeName: true },
+        },
         manager: { select: { email: true } },
       },
       orderBy: { createdAt: 'desc' },
@@ -429,10 +442,18 @@ export class SuperAdminService {
     });
 
     if (branch.manager?.email) {
-      await this.emailService.sendBranchApproval(branch.manager.email, branch.name, true);
+      await this.emailService.sendBranchApproval(
+        branch.manager.email,
+        branch.name,
+        true,
+      );
     }
     if (branch.pharmacy.user?.email) {
-      await this.emailService.sendBranchApproval(branch.pharmacy.user.email, branch.name, true);
+      await this.emailService.sendBranchApproval(
+        branch.pharmacy.user.email,
+        branch.name,
+        true,
+      );
     }
 
     return updated;
@@ -451,10 +472,20 @@ export class SuperAdminService {
     });
 
     if (branch.manager?.email) {
-      await this.emailService.sendBranchApproval(branch.manager.email, branch.name, false, reason);
+      await this.emailService.sendBranchApproval(
+        branch.manager.email,
+        branch.name,
+        false,
+        reason,
+      );
     }
     if (branch.pharmacy.user?.email) {
-      await this.emailService.sendBranchApproval(branch.pharmacy.user.email, branch.name, false, reason);
+      await this.emailService.sendBranchApproval(
+        branch.pharmacy.user.email,
+        branch.name,
+        false,
+        reason,
+      );
     }
 
     return updated;

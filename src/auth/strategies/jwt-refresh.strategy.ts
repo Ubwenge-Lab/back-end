@@ -8,7 +8,10 @@ import { Request } from 'express';
 import { PrismaService } from '../../prisma/prisma.service';
 
 @Injectable()
-export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh') {
+export class JwtRefreshStrategy extends PassportStrategy(
+  Strategy,
+  'jwt-refresh',
+) {
   constructor(
     private configService: ConfigService,
     private prisma: PrismaService,
@@ -26,9 +29,9 @@ export class JwtRefreshStrategy extends PassportStrategy(Strategy, 'jwt-refresh'
   async validate(req: Request, payload: any) {
     const authHeader = req.get('Authorization');
     if (!authHeader) throw new UnauthorizedException('No authorization header');
-    
+
     const refreshToken = authHeader.replace('Bearer', '').trim();
-    
+
     const user = await this.prisma.user.findUnique({
       where: { id: payload.sub },
     });

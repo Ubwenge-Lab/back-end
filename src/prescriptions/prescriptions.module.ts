@@ -9,7 +9,12 @@ import { MedicationsModule } from '../medications/medications.module';
 import { StaffModule } from '../staff/staff.module';
 
 @Module({
-  imports: [PatientsModule, NotificationsModule, MedicationsModule, StaffModule],
+  imports: [
+    PatientsModule,
+    NotificationsModule,
+    MedicationsModule,
+    StaffModule,
+  ],
   controllers: [PrescriptionsController],
   providers: [PrescriptionsService],
   exports: [PrescriptionsService],

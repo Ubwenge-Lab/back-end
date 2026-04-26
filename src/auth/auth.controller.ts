@@ -30,7 +30,7 @@ import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 @ApiTags('Authentication')
 @Controller('auth')
 export class AuthController {
-  constructor(private authService: AuthService) { }
+  constructor(private authService: AuthService) {}
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
@@ -110,7 +110,9 @@ export class AuthController {
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Change branch manager password (temp -> permanent)' })
+  @ApiOperation({
+    summary: 'Change branch manager password (temp -> permanent)',
+  })
   changeBranchPassword(@Req() req: any, @Body() dto: ChangeBranchPasswordDto) {
     return this.authService.changeBranchPassword(req.user.sub, dto);
   }
@@ -121,6 +123,9 @@ export class AuthController {
   @ApiBearerAuth()
   @ApiOperation({ summary: 'Upload pharmacy license for branch approval' })
   uploadBranchLicense(@Req() req: any, @Body() dto: UploadBranchLicenseDto) {
-    return this.authService.uploadBranchLicense(req.user.sub, dto.pharmacyLicense);
+    return this.authService.uploadBranchLicense(
+      req.user.sub,
+      dto.pharmacyLicense,
+    );
   }
 }

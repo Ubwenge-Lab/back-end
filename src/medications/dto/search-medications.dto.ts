@@ -28,12 +28,15 @@ export class SearchMedicationsDto {
   @ApiProperty({ required: false })
   @IsBoolean()
   @IsOptional()
-  @Transform(({ value }) => value === 'true' || value === true)
+  @Transform(
+    ({ value }: { value: string | boolean }) =>
+      value === 'true' || value === true,
+  )
   requiresPrescription?: boolean;
 
   @ApiProperty({ required: false, default: 100 })
   @IsNumber()
   @IsOptional()
-  @Transform(({ value }) => parseInt(value))
+  @Transform(({ value }: { value: string }) => parseInt(value, 10))
   limit?: number;
 }

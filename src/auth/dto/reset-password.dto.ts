@@ -1,6 +1,12 @@
 // backend/src/auth/dto/reset-password.dto.ts
 
-import { IsEmail, IsNotEmpty, IsString, MinLength, Matches } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  MinLength,
+  Matches,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ResetPasswordDto {
@@ -18,9 +24,13 @@ export class ResetPasswordDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(8)
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d|.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/, {
-    message: 'Password must contain uppercase, lowercase, and number or symbol',
-  })
+  @Matches(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d|.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/,
+    {
+      message:
+        'Password must contain uppercase, lowercase, and number or symbol',
+    },
+  )
   newPassword: string;
 
   @ApiProperty({ example: 'NewPassword123!' })

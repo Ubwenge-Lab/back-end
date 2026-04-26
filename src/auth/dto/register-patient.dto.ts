@@ -1,6 +1,14 @@
 // backend/src/auth/dto/register-patient.dto.ts
 
-import { IsEmail, IsNotEmpty, IsString, IsOptional, IsNumber, MinLength, Matches } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsString,
+  IsOptional,
+  IsNumber,
+  MinLength,
+  Matches,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterPatientDto {
@@ -23,9 +31,13 @@ export class RegisterPatientDto {
   @IsString()
   @IsNotEmpty()
   @MinLength(8)
-  @Matches(/^(?=.*[a-z])(?=.*[A-Z])(?=.*\d|.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/, {
-    message: 'Password must contain uppercase, lowercase, and number or symbol',
-  })
+  @Matches(
+    /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d|.*[@$!%*?&#])[A-Za-z\d@$!%*?&#]{8,}$/,
+    {
+      message:
+        'Password must contain uppercase, lowercase, and number or symbol',
+    },
+  )
   password: string;
 
   @ApiProperty()

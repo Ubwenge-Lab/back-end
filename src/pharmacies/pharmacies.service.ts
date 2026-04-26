@@ -11,6 +11,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
 import { EmailService } from '../notifications/email.service';
 import { toPharmacyLocationDto } from './utils/pharmacy.mapper';
+import { getDistrict } from '../triangulation/triangulation.helpers';
 
 @Injectable()
 export class PharmaciesService {
@@ -637,11 +638,34 @@ export class PharmaciesService {
       },
     });
 
-    if (!pharmacy) {
-      throw new NotFoundException('Pharmacy not found');
+    if (pharmacy) return pharmacy;
+
+    // If not a main pharmacy, check if it's a branch
+    const branch = await this.prisma.branch.findUnique({
+      where: { id },
+      include: {
+        pharmacy: {
+          include: {
+            user: {
+              select: { email: true },
+            },
+          },
+        },
+        medications: true,
+      },
+    });
+
+    if (!branch) {
+      throw new NotFoundException('Pharmacy or Branch not found');
     }
 
-    return pharmacy;
+    // Unify branch response to look like a pharmacy for the frontend details page
+    return {
+      ...branch,
+      name: `${branch.pharmacy.name} - ${branch.name}`,
+      status: branch.branchStatus,
+      user: branch.pharmacy.user,
+    };
   }
 
   // ========================================

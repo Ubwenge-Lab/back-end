@@ -30,7 +30,12 @@ export class StockTransfersService {
         items: {
           include: {
             medication: {
-              select: { id: true, name: true, chemicalName: true, quantity: true },
+              select: {
+                id: true,
+                name: true,
+                chemicalName: true,
+                quantity: true,
+              },
             },
           },
         },
@@ -146,7 +151,9 @@ export class StockTransfersService {
           });
 
           if (!sendingMed || sendingMed.quantity < item.quantity) {
-            throw new BadRequestException(`Insufficient stock to complete transfer for medication ID ${item.medicationId}`);
+            throw new BadRequestException(
+              `Insufficient stock to complete transfer for medication ID ${item.medicationId}`,
+            );
           }
 
           await tx.medication.update({

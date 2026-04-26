@@ -11,7 +11,12 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiTags, ApiOperation, ApiConsumes, ApiBearerAuth } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiConsumes,
+  ApiBearerAuth,
+} from '@nestjs/swagger';
 import { UploadService } from './upload.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 
@@ -42,7 +47,9 @@ export class UploadController {
 
   // POST /upload/license
   @Post('license')
-  @ApiOperation({ summary: 'Upload pharmacy/branch license — stored as base64 in DB' })
+  @ApiOperation({
+    summary: 'Upload pharmacy/branch license — stored as base64 in DB',
+  })
   @ApiConsumes('multipart/form-data')
   @UseInterceptors(FileInterceptor('file'))
   async uploadLicense(@UploadedFile() file: MulterFile) {
@@ -66,7 +73,9 @@ export class UploadController {
 
   // DELETE /upload/file
   @Delete('file')
-  @ApiOperation({ summary: 'Delete file (no-op for DB storage — clear the DB field instead)' })
+  @ApiOperation({
+    summary: 'Delete file (no-op for DB storage — clear the DB field instead)',
+  })
   async deleteFile(@Body('fileUrl') fileUrl: string) {
     await this.uploadService.deleteFile(fileUrl);
     return { message: 'File reference removed' };

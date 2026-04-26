@@ -39,138 +39,151 @@ export class OrdersService {
     }
 
     // Validate items and calculate subtotal
-    const order = await this.prisma.$transaction(async (tx) => {
-      let subtotal = 0;
-      const orderItems: { medicationId: string; quantity: number; price: number }[] = [];
+    const order = await this.prisma.$transaction(
+      async (tx) => {
+        let subtotal = 0;
+        const orderItems: {
+          medicationId: string;
+          quantity: number;
+          price: number;
+        }[] = [];
 
-      for (const item of dto.items) {
-        // Fetching medication within the transaction to ensure stock is up-to-date
-        const medication = await tx.medication.findUnique({
-          where: { id: item.medicationId }
-        });
+        for (const item of dto.items) {
+          // Fetching medication within the transaction to ensure stock is up-to-date
+          const medication = await tx.medication.findUnique({
+            where: { id: item.medicationId },
+          });
 
-        if (!medication) {
-          throw new NotFoundException(`Medication ${item.medicationId} not found`);
-        }
-
-        // Check stock
-        if (medication.quantity < item.quantity) {
-          throw new BadRequestException(
-            `Insufficient stock for ${medication.name}. Available: ${medication.quantity}`,
-          );
-        }
-
-        // Check pharmacy match
-        if (medication.pharmacyId !== dto.pharmacyId) {
-          throw new BadRequestException(
-            `Medication ${medication.name} does not belong to this pharmacy`,
-          );
-        }
-
-        // Check prescription requirement
-        if (medication.requiresPrescription && !dto.prescriptionId) {
-          throw new BadRequestException(
-            `Prescription required for ${medication.name}`,
-          );
-        }
-
-        subtotal += medication.price * item.quantity;
-        orderItems.push({
-          medicationId: medication.id,
-          quantity: item.quantity,
-          price: medication.price,
-        });
-        // FIX: Use atomic update with condition to prevent race conditions
-        // This prevents overselling by ensuring quantity doesn't go negative
-        const updateResult = await tx.medication.updateMany({
-          where: {
-            id: item.medicationId,
-            quantity: { gte: item.quantity } // Only update if sufficient stock
-          },
-          data: {
-            quantity: { decrement: item.quantity }
+          if (!medication) {
+            throw new NotFoundException(
+              `Medication ${item.medicationId} not found`,
+            );
           }
-        });
 
-        // If no rows were updated, stock was insufficient (race condition occurred)
-        if (updateResult.count === 0) {
-          throw new BadRequestException(
-            `Insufficient stock for ${medication.name}. Stock may have been depleted by another order.`,
-          );
+          // Check stock
+          if (medication.quantity < item.quantity) {
+            throw new BadRequestException(
+              `Insufficient stock for ${medication.name}. Available: ${medication.quantity}`,
+            );
+          }
+
+          // Check pharmacy match
+          if (medication.pharmacyId !== dto.pharmacyId) {
+            throw new BadRequestException(
+              `Medication ${medication.name} does not belong to this pharmacy`,
+            );
+          }
+
+          // Check prescription requirement
+          if (medication.requiresPrescription && !dto.prescriptionId) {
+            throw new BadRequestException(
+              `Prescription required for ${medication.name}`,
+            );
+          }
+
+          subtotal += medication.price * item.quantity;
+          orderItems.push({
+            medicationId: medication.id,
+            quantity: item.quantity,
+            price: medication.price,
+          });
+          // FIX: Use atomic update with condition to prevent race conditions
+          // This prevents overselling by ensuring quantity doesn't go negative
+          const updateResult = await tx.medication.updateMany({
+            where: {
+              id: item.medicationId,
+              quantity: { gte: item.quantity }, // Only update if sufficient stock
+            },
+            data: {
+              quantity: { decrement: item.quantity },
+            },
+          });
+
+          // If no rows were updated, stock was insufficient (race condition occurred)
+          if (updateResult.count === 0) {
+            throw new BadRequestException(
+              `Insufficient stock for ${medication.name}. Stock may have been depleted by another order.`,
+            );
+          }
         }
-      }
 
-      // Calculate delivery fee if applicable
-      let deliveryFee = 0;
-      let deliveryZone: string | null = null;
+        // Calculate delivery fee if applicable
+        let deliveryFee = 0;
+        let deliveryZone: string | null = null;
 
-      if (dto.type === 'DELIVERY') {
-        if (!dto.deliveryAddress) {
-          throw new BadRequestException('Delivery address is required for delivery orders');
+        if (dto.type === 'DELIVERY') {
+          if (!dto.deliveryAddress) {
+            throw new BadRequestException(
+              'Delivery address is required for delivery orders',
+            );
+          }
+
+          // For MVP, use fixed delivery zones
+          // In production, calculate based on actual coordinates
+          deliveryFee = 2000; // Fixed delivery fee for MVP
+          deliveryZone = 'Zone 1';
         }
 
-        // For MVP, use fixed delivery zones
-        // In production, calculate based on actual coordinates
-        deliveryFee = 2000; // Fixed delivery fee for MVP
-        deliveryZone = 'Zone 1';
-      }
+        // Calculate total
+        const total = subtotal + deliveryFee;
 
-      // Calculate total
-      const total = subtotal + deliveryFee;
+        // Handle insurance if applicable
+        let insuranceCoverage = 0;
+        let patientPayment = total;
 
-      // Handle insurance if applicable
-      let insuranceCoverage = 0;
-      let patientPayment = total;
+        if (dto.paymentMethod === 'INSURANCE') {
+          if (!patient.insuranceProvider || !patient.insuranceCoverage) {
+            throw new BadRequestException(
+              'Patient does not have valid insurance',
+            );
+          }
 
-      if (dto.paymentMethod === 'INSURANCE') {
-        if (!patient.insuranceProvider || !patient.insuranceCoverage) {
-          throw new BadRequestException('Patient does not have valid insurance');
+          insuranceCoverage = (subtotal * patient.insuranceCoverage) / 100;
+          patientPayment = subtotal - insuranceCoverage + deliveryFee;
         }
 
-        insuranceCoverage = (subtotal * patient.insuranceCoverage) / 100;
-        patientPayment = subtotal - insuranceCoverage + deliveryFee;
-      }
+        // Generate unique order number
+        const orderNumber = await this.generateOrderNumber(tx);
 
-      // Generate unique order number
-      const orderNumber = await this.generateOrderNumber(tx);
-
-      // Create order
-      const createdOrder = await tx.order.create({
-        data: {
-          patientId: patient.id,
-          pharmacyId: dto.pharmacyId,
-          branchId: dto.branchId,
-          orderNumber,
-          type: dto.type,
-          status: 'PENDING',
-          deliveryAddress: dto.deliveryAddress,
-          deliveryFee,
-          deliveryZone,
-          prescriptionId: dto.prescriptionId,
-          subtotal,
-          total,
-          paymentMethod: dto.paymentMethod,
-          paymentStatus: 'PENDING',
-          insuranceCoverage,
-          patientPayment,
-          orderItems: {
-            create: orderItems,
-          },
-        },
-        include: {
-          orderItems: {
-            include: {
-              medication: true,
+        // Create order
+        const createdOrder = await tx.order.create({
+          data: {
+            patientId: patient.id,
+            pharmacyId: dto.pharmacyId,
+            branchId: dto.branchId,
+            orderNumber,
+            type: dto.type,
+            status: 'PENDING',
+            deliveryAddress: dto.deliveryAddress,
+            deliveryFee,
+            deliveryZone,
+            prescriptionId: dto.prescriptionId,
+            subtotal,
+            total,
+            paymentMethod: dto.paymentMethod,
+            paymentStatus: 'PENDING',
+            insuranceCoverage,
+            patientPayment,
+            orderItems: {
+              create: orderItems,
             },
           },
-          pharmacy: true,
-          prescription: true,
-        },
-      });
-      return createdOrder;
-    }, {
-      timeout: 20000, // Increased for remote Supabase latency
-    });
+          include: {
+            orderItems: {
+              include: {
+                medication: true,
+              },
+            },
+            pharmacy: true,
+            prescription: true,
+          },
+        });
+        return createdOrder;
+      },
+      {
+        timeout: 20000, // Increased for remote Supabase latency
+      },
+    );
 
     // FIX: Send notifications AFTER transaction commits to avoid foreign key issues
     // This ensures the order exists in the database before creating notifications
@@ -233,18 +246,29 @@ export class OrdersService {
 
     // Verify identity
     if (userId) {
-      const patient = await this.patientsService.findByUserId(userId).catch(() => null);
-      const pharmacy = await this.pharmaciesService.findByUserId(userId).catch(() => null);
-      const staff = await this.staffService.findByUserId(userId).catch(() => null);
-      const branchManager = await this.prisma.branch.findFirst({ where: { managerId: userId } });
+      const patient = await this.patientsService
+        .findByUserId(userId)
+        .catch(() => null);
+      const pharmacy = await this.pharmaciesService
+        .findByUserId(userId)
+        .catch(() => null);
+      const staff = await this.staffService
+        .findByUserId(userId)
+        .catch(() => null);
+      const branchManager = await this.prisma.branch.findFirst({
+        where: { managerId: userId },
+      });
 
-      const isOwner = (patient && order.patientId === patient.id) ||
-                      (pharmacy && order.pharmacyId === pharmacy.id) ||
-                      (staff && staff.branch.id === order.branchId) ||
-                      (branchManager && branchManager.id === order.branchId);
+      const isOwner =
+        (patient && order.patientId === patient.id) ||
+        (pharmacy && order.pharmacyId === pharmacy.id) ||
+        (staff && staff.branch.id === order.branchId) ||
+        (branchManager && branchManager.id === order.branchId);
 
       if (!isOwner) {
-        throw new ForbiddenException('You are not authorized to access this order');
+        throw new ForbiddenException(
+          'You are not authorized to access this order',
+        );
       }
     }
 
@@ -294,7 +318,9 @@ export class OrdersService {
       pharmacyId = pharmacy.id;
     } catch (e) {
       // Check if Branch Manager
-      const branchManager = await this.prisma.branch.findFirst({ where: { managerId: userId } });
+      const branchManager = await this.prisma.branch.findFirst({
+        where: { managerId: userId },
+      });
       if (branchManager) {
         pharmacyId = branchManager.pharmacyId;
         branchId = branchManager.id;
@@ -350,7 +376,9 @@ export class OrdersService {
       if (order.pharmacyId === pharmacy.id) isAuthorized = true;
     } catch (e) {
       // Check if Branch Manager
-      const branchManager = await this.prisma.branch.findFirst({ where: { managerId: userId } });
+      const branchManager = await this.prisma.branch.findFirst({
+        where: { managerId: userId },
+      });
       if (branchManager && branchManager.id === order.branchId) {
         isAuthorized = true;
       } else {
@@ -410,8 +438,16 @@ export class OrdersService {
     }
 
     // Check if cancellation is allowed (only until PREPARING)
-    if (['PREPARING', 'READY', 'OUT_FOR_DELIVERY', 'READY_FOR_PICKUP', 'DELIVERED', 'COMPLETED'].includes(order.status)
-) {
+    if (
+      [
+        'PREPARING',
+        'READY',
+        'OUT_FOR_DELIVERY',
+        'READY_FOR_PICKUP',
+        'DELIVERED',
+        'COMPLETED',
+      ].includes(order.status)
+    ) {
       throw new BadRequestException(
         'Cannot cancel order at this stage. Please contact the pharmacy.',
       );
@@ -473,26 +509,27 @@ export class OrdersService {
   }
 
   private validateStatusTransition(currentStatus: string, newStatus: string) {
-  const validTransitions: Record<string, string[]> = {
+    const validTransitions: Record<string, string[]> = {
+      PENDING: ['PREPARING', 'CANCELLED'],
+      PREPARING: ['READY', 'READY_FOR_PICKUP'],
+      READY: ['OUT_FOR_DELIVERY'],
+      OUT_FOR_DELIVERY: ['DELIVERED'],
+      READY_FOR_PICKUP: ['COMPLETED'],
+      DELIVERED: ['COMPLETED'],
+    };
 
-    PENDING: ['PREPARING', 'CANCELLED'],
-    PREPARING: ['READY', 'READY_FOR_PICKUP'],
-    READY: ['OUT_FOR_DELIVERY'],
-    OUT_FOR_DELIVERY: ['DELIVERED'],
-    READY_FOR_PICKUP: ['COMPLETED'],
-    DELIVERED: ['COMPLETED'],
-  };
-
-  if (!validTransitions[currentStatus]?.includes(newStatus)) {
-    throw new BadRequestException(
-      `Cannot transition from ${currentStatus} to ${newStatus}`,
-    );
+    if (!validTransitions[currentStatus]?.includes(newStatus)) {
+      throw new BadRequestException(
+        `Cannot transition from ${currentStatus} to ${newStatus}`,
+      );
+    }
   }
-}
-
 
   private async sendStatusNotification(order: any) {
-    const notificationMap: Record<string, { title: string; message: string; type: any }> = {
+    const notificationMap: Record<
+      string,
+      { title: string; message: string; type: any }
+    > = {
       ACCEPTED: {
         title: 'Order Accepted',
         message: `Your order #${order.orderNumber} has been accepted by ${order.pharmacy.name}`,
@@ -553,62 +590,68 @@ export class OrdersService {
         }
       } catch (emailErr) {
         // Never block the main flow due to email failure
-        console.error('❌ Failed to send order status email:', emailErr?.message);
+        console.error(
+          '❌ Failed to send order status email:',
+          emailErr?.message,
+        );
       }
     }
   }
 
   async confirmDelivery(orderId: string, userId: string) {
-  const order = await this.findById(orderId);
-  const patient = await this.patientsService.findByUserId(userId);
+    const order = await this.findById(orderId);
+    const patient = await this.patientsService.findByUserId(userId);
 
-  if (order.patientId !== patient.id) {
-    throw new ForbiddenException();
-  }
-
-  if (order.status !== 'OUT_FOR_DELIVERY') {
-    throw new BadRequestException('Invalid state');
-  }
-
-  const updated = await this.prisma.order.update({
-    where: { id: orderId },
-    data: { status: 'DELIVERED' },
-  });
-
-  await this.sendStatusNotification(updated);
-
-  return updated;
-}
-
-async handlePaymentSuccess(orderId: string) {
-  return await this.prisma.$transaction(async (tx) => {
-    const order = await tx.order.findUnique({
-      where: { id: orderId },
-      include: { orderItems: true },
-    });
-
-    if (!order) throw new NotFoundException('Order not found');
-
-    // Prevent double processing
-    if (order.paymentStatus === 'COMPLETED') {
-      return order; // Already processed
+    if (order.patientId !== patient.id) {
+      throw new ForbiddenException();
     }
 
-    // Stock was already reserved during order creation (Line 85).
-    // No need to reduce it again here.
+    if (order.status !== 'OUT_FOR_DELIVERY') {
+      throw new BadRequestException('Invalid state');
+    }
 
-    // Update order status to PENDING (ready for pharmacy to prepare)
-    const updated = await tx.order.update({
+    const updated = await this.prisma.order.update({
       where: { id: orderId },
-      data: {
-        status: 'PENDING',
-        paymentStatus: 'COMPLETED'
-      },
+      data: { status: 'DELIVERED' },
     });
 
+    await this.sendStatusNotification(updated);
+
     return updated;
-  }, {
-    timeout: 20000, // Increased for remote Supabase latency
-  });
-}
+  }
+
+  async handlePaymentSuccess(orderId: string) {
+    return await this.prisma.$transaction(
+      async (tx) => {
+        const order = await tx.order.findUnique({
+          where: { id: orderId },
+          include: { orderItems: true },
+        });
+
+        if (!order) throw new NotFoundException('Order not found');
+
+        // Prevent double processing
+        if (order.paymentStatus === 'COMPLETED') {
+          return order; // Already processed
+        }
+
+        // Stock was already reserved during order creation (Line 85).
+        // No need to reduce it again here.
+
+        // Update order status to PENDING (ready for pharmacy to prepare)
+        const updated = await tx.order.update({
+          where: { id: orderId },
+          data: {
+            status: 'PENDING',
+            paymentStatus: 'COMPLETED',
+          },
+        });
+
+        return updated;
+      },
+      {
+        timeout: 20000, // Increased for remote Supabase latency
+      },
+    );
+  }
 }

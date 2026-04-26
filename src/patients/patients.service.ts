@@ -104,7 +104,7 @@ export class PatientsService {
     },
   ) {
     const patient = await this.findByUserId(userId);
-    
+
     return this.prisma.patient.update({
       where: { id: patient.id },
       data: insuranceData,

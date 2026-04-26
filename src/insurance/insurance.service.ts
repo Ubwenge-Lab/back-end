@@ -14,7 +14,8 @@ export class InsuranceService {
     private patientsService: PatientsService,
   ) {
     this.insuranceProviders = (
-      this.configService.get('INSURANCE_PROVIDERS') || 'MMI,RSSB,Sanlam,RAMA,Britam,Radiant'
+      this.configService.get('INSURANCE_PROVIDERS') ||
+      'MMI,RSSB,Sanlam,RAMA,Britam,Radiant'
     ).split(',');
   }
 
@@ -37,7 +38,9 @@ export class InsuranceService {
     const isValid = this.mockInsuranceVerification(dto);
 
     if (!isValid) {
-      throw new BadRequestException('Insurance verification failed. Please check your policy details.');
+      throw new BadRequestException(
+        'Insurance verification failed. Please check your policy details.',
+      );
     }
 
     // Determine coverage percentage based on provider (mock data)
