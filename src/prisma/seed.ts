@@ -672,6 +672,118 @@ async function main() {
     },
   });
 
+  // Order 4: READY_FOR_PICKUP order for Alice, already paid online via MTN MOMO.
+  // Lets the cashier exercise the Verify tab against an existing Flutterwave reference.
+  const readyPaidOrder = await prisma.order.create({
+    data: {
+      patientId: patient1.id,
+      pharmacyId: pharmacy.id,
+      branchId: mainBranch.id,
+      orderNumber: 'ORD-2026-0004',
+      type: 'PICKUP',
+      status: 'READY_FOR_PICKUP',
+      subtotal: 8000, // 2*amoxicillin(2500) + 6*paracetamol(500)
+      total: 8000,
+      paymentMethod: 'MTN_MOMO',
+      paymentStatus: 'COMPLETED',
+      patientPayment: 8000,
+      orderItems: {
+        create: [
+          {
+            medicationId: amoxicillin.id,
+            quantity: 2,
+            price: 2500,
+          },
+          {
+            medicationId: paracetamol.id,
+            quantity: 6,
+            price: 500,
+          },
+        ],
+      },
+    },
+  });
+
+  await prisma.payment.create({
+    data: {
+      orderId: readyPaidOrder.id,
+      amount: 8000,
+      paymentMethod: 'MTN_MOMO',
+      status: 'COMPLETED',
+      transactionId: 'TXN-MTN-20260420-002',
+      flutterwaveRef: 'FLW-MOCK-002233',
+      paymentResponse: {
+        status: 'success',
+        message: 'Payment processed successfully',
+        data: { reference: 'FLW-MOCK-002233', amount: 8000, currency: 'RWF' },
+      },
+    },
+  });
+
+  // Order 5: READY_FOR_PICKUP walk-in order for Bob, will pay cash at the counter.
+  // Lets the cashier exercise the Record tab end to end.
+  await prisma.order.create({
+    data: {
+      patientId: patient2.id,
+      pharmacyId: pharmacy.id,
+      branchId: mainBranch.id,
+      orderNumber: 'ORD-2026-0005',
+      type: 'PICKUP',
+      status: 'READY_FOR_PICKUP',
+      subtotal: 4500, // 3*ibuprofen(800) + 7*ors(300)
+      total: 4500,
+      paymentMethod: 'CASH',
+      paymentStatus: 'PENDING',
+      patientPayment: 4500,
+      orderItems: {
+        create: [
+          {
+            medicationId: ibuprofen.id,
+            quantity: 3,
+            price: 800,
+          },
+          {
+            medicationId: ors.id,
+            quantity: 7,
+            price: 300,
+          },
+        ],
+      },
+    },
+  });
+
+  // Order 6: PREPARING order for Bob, populates the Ready for Pickup tab on the
+  // cashier orders board so the tab is not empty during testing.
+  await prisma.order.create({
+    data: {
+      patientId: patient2.id,
+      pharmacyId: pharmacy.id,
+      branchId: mainBranch.id,
+      orderNumber: 'ORD-2026-0006',
+      type: 'PICKUP',
+      status: 'PREPARING',
+      subtotal: 11000, // 2*metformin(3500) + 2*amlodipine(2000)
+      total: 11000,
+      paymentMethod: 'CARD',
+      paymentStatus: 'PENDING',
+      patientPayment: 11000,
+      orderItems: {
+        create: [
+          {
+            medicationId: metformin.id,
+            quantity: 2,
+            price: 3500,
+          },
+          {
+            medicationId: amlodipine.id,
+            quantity: 2,
+            price: 2000,
+          },
+        ],
+      },
+    },
+  });
+
   console.log('✅ Orders created.\n');
 
   // ==========================================
@@ -898,7 +1010,7 @@ async function main() {
   console.log('🏪 Branches:     Main Branch + Remera Branch (both APPROVED)');
   console.log(`💊 Medications:  ${medications.length} medications (8 main branch, 2 remera branch)`);
   console.log('📋 Prescriptions: 1 APPROVED (Alice), 1 PENDING (Bob)');
-  console.log('🛒 Orders:       1 COMPLETED, 1 PENDING, 1 ACCEPTED');
+  console.log('🛒 Orders:       1 COMPLETED, 1 PENDING, 1 ACCEPTED, 2 READY_FOR_PICKUP, 1 PREPARING');
   console.log('🔄 Transfers:    1 COMPLETED, 1 PENDING');
   console.log('🕐 Attendance:   2 COMPLETED (yesterday), 1 PENDING (today)');
   console.log('='.repeat(60));
