@@ -56,7 +56,10 @@ export class PrescriptionsController {
   @Put(':id/status')
   @Roles(Role.PHARMACY, Role.PHARMACIST, Role.CASHIER, Role.NURSE)
   @ApiOperation({ summary: 'Update prescription status (Pharmacy)' })
-  updateStatus(@Param('id') id: string, @Body() dto: UpdatePrescriptionStatusDto) {
+  updateStatus(
+    @Param('id') id: string,
+    @Body() dto: UpdatePrescriptionStatusDto,
+  ) {
     return this.prescriptionsService.updateStatus(id, dto);
   }
 }

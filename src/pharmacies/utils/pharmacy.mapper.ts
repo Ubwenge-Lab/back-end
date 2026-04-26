@@ -1,5 +1,8 @@
-import { PharmacyLocationDto } from "../dto/pharmacy_location.dto";
-export function toPharmacyLocationDto(pharmacy: any, distanceKm?: number): PharmacyLocationDto {
+import { PharmacyLocationDto } from '../dto/pharmacy_location.dto';
+export function toPharmacyLocationDto(
+  pharmacy: any,
+  distanceKm?: number,
+): PharmacyLocationDto {
   return {
     id: pharmacy.id,
     name: pharmacy.name,
@@ -12,8 +15,7 @@ export function toPharmacyLocationDto(pharmacy: any, distanceKm?: number): Pharm
     hours: pharmacy.hours,
     isActive: pharmacy.isActive,
     rating: pharmacy.rating,
-    distance: distanceKm
-
+    distance: distanceKm,
   };
 }
 function mapRegion(pharmacy: any): string {
@@ -23,13 +25,15 @@ function getPharmacyStatus(hours: string): 'OPEN' | 'CLOSED' {
   if (!hours) return 'CLOSED';
 
   const [openTimeStr, closedTimeStr] = hours.split('-');
-  if (!openTimeStr|| !closedTimeStr) return 'CLOSED'
+  if (!openTimeStr || !closedTimeStr) return 'CLOSED';
 
-  const nowString = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali" });
+  const nowString = new Date().toLocaleString('en-US', {
+    timeZone: 'Africa/Kigali',
+  });
   const kigaliDate = new Date(nowString);
-  
+
   const currentHour = kigaliDate.getHours();
-  const currentMin = kigaliDate.getMinutes(); 
+  const currentMin = kigaliDate.getMinutes();
 
   const currentTotalMinutes = currentHour * 60 + currentMin;
 
@@ -40,13 +44,19 @@ function getPharmacyStatus(hours: string): 'OPEN' | 'CLOSED' {
   const closeTotalMinutes = closeHour * 60 + closeMin;
 
   if (openTotalMinutes < closeTotalMinutes) {
-    if (openTotalMinutes <= currentTotalMinutes && currentTotalMinutes <= closeTotalMinutes) {
+    if (
+      openTotalMinutes <= currentTotalMinutes &&
+      currentTotalMinutes <= closeTotalMinutes
+    ) {
       return 'OPEN';
     }
   } else {
-    if (currentTotalMinutes >= openTotalMinutes || currentTotalMinutes <= closeTotalMinutes) {
-    return 'OPEN';
-  }}
+    if (
+      currentTotalMinutes >= openTotalMinutes ||
+      currentTotalMinutes <= closeTotalMinutes
+    ) {
+      return 'OPEN';
+    }
+  }
   return 'CLOSED';
-
 }

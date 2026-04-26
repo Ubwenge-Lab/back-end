@@ -37,7 +37,7 @@ export class AuthService {
     private patientsService: PatientsService,
     private pharmaciesService: PharmaciesService,
     private notificationsService: NotificationsService,
-  ) { }
+  ) {}
 
   // ========================================
   // LOGIN (For ALL users including SUPER_ADMIN)
@@ -55,9 +55,12 @@ export class AuthService {
     }
 
     // Check email verification for PATIENT and PHARMACY
-    if (!user.isVerified && (user.role === 'PATIENT' || user.role === 'PHARMACY')) {
+    if (
+      !user.isVerified &&
+      (user.role === 'PATIENT' || user.role === 'PHARMACY')
+    ) {
       throw new UnauthorizedException(
-        'Please verify your email first. Check your inbox for the verification code.'
+        'Please verify your email first. Check your inbox for the verification code.',
       );
     }
 
@@ -65,7 +68,7 @@ export class AuthService {
     if (user.role === 'SUPER_ADMIN') {
       const isDefaultPassword = await bcrypt.compare(
         process.env.SUPER_ADMIN_PASSWORD || 'SuperAdminPower@2025',
-        user.password
+        user.password,
       );
 
       const tokens = await this.generateTokens(user.id, user.email, user.role);
@@ -94,7 +97,12 @@ export class AuthService {
         throw new UnauthorizedException('Pharmacy profile not found');
       }
 
-      const tokens = await this.generateTokens(user.id, user.email, user.role, pharmacy.status);
+      const tokens = await this.generateTokens(
+        user.id,
+        user.email,
+        user.role,
+        pharmacy.status,
+      );
       await this.updateRefreshToken(user.id, tokens.refreshToken);
 
       return {
@@ -108,11 +116,12 @@ export class AuthService {
           rejectionReason: pharmacy.rejectionReason || null,
         },
         ...tokens,
-        message: pharmacy.status === 'PENDING'
-          ? 'Your account is under review. Please wait for approval.'
-          : pharmacy.status === 'REJECTED'
-            ? 'Your account was rejected. Please update your documents and resubmit.'
-            : null,
+        message:
+          pharmacy.status === 'PENDING'
+            ? 'Your account is under review. Please wait for approval.'
+            : pharmacy.status === 'REJECTED'
+              ? 'Your account was rejected. Please update your documents and resubmit.'
+              : null,
       };
     }
 
@@ -125,15 +134,27 @@ export class AuthService {
 
       if (!branch) throw new UnauthorizedException('Branch not found');
 
-      const isUsingTempPassword = branch.tempPasswordHash && await bcrypt.compare(dto.password, branch.tempPasswordHash);
+      const isUsingTempPassword =
+        branch.tempPasswordHash &&
+        (await bcrypt.compare(dto.password, branch.tempPasswordHash));
 
       if (isUsingTempPassword) {
-        if (branch.tempPasswordExpiry && branch.tempPasswordExpiry < new Date()) {
-          throw new ForbiddenException('Temporary password expired. Contact HQ to resend credentials.');
+        if (
+          branch.tempPasswordExpiry &&
+          branch.tempPasswordExpiry < new Date()
+        ) {
+          throw new ForbiddenException(
+            'Temporary password expired. Contact HQ to resend credentials.',
+          );
         }
       }
 
-      const tokens = await this.generateTokens(user.id, user.email, user.role, branch.branchStatus);
+      const tokens = await this.generateTokens(
+        user.id,
+        user.email,
+        user.role,
+        branch.branchStatus,
+      );
       await this.updateRefreshToken(user.id, tokens.refreshToken);
 
       return {
@@ -172,22 +193,28 @@ export class AuthService {
       }
 
       if (staff.status !== 'ACTIVE') {
-        throw new UnauthorizedException('Your account has been deactivated. Please contact your branch manager.');
+        throw new UnauthorizedException(
+          'Your account has been deactivated. Please contact your branch manager.',
+        );
       }
 
       // Check branch status
       if (staff.branch.branchStatus !== 'APPROVED') {
-        throw new UnauthorizedException('Branch is not yet approved. Please wait for approval.');
+        throw new UnauthorizedException(
+          'Branch is not yet approved. Please wait for approval.',
+        );
       }
 
       // Check if using temporary password
-      const isUsingTempPassword = 
-        staff.tempPasswordHash && 
-        await bcrypt.compare(dto.password, staff.tempPasswordHash);
+      const isUsingTempPassword =
+        staff.tempPasswordHash &&
+        (await bcrypt.compare(dto.password, staff.tempPasswordHash));
 
       if (isUsingTempPassword) {
         if (staff.tempPasswordExpiry && staff.tempPasswordExpiry < new Date()) {
-          throw new ForbiddenException('Temporary password expired. Contact your branch manager to resend credentials.');
+          throw new ForbiddenException(
+            'Temporary password expired. Contact your branch manager to resend credentials.',
+          );
         }
       }
 
@@ -207,7 +234,7 @@ export class AuthService {
           requiresPasswordChange: !!isUsingTempPassword,
         },
         ...tokens,
-        message: isUsingTempPassword 
+        message: isUsingTempPassword
           ? 'Please change your password for security purposes.'
           : null,
       };
@@ -286,20 +313,25 @@ export class AuthService {
         user.email,
         verificationCode,
       );
-      console.log(`✅ Verification code sent to ${user.email}: ${verificationCode}`);
+      console.log(
+        `✅ Verification code sent to ${user.email}: ${verificationCode}`,
+      );
     } catch (error) {
       console.error('❌ Failed to send verification email:', error);
       if (this.configService.get('NODE_ENV') === 'development') {
-        console.log(`🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`);
+        console.log(
+          `🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`,
+        );
       }
     }
 
     return {
-      message: 'Registration successful! Please check your email for the verification code.',
+      message:
+        'Registration successful! Please check your email for the verification code.',
       userId: user.id,
       email: user.email,
       ...(this.configService.get('NODE_ENV') === 'development' && {
-        verificationCode
+        verificationCode,
       }),
     };
   }
@@ -357,21 +389,26 @@ export class AuthService {
         user.email,
         verificationCode,
       );
-      console.log(`✅ Pharmacy verification code sent to ${user.email}: ${verificationCode}`);
+      console.log(
+        `✅ Pharmacy verification code sent to ${user.email}: ${verificationCode}`,
+      );
     } catch (error) {
       console.error('❌ Failed to send verification email:', error);
       if (this.configService.get('NODE_ENV') === 'development') {
-        console.log(`🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`);
+        console.log(
+          `🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`,
+        );
       }
     }
 
     return {
-      message: 'Registration successful! Please verify your email, then wait for admin approval.',
+      message:
+        'Registration successful! Please verify your email, then wait for admin approval.',
       userId: user.id,
       pharmacyId: user.pharmacy.id,
       status: 'PENDING',
       ...(this.configService.get('NODE_ENV') === 'development' && {
-        verificationCode
+        verificationCode,
       }),
     };
   }
@@ -393,8 +430,13 @@ export class AuthService {
       throw new BadRequestException('Invalid verification code or email');
     }
 
-    if (user.verificationCodeExpiry && user.verificationCodeExpiry < new Date()) {
-      throw new BadRequestException('Verification code has expired. Please request a new one.');
+    if (
+      user.verificationCodeExpiry &&
+      user.verificationCodeExpiry < new Date()
+    ) {
+      throw new BadRequestException(
+        'Verification code has expired. Please request a new one.',
+      );
     }
 
     // Verify user
@@ -414,16 +456,19 @@ export class AuthService {
           user.pharmacy.id,
           user.pharmacy.name,
         );
-        console.log(`✅ Super admins notified about verified pharmacy: ${user.pharmacy.name}`);
+        console.log(
+          `✅ Super admins notified about verified pharmacy: ${user.pharmacy.name}`,
+        );
       } catch (error) {
         console.error('❌ Failed to notify super admins:', error);
       }
     }
 
     return {
-      message: user.role === 'PHARMACY'
-        ? 'Email verified! Your pharmacy will be reviewed by our admin team.'
-        : 'Email verified successfully! You can now login.',
+      message:
+        user.role === 'PHARMACY'
+          ? 'Email verified! Your pharmacy will be reviewed by our admin team.'
+          : 'Email verified successfully! You can now login.',
       verified: true,
     };
   }
@@ -459,18 +504,22 @@ export class AuthService {
         user.email,
         verificationCode,
       );
-      console.log(`✅ New verification code sent to ${user.email}: ${verificationCode}`);
+      console.log(
+        `✅ New verification code sent to ${user.email}: ${verificationCode}`,
+      );
     } catch (error) {
       console.error('❌ Failed to send verification email:', error);
       if (this.configService.get('NODE_ENV') === 'development') {
-        console.log(`🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`);
+        console.log(
+          `🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`,
+        );
       }
     }
 
     return {
       message: 'New verification code sent to your email',
       ...(this.configService.get('NODE_ENV') === 'development' && {
-        verificationCode
+        verificationCode,
       }),
     };
   }
@@ -485,7 +534,8 @@ export class AuthService {
     if (!user) {
       // Don't reveal if email exists for security
       return {
-        message: 'If your email is registered, you will receive a password reset code.',
+        message:
+          'If your email is registered, you will receive a password reset code.',
       };
     }
 
@@ -512,7 +562,8 @@ export class AuthService {
     }
 
     return {
-      message: 'If your email is registered, you will receive a password reset code.'
+      message:
+        'If your email is registered, you will receive a password reset code.',
     };
   }
 
@@ -536,8 +587,13 @@ export class AuthService {
       throw new BadRequestException('Invalid reset code or email');
     }
 
-    if (user.verificationCodeExpiry && user.verificationCodeExpiry < new Date()) {
-      throw new BadRequestException('Reset code has expired. Please request a new one.');
+    if (
+      user.verificationCodeExpiry &&
+      user.verificationCodeExpiry < new Date()
+    ) {
+      throw new BadRequestException(
+        'Reset code has expired. Please request a new one.',
+      );
     }
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
@@ -553,7 +609,8 @@ export class AuthService {
     });
 
     return {
-      message: 'Password reset successfully! You can now login with your new password.',
+      message:
+        'Password reset successfully! You can now login with your new password.',
     };
   }
 
@@ -571,7 +628,10 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const isCurrentPasswordValid = await bcrypt.compare(dto.currentPassword, user.password);
+    const isCurrentPasswordValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.password,
+    );
     if (!isCurrentPasswordValid) {
       throw new BadRequestException('Current password is incorrect');
     }
@@ -587,11 +647,15 @@ export class AuthService {
     });
 
     return {
-      message: 'Password changed successfully! Please login again with your new password.',
+      message:
+        'Password changed successfully! Please login again with your new password.',
     };
   }
 
-  async changeBranchPassword(userId: string, dto: { tempPassword: string; newPassword: string; confirmPassword: string }) {
+  async changeBranchPassword(
+    userId: string,
+    dto: { tempPassword: string; newPassword: string; confirmPassword: string },
+  ) {
     if (dto.newPassword !== dto.confirmPassword) {
       throw new BadRequestException('Passwords do not match');
     }
@@ -602,9 +666,13 @@ export class AuthService {
     });
 
     if (!branch) throw new BadRequestException('Branch not found');
-    if (!branch.tempPasswordHash) throw new BadRequestException('No temporary password set');
+    if (!branch.tempPasswordHash)
+      throw new BadRequestException('No temporary password set');
 
-    const isValid = await bcrypt.compare(dto.tempPassword, branch.tempPasswordHash);
+    const isValid = await bcrypt.compare(
+      dto.tempPassword,
+      branch.tempPasswordHash,
+    );
     if (!isValid) throw new BadRequestException('Invalid temporary password');
 
     if (branch.tempPasswordExpiry && branch.tempPasswordExpiry < new Date()) {
@@ -634,7 +702,8 @@ export class AuthService {
     });
 
     if (!branch) throw new BadRequestException('Branch not found');
-    if (branch.branchStatus === 'APPROVED') throw new BadRequestException('Branch already approved');
+    if (branch.branchStatus === 'APPROVED')
+      throw new BadRequestException('Branch already approved');
 
     await this.prisma.branch.update({
       where: { id: branch.id },
@@ -654,7 +723,10 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    const isRefreshTokenValid = await bcrypt.compare(refreshToken, user.refreshToken);
+    const isRefreshTokenValid = await bcrypt.compare(
+      refreshToken,
+      user.refreshToken,
+    );
     if (!isRefreshTokenValid) {
       throw new UnauthorizedException('Access denied');
     }
@@ -665,7 +737,12 @@ export class AuthService {
       pharmacyStatus = pharmacy?.status;
     }
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role, pharmacyStatus);
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.role,
+      pharmacyStatus,
+    );
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
@@ -696,7 +773,12 @@ export class AuthService {
     return randomInt(100000, 999999).toString();
   }
 
-  private async generateTokens(userId: string, email: string, role: string, pharmacyStatus?: string) {
+  private async generateTokens(
+    userId: string,
+    email: string,
+    role: string,
+    pharmacyStatus?: string,
+  ) {
     const payload: Record<string, any> = { sub: userId, email, role };
 
     if (pharmacyStatus) {

@@ -1,13 +1,6 @@
 // backend/src/patients/patients.controller.ts
 
-import {
-  Controller,
-  Get,
-  Put,
-  Body,
-  UseGuards,
-  Req,
-} from '@nestjs/common';
+import { Controller, Get, Put, Body, UseGuards, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PatientsService } from './patients.service';
 import { UpdatePatientDto } from './dto/update-patient.dto';

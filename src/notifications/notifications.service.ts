@@ -36,9 +36,10 @@ export class NotificationsService {
   // ========================================
 
   async findByUser(userId: string, userType: 'patient' | 'pharmacy') {
-    const where = userType === 'patient' 
-      ? { patient: { userId } }
-      : { pharmacy: { userId } };
+    const where =
+      userType === 'patient'
+        ? { patient: { userId } }
+        : { pharmacy: { userId } };
 
     return this.prisma.notification.findMany({
       where,
@@ -63,9 +64,10 @@ export class NotificationsService {
   // ========================================
 
   async markAllAsRead(userId: string, userType: 'patient' | 'pharmacy') {
-    const where = userType === 'patient'
-      ? { patient: { userId } }
-      : { pharmacy: { userId } };
+    const where =
+      userType === 'patient'
+        ? { patient: { userId } }
+        : { pharmacy: { userId } };
 
     return this.prisma.notification.updateMany({
       where,
@@ -77,7 +79,7 @@ export class NotificationsService {
   // SEND EMAIL NOTIFICATIONS
   // ========================================
 
-  async sendVerificationEmail(email: string, code: string,) {
+  async sendVerificationEmail(email: string, code: string) {
     await this.emailService.sendVerificationEmail(email, code);
   }
 

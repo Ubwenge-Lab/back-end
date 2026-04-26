@@ -6,15 +6,21 @@ import { getDistrict } from './triangulation.helpers';
 
 describe('getDistrict()', () => {
   it('should return Gasabo for Kimironko address', () => {
-    expect(getDistrict(-1.9412, 30.1092, 'KG 11 Ave, Kimironko, Gasabo, Kigali')).toBe('Gasabo');
+    expect(
+      getDistrict(-1.9412, 30.1092, 'KG 11 Ave, Kimironko, Gasabo, Kigali'),
+    ).toBe('Gasabo');
   });
 
   it('should return Gasabo for Remera address', () => {
-    expect(getDistrict(-1.9559, 30.1125, 'KG 9 Ave, Remera, Gasabo, Kigali')).toBe('Gasabo');
+    expect(
+      getDistrict(-1.9559, 30.1125, 'KG 9 Ave, Remera, Gasabo, Kigali'),
+    ).toBe('Gasabo');
   });
 
   it('should return Nyarugenge for City Centre address', () => {
-    expect(getDistrict(-1.95, 30.0588, 'KN 3 Rd, City Centre, Nyarugenge, Kigali')).toBe('Nyarugenge');
+    expect(
+      getDistrict(-1.95, 30.0588, 'KN 3 Rd, City Centre, Nyarugenge, Kigali'),
+    ).toBe('Nyarugenge');
   });
 
   it('should return Kicukiro for southern Kigali coordinates with no district in address', () => {
@@ -26,7 +32,9 @@ describe('getDistrict()', () => {
   });
 
   it('should prioritize address over coordinates when address contains district name', () => {
-    expect(getDistrict(-1.9559, 30.1125, 'KG 9 Ave, Remera, Gasabo, Kigali')).toBe('Gasabo');
+    expect(
+      getDistrict(-1.9559, 30.1125, 'KG 9 Ave, Remera, Gasabo, Kigali'),
+    ).toBe('Gasabo');
   });
 
   it('should fallback to coordinates when address has no district name', () => {
@@ -131,7 +139,9 @@ describe('TriangulationService', () => {
       d.branches.flatMap((b: any) => b.nearbyPatients),
     );
 
-    const livePatient = allPatients.find((p: any) => p.patientId === 'patient-1');
+    const livePatient = allPatients.find(
+      (p: any) => p.patientId === 'patient-1',
+    );
     if (livePatient) {
       expect(livePatient.locationSource).toBe('LIVE_GPS');
     }
@@ -147,7 +157,9 @@ describe('TriangulationService', () => {
       d.branches.flatMap((b: any) => b.nearbyPatients),
     );
 
-    const fallbackPatient = allPatients.find((p: any) => p.patientId === 'patient-2');
+    const fallbackPatient = allPatients.find(
+      (p: any) => p.patientId === 'patient-2',
+    );
     if (fallbackPatient) {
       expect(fallbackPatient.locationSource).toBe('FIXED_FALLBACK');
     }
@@ -185,7 +197,10 @@ describe('TriangulationService', () => {
       .mockResolvedValueOnce({ latitude: -1.944, longitude: 30.062 })
       .mockResolvedValueOnce({ latitude: -1.9412, longitude: 30.1092 });
 
-    const result = await service.getMapData({ view: 'all', district: 'Nyarugenge' });
+    const result = await service.getMapData({
+      view: 'all',
+      district: 'Nyarugenge',
+    });
     expect(result.districts.length).toBe(1);
     expect(result.districts[0].name).toBe('Nyarugenge');
   });

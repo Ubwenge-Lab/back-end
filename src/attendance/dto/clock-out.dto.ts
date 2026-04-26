@@ -4,10 +4,10 @@ import { IsOptional, IsObject, IsString } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class ClockOutDto {
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'GPS location (optional)',
     example: { latitude: -1.9441, longitude: 30.0619 },
-    required: false 
+    required: false,
   })
   @IsOptional()
   @IsObject()
@@ -16,9 +16,9 @@ export class ClockOutDto {
     longitude: number;
   };
 
-  @ApiProperty({ 
+  @ApiProperty({
     description: 'Optional notes about the shift',
-    required: false 
+    required: false,
   })
   @IsOptional()
   @IsString()

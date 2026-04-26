@@ -46,9 +46,12 @@ import { LocationModule } from './location/location.module';
     UploadModule,
     BranchesModule,
     StaffModule, // NEW
-    AttendanceModule, StockTransfersModule, TriangulationModule, LocationModule,
+    AttendanceModule,
+    StockTransfersModule,
+    TriangulationModule,
+    LocationModule,
   ],
   controllers: [AppController],
   providers: [AppService],
 })
-export class AppModule { }
+export class AppModule {}
