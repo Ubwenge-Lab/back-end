@@ -15,6 +15,7 @@ export function toPharmacyLocationDto(pharmacy: any, distanceKm?: number): Pharm
     isActive: pharmacy.isActive,
     rating: pharmacy.rating,
     distance: distanceKm,
+    medications: pharmacy.medications,
   };
 }
 function mapRegion(pharmacy: any): string {

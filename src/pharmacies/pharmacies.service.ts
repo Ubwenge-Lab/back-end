@@ -1085,6 +1085,7 @@ export class PharmaciesService {
       where: { id },
       include: {
         user: { select: { isActive: true } },
+        medications: true,
       },
     });
 
@@ -1110,6 +1111,7 @@ export class PharmaciesService {
             user: { select: { isActive: true } },
           },
         },
+        medications: true,
       },
     });
 

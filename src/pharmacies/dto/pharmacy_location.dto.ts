@@ -61,4 +61,8 @@ export class PharmacyLocationDto {
   @IsNumber()
   @IsOptional()
   rating: number | null;
+
+  @ApiProperty({ type: [Object], isArray: true })
+  @IsOptional()
+  medications?: any[];
 }
