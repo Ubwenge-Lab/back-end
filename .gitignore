@@ -57,3 +57,10 @@ report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Test scripts
 scripts/
+scratch/
+src/prisma/backup-data.ts
+src/prisma/data-backup.json
+src/prisma/test-conn.ts
+get_exact_ids.ts
+get_ids.ts
+test_checkout.ts
