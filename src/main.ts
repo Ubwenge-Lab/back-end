@@ -18,9 +18,13 @@ async function bootstrap() {
   app.use(helmet());
 
   // CORS - Allow frontend on port 3000
+  const allowedOrigins = process.env.FRONTEND_URL
+    ? process.env.FRONTEND_URL.split(',')
+    : [];
+
   app.enableCors({
     origin: [
-      'https://evuze-testing.vercel.app',
+      ...allowedOrigins, // pulls from Render env variable
       'http://localhost:3000',
       /^https:\/\/.*\.vercel\.app$/,
     ],
@@ -67,4 +71,7 @@ async function bootstrap() {
   `);
 }
 
-bootstrap();
+bootstrap().catch((err) => {
+  console.error(err);
+  process.exit(1);
+});
