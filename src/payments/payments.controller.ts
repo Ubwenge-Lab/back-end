@@ -83,11 +83,7 @@ export class PaymentsController {
 
   @Post('record')
   @Roles(Role.CASHIER, Role.PHARMACIST, Role.BRANCH_MANAGER)
-  @ApiOperation({
-    summary: 'Record in-person payment collection',
-    description:
-      'Records cash, card, or manual MoMo payments collected at the counter. Creates a completed payment and updates order status atomically.',
-  })
+  @ApiOperation({ summary: 'Record an in-person payment at the branch counter' })
   recordPayment(@Req() req: any, @Body() dto: RecordPaymentDto) {
     return this.paymentsService.recordPayment(req.user.sub, dto);
   }

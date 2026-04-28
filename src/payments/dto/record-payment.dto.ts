@@ -1,54 +1,42 @@
+// backend/src/payments/dto/record-payment.dto.ts
+
+import { IsString, IsEnum, IsNumber, Min, IsOptional } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
-import {
-  IsEnum,
-  IsNumber,
-  IsOptional,
-  IsString,
-  IsUUID,
-  Min,
-} from 'class-validator';
-import { PaymentMethod } from '@prisma/client';
 
 export class RecordPaymentDto {
-  @ApiProperty({
-    description: 'The ID of the order to record payment for',
-    example: '123e4567-e89b-12d3-a456-426614174000',
-  })
-  @IsUUID()
+  @ApiProperty({ description: 'Order ID to record payment for' })
+  @IsString()
   orderId: string;
 
   @ApiProperty({
-    description: 'The payment method used',
-    enum: PaymentMethod,
-    example: PaymentMethod.CASH,
+    description: 'Payment method used for the recorded payment',
+    enum: ['MTN_MOMO', 'AIRTEL_MONEY', 'CARD', 'CASH', 'INSURANCE'],
   })
-  @IsEnum(PaymentMethod)
-  method: PaymentMethod;
+  @IsEnum(['MTN_MOMO', 'AIRTEL_MONEY', 'CARD', 'CASH', 'INSURANCE'])
+  paymentMethod: 'MTN_MOMO' | 'AIRTEL_MONEY' | 'CARD' | 'CASH' | 'INSURANCE';
 
-  @ApiProperty({
-    description: 'The amount received from the customer',
-    example: 15000,
-    minimum: 0,
-  })
+  @ApiProperty({ description: 'Amount received from the customer' })
   @IsNumber()
   @Min(0)
   amountReceived: number;
 
-  @ApiProperty({
-    description: 'Insurance provider name (required if method is INSURANCE)',
-    example: 'Radiant Health Insurance',
-    required: false,
-  })
-  @IsOptional()
+  @ApiProperty({ required: false, description: 'Phone number for mobile money payments' })
   @IsString()
+  @IsOptional()
+  phoneNumber?: string;
+
+  @ApiProperty({ required: false, description: 'Insurance provider for insurance payments' })
+  @IsString()
+  @IsOptional()
   insuranceProvider?: string;
 
-  @ApiProperty({
-    description: 'Insurance policy number (required if method is INSURANCE)',
-    example: 'POL-123456789',
-    required: false,
-  })
-  @IsOptional()
+  @ApiProperty({ required: false, description: 'Insurance policy number for insurance payments' })
   @IsString()
+  @IsOptional()
   insurancePolicyNumber?: string;
+
+  @ApiProperty({ required: false, description: 'Optional payment reference for manual card or mobile money receipts' })
+  @IsString()
+  @IsOptional()
+  reference?: string;
 }

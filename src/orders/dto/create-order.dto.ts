@@ -52,9 +52,11 @@ export class CreateOrderDto {
   @IsOptional()
   prescriptionId?: string;
 
-  @ApiProperty({ enum: ['MTN_MOMO', 'AIRTEL_MONEY', 'CARD', 'INSURANCE'] })
-  @IsEnum(['MTN_MOMO', 'AIRTEL_MONEY', 'CARD', 'INSURANCE'])
-  paymentMethod: 'MTN_MOMO' | 'AIRTEL_MONEY' | 'CARD' | 'INSURANCE';
+  @ApiProperty({
+    enum: ['MTN_MOMO', 'AIRTEL_MONEY', 'CARD', 'INSURANCE', 'CASH'],
+  })
+  @IsEnum(['MTN_MOMO', 'AIRTEL_MONEY', 'CARD', 'INSURANCE', 'CASH'])
+  paymentMethod: 'MTN_MOMO' | 'AIRTEL_MONEY' | 'CARD' | 'INSURANCE' | 'CASH';
 
   // For insurance payments
   @ApiProperty({ required: false })
