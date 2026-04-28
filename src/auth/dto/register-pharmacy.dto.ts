@@ -1,6 +1,13 @@
 // backend/src/auth/dto/register-pharmacy.dto.ts
 
-import { IsString, IsEmail, IsNotEmpty, IsNumber, IsOptional, IsDateString } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsNotEmpty,
+  IsNumber,
+  IsOptional,
+  IsDateString,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class RegisterPharmacyDto {
