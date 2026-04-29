@@ -143,6 +143,21 @@ export class SuperAdminController {
     return this.superAdminService.verifyPharmacyLocation(id, dto);
   }
 
+  @Get('branches/unverified-locations')
+  @ApiOperation({ summary: 'Get branches with unverified locations' })
+  getUnverifiedBranchLocations() {
+    return this.superAdminService.getUnverifiedBranchLocations();
+  }
+
+  @Patch('branches/:id/verify-location')
+  @ApiOperation({ summary: 'Verify branch location' })
+  verifyBranchLocation(
+    @Param('id') id: string,
+    @Body() dto: VerifyLocationDto,
+  ) {
+    return this.superAdminService.verifyBranchLocation(id, dto);
+  }
+
   @Get('branches/pending')
   @ApiOperation({ summary: 'Get pending branch applications' })
   getPendingBranches() {
