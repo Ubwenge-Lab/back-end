@@ -103,13 +103,52 @@ export class NotificationsService {
       where: { role: 'SUPER_ADMIN' },
     });
 
+    const title = 'New Pharmacy Application';
+    const message = `${pharmacyName} has registered and is pending approval.`;
+
     // Create in-app notifications for each super admin
     for (const admin of superAdmins) {
       await this.create({
         type: 'PHARMACY_APPROVED', // Reuse enum
-        title: 'New Pharmacy Application',
-        message: `${pharmacyName} has registered and is pending approval.`,
+        title,
+        message,
       });
     }
+
+    // Send email alert to the configured SUPER_ADMIN_EMAIL
+    // Since the email config sends to the centralized info@ubwengelab.rw or similar, we just call it once
+    await this.emailService.sendSuperAdminAlert(
+      title,
+      message,
+      'Review Pharmacy',
+      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/pharmacies`
+    );
+  }
+
+  async notifySuperAdminsNewBranch(branchName: string, pharmacyName: string) {
+    // Get all super admins
+    const superAdmins = await this.prisma.user.findMany({
+      where: { role: 'SUPER_ADMIN' },
+    });
+
+    const title = 'New Branch Registration';
+    const message = `A new branch "${branchName}" has been registered by "${pharmacyName}" and its coordinates are pending verification.`;
+
+    // Create in-app notifications for each super admin
+    for (const admin of superAdmins) {
+      await this.create({
+        type: 'PHARMACY_APPROVED', // Fallback to an existing enum or add a new one in Prisma schema later if needed
+        title,
+        message,
+      });
+    }
+
+    // Send email alert
+    await this.emailService.sendSuperAdminAlert(
+      title,
+      message,
+      'Verify Location',
+      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/branches`
+    );
   }
 }

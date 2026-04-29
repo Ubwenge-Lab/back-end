@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../notifications/email.service';
+import { NotificationsService } from '../notifications/notifications.service';
 import { CreateBranchDto } from './dto';
 import { BranchStatus, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -17,12 +18,13 @@ export class BranchesService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
+    private readonly notificationsService: NotificationsService,
   ) {}
 
   async createBranch(hqUserId: string, dto: CreateBranchDto) {
     const pharmacy = await this.prisma.pharmacy.findUnique({
       where: { userId: hqUserId },
-      select: { id: true, status: true },
+      select: { id: true, name: true, status: true },
     });
     if (!pharmacy) throw new ForbiddenException('Pharmacy not found');
     if (pharmacy.status !== 'APPROVED')
@@ -36,7 +38,7 @@ export class BranchesService {
     if (existingEmail)
       throw new ConflictException('Email already assigned to another branch');
 
-    return this.prisma.branch.create({
+    const branch = await this.prisma.branch.create({
       data: {
         pharmacyId: pharmacy.id,
         name: dto.name,
@@ -56,6 +58,18 @@ export class BranchesService {
         createdAt: true,
       },
     });
+
+    // Notify Super Admin
+    try {
+      await this.notificationsService.notifySuperAdminsNewBranch(
+        branch.name,
+        pharmacy.name,
+      );
+    } catch (error) {
+      console.error('Failed to notify super admins about new branch:', error);
+    }
+
+    return branch;
   }
 
   async sendCredentials(branchId: string, hqUserId: string) {

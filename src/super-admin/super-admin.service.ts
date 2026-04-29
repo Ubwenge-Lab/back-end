@@ -413,12 +413,10 @@ export class SuperAdminService {
   // GET BRANCHES WITH UNVERIFIED LOCATIONS
   // ========================================
   async getUnverifiedBranchLocations() {
-  return this.prisma.branch.findMany({
-    where: {
-      latitude: { not: null },
-      longitude: { not: null },
-      isLocationVerified: false,
-    },
+    return this.prisma.branch.findMany({
+      where: {
+        isLocationVerified: false,
+      },
     select: {
       id: true,
       name: true,
