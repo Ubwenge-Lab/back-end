@@ -70,6 +70,11 @@ src/prisma/test-conn.ts
 get_exact_ids.ts
 get_ids.ts
 test_checkout.ts
+
+# Testing directories
+tests/
+/tests/
+
 # Beads issue tracker & Dolt (local dev tools — keep off GitHub)
 .beads/
 .dolt/
@@ -83,6 +88,7 @@ CLAUDE.md
 # Security audit reports (sensitive, not project source)
 SECURITY_AUDIT.md
 /reports/
+reports/
 
 # Seed data (large local data files - place manually before seeding)
 medication_registry.csv
