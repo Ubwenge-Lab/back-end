@@ -32,7 +32,7 @@ export class AppService {
 
               body {
                   background-color: var(--bg);
-                  background-image: 
+                  background-image:
                       radial-gradient(at 0% 0%, rgba(99, 102, 241, 0.15) 0px, transparent 50%),
                       radial-gradient(at 100% 0%, rgba(168, 85, 247, 0.15) 0px, transparent 50%),
                       radial-gradient(at 100% 100%, rgba(59, 130, 246, 0.15) 0px, transparent 50%),
@@ -235,19 +235,19 @@ export class AppService {
       </head>
       <body>
           <div class="glow"></div>
-          
+
           <div class="container">
               <div class="status-badge">
                   <div class="pulse"></div>
                   System Operational
               </div>
-              
+
               <h1>E-Vuze API</h1>
               <p>The backend orchestration layer for the E-Vuze healthcare platform is active and healthy. Database connection verified.</p>
-              
+
               <div class="buttons">
                   <a href="/api/docs" class="btn btn-primary">Documentation</a>
-                  <a href="https://evuze-testing.vercel.app" target="_blank" class="btn btn-secondary">Connect Frontend</a>
+                  <a href="https://evuze.ubwengelab.rw/" target="_blank" class="btn btn-secondary">Connect Frontend</a>
               </div>
           </div>
 
