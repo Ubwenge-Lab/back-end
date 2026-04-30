@@ -165,6 +165,8 @@ export class BranchesService {
         name: true,
         address: true,
         phone: true,
+        latitude: true,
+        longitude: true, 
         branchManagerEmail: true,
         branchStatus: true,
         isActive: true,
@@ -198,10 +200,32 @@ export class BranchesService {
         id: true,
         name: true,
         address: true,
+        latitude: true,
+        longitude: true,  
       },
       orderBy: { name: 'asc' },
     });
   }
+
+  async getMyBranchDetails(managerUserId: string) {
+  const branch = await this.prisma.branch.findUnique({
+    where: { managerId: managerUserId },
+    select: {
+      id: true,
+      name: true,
+      address: true,
+      latitude: true,
+      longitude: true,
+    },
+  });
+
+  if (!branch) {
+    throw new NotFoundException('Branch not found');
+  }
+
+  return branch;
+}
+
 
   async getBranchDetails(branchId: string, hqUserId: string) {
     await this.validateBranchOwnership(branchId, hqUserId);
