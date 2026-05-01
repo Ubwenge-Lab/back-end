@@ -71,6 +71,15 @@ export class PaymentsController {
     return this.paymentsService.processMtnPayment(data);
   }
 
+
+  @Get(':paymentId/receipt')
+  @Roles(Role.CASHIER, Role.PHARMACIST, Role.BRANCH_MANAGER)
+  @ApiOperation({ summary: 'Get payment receipt' })
+  getReceipt(@Param('paymentId') paymentId: string, @Req() req: any) {
+    // req.user.sub contains the authenticated User ID
+    return this.paymentsService.getReceipt(paymentId, req.user.sub);
+  }
+
   @Post('checkout')
   @Roles(Role.PATIENT)
   @ApiOperation({

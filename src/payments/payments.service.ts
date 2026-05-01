@@ -4,6 +4,7 @@ import {
   Injectable,
   NotFoundException,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FlutterwaveService } from './flutterwave.service';
@@ -472,6 +473,49 @@ export class PaymentsService {
       },
     });
   }
+
+
+  async getReceipt(paymentId: string, staffUserId: string) {
+    // 1. Fetch the payment and include the linked order
+    const payment = await this.prisma.payment.findUnique({
+      where: { id: paymentId },
+      include: {
+        order: true,
+      },
+    });
+
+    // Task 3: Return 404 if payment doesn't exist
+    if (!payment) {
+      throw new NotFoundException('Payment not found');
+    }
+
+    // 2. Fetch the staff member's profile to get their branchId
+    const staff = await this.prisma.staff.findUnique({
+      where: { userId: staffUserId },
+    });
+
+    if (!staff) {
+      throw new ForbiddenException('Staff record not found');
+    }
+
+    // Task 4: Return 403 if the branch doesn't match
+    if (payment.order.branchId !== staff.branchId) {
+      throw new ForbiddenException(
+        'You do not have permission to view receipts for this branch',
+      );
+    }
+
+    // 3. Return the data (using any to handle the new receiptNumber field)
+    return {
+      receiptNumber: (payment as any).receiptNumber,
+      orderId: payment.orderId,
+      totalAmount: payment.order.total,
+      paymentStatus: payment.status,
+    };
+  }
+
+
+
 
   // CHECKOUT (Create order + initiate payment in one step)
 
