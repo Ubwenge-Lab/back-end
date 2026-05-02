@@ -10,6 +10,7 @@ import {
   ResolvedPatient,
 } from './triangulation.types';
 import { toPharmacyLocationDto } from '../pharmacies/utils/pharmacy.mapper';
+import { PharmacyLocationDto } from '../pharmacies/dto/pharmacy_location.dto';
 
 
 @Injectable()
@@ -437,5 +438,78 @@ export class TriangulationService {
       },
       sisterBranches: triangulation.sort((a, b) => a.distance - b.distance),
     };
+  }
+
+  async getCompetitors(userId: string): Promise<PharmacyLocationDto[]> {
+    try {
+      const managerBranch = await this.prisma.branch.findFirst({
+        where: { managerId: userId },
+        select: {
+          id: true,
+          pharmacyId: true,
+          latitude: true,
+          longitude: true,
+        }
+      });
+
+      if (!managerBranch || !managerBranch.latitude || !managerBranch.longitude) {
+        return [];
+      }
+
+      const dayOfWeek = new Date()
+        .toLocaleString('en-US', { timeZone: 'Africa/Kigali', weekday: 'long' })
+        .toLowerCase();
+
+      const allBranches = await this.prisma.branch.findMany({
+        where: {
+          isActive: true,
+          pharmacy: { status: 'APPROVED' }
+        },
+        select: {
+          id: true,
+          name: true,
+          latitude: true,
+          longitude: true,
+          address: true,
+          phone: true,
+          pharmacyId: true,
+          operatingHours: true,
+        },
+      });
+
+      const competitors: PharmacyLocationDto[] = [];
+
+      for (const b of allBranches) {
+        if (b.pharmacyId !== managerBranch.pharmacyId) {
+          const distance = this.calculateHaversine(
+            managerBranch.latitude,
+            managerBranch.longitude,
+            b.latitude,
+            b.longitude
+          );
+
+          if (distance <= PROXIMITY_RADIUS_KM) {
+            const todayHours = b.operatingHours ? (b.operatingHours as any)[dayOfWeek] : null;
+            const hoursString = todayHours?.open && todayHours?.close
+              ? `${todayHours.open}-${todayHours.close}`
+              : null;
+
+            competitors.push(
+              toPharmacyLocationDto(
+                { ...b, hours: hoursString, region: null, rating: null, isActive: true },
+                parseFloat(distance.toFixed(2))
+              )
+            );
+          }
+        }
+      }
+
+      competitors.sort((a, b) => a.distance - b.distance);
+      return competitors;
+
+    } catch (error) {
+      this.logger.error(`Error fetching competitors for user ${userId}:`, error);
+      throw new Error('Failed to fetch competitor data');
+    }
   }
 }
