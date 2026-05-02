@@ -4,3 +4,4 @@ export { InitiatePaymentDto } from './initiate-payment.dto';
 export { VerifyPaymentDto } from './verify-payment.dto';
 export { MobileMoneyPaymentDto } from './mobile-money-payment.dto';
 export { CheckoutDto } from './checkout.dto';
+export { RecordPaymentDto } from './record-payment.dto';

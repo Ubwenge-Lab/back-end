@@ -25,7 +25,6 @@ export class TriangulationService {
   // This unifies Branches and Pharmacies into a single searchable list.
 
   async getGlobalCoordinates() {
-    // 1. Fetch main pharmacy coordinates
     const pharmacies = await this.prisma.pharmacy.findMany({
       select: {
         id: true,
@@ -37,7 +36,6 @@ export class TriangulationService {
       },
     });
 
-    // 2. Fetch all branch coordinates
     const branches = await this.prisma.branch.findMany({
       select: {
         id: true,
@@ -51,22 +49,14 @@ export class TriangulationService {
       },
     });
 
-    return {
-      pharmacies,
-      branches,
-    };
+    return { pharmacies, branches };
   }
+
   async getNearbyBranches(patientLat: number, patientLng: number) {
-    // 1. Fetch Branches belonging to APPROVED pharmacies
-    // We prioritize branches because they represent specific active outlets.
     const allLocations = await this.prisma.branch.findMany({
       where: {
-        pharmacy: {
-          status: 'APPROVED', // Ensure the business is licensed
-        },
-        // Only fetch branches that actually have coordinates set
-        latitude: { not: null },
-        longitude: { not: null },
+        pharmacy: { status: 'APPROVED' },
+        isActive: true,
       },
       select: {
         id: true,
@@ -75,15 +65,11 @@ export class TriangulationService {
         longitude: true,
         address: true,
         pharmacy: {
-          select: {
-            name: true,
-            status: true,
-          },
+          select: { name: true, status: true },
         },
       },
     });
 
-    // 2. Map and Calculate Distance in one pass (Restoring Benjamin's original logic)
     return allLocations
       .map((location) => ({
         id: location.id,
@@ -107,7 +93,6 @@ export class TriangulationService {
     radius: number,
     userId?: string,
   ) {
-    // 1. Update patient location if userId is provided (Recording recent location)
     if (userId) {
       await this.prisma.patient
         .updateMany({
@@ -119,7 +104,6 @@ export class TriangulationService {
         );
     }
 
-    // 2. Fetch all Approved pharmacies and active Branches that have coordinates
     const [pharmacies, branches] = await Promise.all([
       this.prisma.pharmacy.findMany({
         where: {
@@ -161,49 +145,50 @@ export class TriangulationService {
       }),
     ]);
 
-    // 3. Unify into a single list of locations
     const allLocations = [
-      ...pharmacies.map((p) => ({
-        ...p,
-        type: 'MAIN',
-      })),
+      ...pharmacies.map((p) => ({ ...p, type: 'MAIN' })),
       ...branches.map((b) => ({
         ...b,
         name: `${b.pharmacy.name} - ${b.name}`,
         type: 'BRANCH',
-        status: b.branchStatus as any, // Cast for mapper compatibility
+        status: b.branchStatus as any,
       })),
     ];
 
-    const dayOfWeek = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali", weekday: 'long' }).toLowerCase();
+    const dayOfWeek = new Date()
+      .toLocaleString('en-US', { timeZone: 'Africa/Kigali', weekday: 'long' })
+      .toLowerCase();
 
-    // 4. Calculate distance, filter by radius, sort, and map to DTO
     return allLocations
       .map((loc) => {
-        const distance = this.calculateHaversine(
-          lat,
-          lng,
-          loc.latitude,
-          loc.longitude,
-        );
-        return {
-          ...loc,
-          distance: parseFloat(distance.toFixed(1)),
-        };
+        const distance = this.calculateHaversine(lat, lng, loc.latitude, loc.longitude);
+        return { ...loc, distance: parseFloat(distance.toFixed(1)) };
       })
       .filter((loc) => loc.distance <= radius)
       .sort((a, b) => a.distance - b.distance)
-      .map(loc => {
+      .map((loc) => {
         const todayHours = loc.operatingHours ? (loc.operatingHours as any)[dayOfWeek] : null;
-        const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
-        
-        return toPharmacyLocationDto({
-          ...loc,
-          hours: hoursString,
-          region: loc.latitude && loc.longitude ? getDistrict(loc.latitude, loc.longitude, loc.address) : 'Unknown',
-          rating: null,
-          isActive: loc.type === 'MAIN' ? loc.status === 'APPROVED' : (loc as any).isActive && loc.status === 'APPROVED',
-        }, loc.distance);
+        const hoursString =
+          todayHours && todayHours.open && todayHours.close
+            ? `${todayHours.open}-${todayHours.close}`
+            : null;
+
+        return toPharmacyLocationDto(
+          {
+            ...loc,
+            hours: hoursString,
+            region:
+              loc.latitude && loc.longitude
+                ? getDistrict(loc.latitude, loc.longitude, loc.address)
+                : 'Unknown',
+            rating: null,
+            isActive:
+              loc.type === 'MAIN'
+                ? loc.status === 'APPROVED'
+                : (loc as any).isActive && loc.status === 'APPROVED',
+          },
+          loc.distance,
+        );
       });
   }
 
@@ -213,7 +198,7 @@ export class TriangulationService {
     lat2: number,
     lon2: number,
   ): number {
-    const R = 6371; // km
+    const R = 6371;
     const dLat = ((lat2 - lat1) * Math.PI) / 180;
     const dLon = ((lon2 - lon1) * Math.PI) / 180;
     const a =
@@ -229,7 +214,6 @@ export class TriangulationService {
   async getMapData(query: MapDataQueryDto) {
     const { view = 'all', district = 'all' } = query;
 
-    // 1. Fetch all APPROVED pharmacies with their branches
     const pharmacies = await this.prisma.pharmacy.findMany({
       where: { status: 'APPROVED' },
       select: {
@@ -253,7 +237,6 @@ export class TriangulationService {
       },
     });
 
-    // 2. Fetch all patients
     const patients = await this.prisma.patient.findMany({
       select: {
         id: true,
@@ -264,7 +247,6 @@ export class TriangulationService {
       },
     });
 
-    // 3. Resolve each patient's coordinates (GPS or fallback)
     const resolvedPatients: ResolvedPatient[] = [];
 
     for (const patient of patients) {
@@ -276,9 +258,7 @@ export class TriangulationService {
       );
 
       if (!coords) {
-        this.logger.warn(
-          `Could not resolve coordinates for patient ${patient.id}, skipping.`,
-        );
+        this.logger.warn(`Could not resolve coordinates for patient ${patient.id}, skipping.`);
         continue;
       }
 
@@ -298,32 +278,11 @@ export class TriangulationService {
       });
     }
 
-    // 4. Build district groups
     const districtMap: Record<DistrictName, DistrictGroup> = {
-      Gasabo: {
-        name: 'Gasabo',
-        pharmacies: [],
-        branches: [],
-        totalNearbyPatients: 0,
-      },
-      Kicukiro: {
-        name: 'Kicukiro',
-        pharmacies: [],
-        branches: [],
-        totalNearbyPatients: 0,
-      },
-      Nyarugenge: {
-        name: 'Nyarugenge',
-        pharmacies: [],
-        branches: [],
-        totalNearbyPatients: 0,
-      },
-      Other: {
-        name: 'Other',
-        pharmacies: [],
-        branches: [],
-        totalNearbyPatients: 0,
-      },
+      Gasabo:    { name: 'Gasabo',    pharmacies: [], branches: [], totalNearbyPatients: 0 },
+      Kicukiro:  { name: 'Kicukiro',  pharmacies: [], branches: [], totalNearbyPatients: 0 },
+      Nyarugenge:{ name: 'Nyarugenge',pharmacies: [], branches: [], totalNearbyPatients: 0 },
+      Other:     { name: 'Other',     pharmacies: [], branches: [], totalNearbyPatients: 0 },
     };
 
     for (const pharmacy of pharmacies) {
@@ -345,11 +304,7 @@ export class TriangulationService {
 
       for (const branch of pharmacy.branches) {
         if (!branch.latitude || !branch.longitude) continue;
-        const branchDistrict = getDistrict(
-          branch.latitude,
-          branch.longitude,
-          branch.address,
-        );
+        const branchDistrict = getDistrict(branch.latitude, branch.longitude, branch.address);
         const nearbyPatients: PatientMapPoint[] = [];
 
         for (const patient of resolvedPatients) {
@@ -383,12 +338,10 @@ export class TriangulationService {
           nearbyPatients,
         });
 
-        districtMap[branchDistrict].totalNearbyPatients +=
-          nearbyPatients.length;
+        districtMap[branchDistrict].totalNearbyPatients += nearbyPatients.length;
       }
     }
 
-    // 5. Apply district filter and return
     let districts = Object.values(districtMap);
     if (district !== 'all') {
       districts = districts.filter((d) => d.name === district);
@@ -401,6 +354,88 @@ export class TriangulationService {
       totalPatientsMapped: resolvedPatients.length,
       filters: { view, district },
       districts,
+    };
+  }
+
+  async getOwnerBranches(pharmacyId: string) {
+    const branches = await this.prisma.branch.findMany({
+      where: { pharmacyId, isActive: true },
+      select: {
+        id: true,
+        name: true,
+        latitude: true,
+        longitude: true,
+        address: true,
+        pharmacy: { select: { name: true } },
+      },
+    });
+
+    return branches.map((branch) => ({
+      id: branch.id,
+      displayName: `${branch.pharmacy.name} - ${branch.name}`,
+      address: branch.address,
+      latitude: branch.latitude,
+      longitude: branch.longitude,
+    }));
+  }
+
+  async getManagerTriangulation(managerId: string) {
+    const managerBranch = await this.prisma.branch.findFirst({
+      where: { managerId, isActive: true },
+      select: {
+        id: true,
+        pharmacyId: true,
+        name: true,
+        latitude: true,
+        longitude: true,
+        address: true,
+        pharmacy: { select: { name: true } },
+      },
+    });
+
+    if (!managerBranch) {
+      throw new Error('Manager branch not found or inactive');
+    }
+
+    const sisterBranches = await this.prisma.branch.findMany({
+      where: {
+        pharmacyId: managerBranch.pharmacyId,
+        id: { not: managerBranch.id },
+        isActive: true,
+      },
+      select: {
+        id: true,
+        name: true,
+        latitude: true,
+        longitude: true,
+        address: true,
+        pharmacy: { select: { name: true } },
+      },
+    });
+
+    const triangulation = sisterBranches.map((branch) => ({
+      id: branch.id,
+      displayName: `${branch.pharmacy.name} - ${branch.name}`,
+      address: branch.address,
+      latitude: branch.latitude,
+      longitude: branch.longitude,
+      distance: this.calculateHaversine(
+        managerBranch.latitude,
+        managerBranch.longitude,
+        branch.latitude,
+        branch.longitude,
+      ),
+    }));
+
+    return {
+      managerBranch: {
+        id: managerBranch.id,
+        displayName: `${managerBranch.pharmacy.name} - ${managerBranch.name}`,
+        address: managerBranch.address,
+        latitude: managerBranch.latitude,
+        longitude: managerBranch.longitude,
+      },
+      sisterBranches: triangulation.sort((a, b) => a.distance - b.distance),
     };
   }
 }

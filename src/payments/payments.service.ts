@@ -14,6 +14,7 @@ import {
   VerifyPaymentDto,
   MobileMoneyPaymentDto,
   CheckoutDto,
+  RecordPaymentDto,
 } from './dto';
 import { MtnCallbackDto } from './dto/mtn-callback.dto';
 import { CreateOrderDto } from '../orders/dto';
@@ -109,6 +110,14 @@ export class PaymentsService {
           message: 'Insurance coverage applied',
         };
         break;
+      case 'CASH':
+        // Cash payment is collected in person.
+        paymentResponse = {
+          status: 'pending',
+          message:
+            'Cash payment selected. Please pay in person at pickup or delivery.',
+        };
+        break;
     }
 
     // Update payment with response
@@ -145,6 +154,12 @@ export class PaymentsService {
 
     if (!payment) {
       throw new NotFoundException('Payment not found');
+    }
+
+    if (payment.paymentMethod === 'CASH') {
+      throw new BadRequestException(
+        'Cash payments are verified manually and cannot be verified through the payment provider',
+      );
     }
 
     // Verify with Flutterwave
@@ -312,6 +327,22 @@ export class PaymentsService {
     // 4. Find the transaction ID.
     const txIdToVerify =
       payment.transactionId || (payment.paymentResponse as any)?.data?.id;
+
+    if (payment.order.paymentMethod === 'CASH') {
+      await this.prisma.payment.update({
+        where: { id: payment.id },
+        data: {
+          status: 'COMPLETED',
+        },
+      });
+
+      await this.ordersService.handlePaymentSuccess(payment.orderId);
+      return {
+        success: true,
+        message:
+          'Cash payment manually confirmed and order updated successfully!',
+      };
+    }
 
     if (!txIdToVerify) {
       throw new BadRequestException(
@@ -518,5 +549,179 @@ export class PaymentsService {
       },
       payment: paymentResult,
     };
+  }
+
+  async recordPayment(staffUserId: string, dto: RecordPaymentDto) {
+    const order = await this.prisma.order.findUnique({
+      where: { id: dto.orderId },
+      include: {
+        branch: true,
+        patient: {
+          include: { user: true },
+        },
+      },
+    });
+
+    if (!order) {
+      throw new NotFoundException('Order not found');
+    }
+
+    if (order.status === 'CANCELLED') {
+      throw new BadRequestException('Cannot record payment for a cancelled order');
+    }
+
+    if (order.paymentStatus === 'COMPLETED') {
+      throw new BadRequestException('Order has already been paid');
+    }
+
+    if (dto.amountReceived < order.patientPayment) {
+      throw new BadRequestException(
+        'Amount received must be equal to or greater than the patient payment amount',
+      );
+    }
+
+    if (dto.paymentMethod === 'INSURANCE') {
+      if (!dto.insuranceProvider || !dto.insurancePolicyNumber) {
+        throw new BadRequestException(
+          'Insurance provider and policy number are required for insurance payments',
+        );
+      }
+    }
+
+    if (
+      (dto.paymentMethod === 'MTN_MOMO' || dto.paymentMethod === 'AIRTEL_MONEY') &&
+      !dto.phoneNumber
+    ) {
+      throw new BadRequestException(
+        'Phone number is required for mobile money payments',
+      );
+    }
+
+    const branch = await this.resolveBranchForStaff(staffUserId);
+    if (!branch || branch.id !== order.branchId) {
+      throw new BadRequestException(
+        'Order does not belong to the authenticated staff member\'s branch',
+      );
+    }
+
+    const receiptNumber = await this.generateReceiptNumber(branch.id);
+
+    const existingPayment = await this.prisma.payment.findUnique({
+      where: { orderId: order.id },
+    });
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        if (existingPayment) {
+          if (existingPayment.status === 'COMPLETED') {
+            throw new BadRequestException('Order payment has already been completed');
+          }
+
+          await tx.payment.update({
+            where: { id: existingPayment.id },
+            data: {
+              amount: order.patientPayment,
+              paymentMethod: dto.paymentMethod,
+              status: 'COMPLETED',
+              transactionId: dto.reference || existingPayment.transactionId,
+              receiptNumber,
+              insuranceProvider: dto.insuranceProvider,
+              insurancePolicyNumber: dto.insurancePolicyNumber,
+              insuranceCoverage: order.insuranceCoverage,
+              insuranceVerified: dto.paymentMethod === 'INSURANCE',
+              paymentResponse: {
+                recordedBy: staffUserId,
+                amountReceived: dto.amountReceived,
+                paymentMethod: dto.paymentMethod,
+                reference: dto.reference || null,
+              },
+            },
+          });
+        } else {
+          await tx.payment.create({
+            data: {
+              orderId: order.id,
+              amount: order.patientPayment,
+              paymentMethod: dto.paymentMethod,
+              status: 'COMPLETED',
+              transactionId: dto.reference,
+              receiptNumber,
+              insuranceProvider: dto.insuranceProvider,
+              insurancePolicyNumber: dto.insurancePolicyNumber,
+              insuranceCoverage: order.insuranceCoverage,
+              insuranceVerified: dto.paymentMethod === 'INSURANCE',
+              paymentResponse: {
+                recordedBy: staffUserId,
+                amountReceived: dto.amountReceived,
+                paymentMethod: dto.paymentMethod,
+                reference: dto.reference || null,
+              },
+            },
+          });
+        }
+
+        await tx.order.update({
+          where: { id: order.id },
+          data: {
+            paymentStatus: 'COMPLETED',
+            paymentMethod: dto.paymentMethod,
+          },
+        });
+      },
+      {
+        timeout: 20000,
+      },
+    );
+
+    await this.ordersService.handlePaymentSuccess(order.id);
+
+    return {
+      success: true,
+      message: 'Payment recorded successfully',
+      receiptNumber,
+    };
+  }
+
+  private async resolveBranchForStaff(userId: string) {
+    const branchManager = await this.prisma.branch.findUnique({
+      where: { managerId: userId },
+    });
+
+    if (branchManager) {
+      return branchManager;
+    }
+
+    const staff = await this.prisma.staff.findUnique({
+      where: { userId },
+      include: { branch: true },
+    });
+
+    return staff?.branch ?? null;
+  }
+
+  private async generateReceiptNumber(branchId: string) {
+    const latestPayment = await this.prisma.payment.findFirst({
+      where: {
+        order: {
+          branchId,
+        },
+      },
+      orderBy: {
+        receiptNumber: 'desc',
+      },
+      select: {
+        receiptNumber: true,
+      },
+    });
+
+    let nextNumber = 1;
+    if (latestPayment?.receiptNumber) {
+      const match = latestPayment.receiptNumber.match(/RCP-(\d{6})$/);
+      if (match) {
+        nextNumber = Number(match[1]) + 1;
+      }
+    }
+
+    return `RCP-${nextNumber.toString().padStart(6, '0')}`;
   }
 }
