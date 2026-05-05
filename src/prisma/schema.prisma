@@ -64,8 +64,8 @@ model Pharmacy {
   representativeName   String
   phone                String
   address              String
-  latitude             Float?
-  longitude            Float?
+  latitude             Float
+  longitude            Float
   dateOfIncorporation  DateTime
   rdbCertificate       String
   pharmacyLicense      String
