@@ -23,6 +23,8 @@ import {
   ChangePasswordDto,
   ChangeBranchPasswordDto,
   UploadBranchLicenseDto,
+  RegisterHospitalDto,
+  OnboardHospitalStaffDto,
 } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
@@ -49,6 +51,20 @@ export class AuthController {
   @ApiOperation({ summary: 'Register as Pharmacy' })
   registerPharmacy(@Body() dto: RegisterPharmacyDto) {
     return this.authService.registerPharmacy(dto);
+  }
+
+  @Post('register/hospital')
+  @ApiOperation({ summary: 'Register as Hospital Admin' })
+  registerHospital(@Body() dto: RegisterHospitalDto) {
+    return this.authService.registerHospital(dto);
+  }
+
+  @Post('onboard/hospital-staff')
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Onboard Hospital Staff (Doctor/Nurse/Receptionist)' })
+  onboardHospitalStaff(@Req() req: any, @Body() dto: OnboardHospitalStaffDto) {
+    return this.authService.onboardHospitalStaff(req.user.sub, dto);
   }
 
   @Post('verify-email')

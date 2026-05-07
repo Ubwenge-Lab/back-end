@@ -1,5 +1,4 @@
 // backend/src/auth/auth.service.ts
-// CORRECTED VERSION - Staff login properly integrated
 
 import {
   Injectable,
@@ -21,9 +20,14 @@ import {
   RegisterPatientDto,
   RegisterPharmacyDto,
   VerifyEmailDto,
+  ResendVerificationDto,
   ForgotPasswordDto,
   ResetPasswordDto,
   ChangePasswordDto,
+  ChangeBranchPasswordDto,
+  UploadBranchLicenseDto,
+  RegisterHospitalDto,
+  OnboardHospitalStaffDto,
 } from './dto';
 import { randomInt } from 'crypto';
 
@@ -58,10 +62,10 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Check email verification for PATIENT and PHARMACY
+    // Check email verification for PATIENT PHARMACY and HOSPITAL_ADMIN
     if (
       !user.isVerified &&
-      (user.role === 'PATIENT' || user.role === 'PHARMACY')
+      (user.role === 'PATIENT' || user.role === 'PHARMACY' || user.role === 'HOSPITAL_ADMIN')
     ) {
       throw new UnauthorizedException(
         'Please verify your email first. Check your inbox for the verification code.',
@@ -129,6 +133,42 @@ export class AuthService {
       };
     }
 
+    if (user.role === 'HOSPITAL_ADMIN') {
+      const hospital = await this.prisma.hospital.findUnique({
+        where: { userId: user.id },
+      });
+
+      if (!hospital) {
+        throw new UnauthorizedException('Hospital profile not found');
+      }
+
+      const tokens = await this.generateTokens(
+        user.id,
+        user.email,
+        user.role,
+        hospital.status,
+      );
+      await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+      return {
+        user: {
+          id: user.id,
+          email: user.email,
+          role: user.role,
+          isVerified: user.isVerified,
+          profile: hospital,
+          hospitalStatus: hospital.status,
+        },
+        ...tokens,
+        message:
+          hospital.status === 'PENDING'
+            ? 'Your account is under review. Please wait for approval.'
+            : hospital.status === 'REJECTED'
+              ? 'Your account was rejected. Please update your documents and resubmit.'
+              : null,
+      };
+    }
+
     // BRANCH_MANAGER login
     if (user.role === 'BRANCH_MANAGER') {
       const branch = await this.prisma.branch.findFirst({
@@ -177,10 +217,11 @@ export class AuthService {
     }
 
     // ========================================
-    // STAFF LOGIN (PHARMACIST, CASHIER, NURSE)
+    // STAFF LOGIN (PHARMACIST, CASHIER, NURSE, DOCTOR, RECEPTIONIST)
     // ========================================
-    if (['PHARMACIST', 'CASHIER', 'NURSE'].includes(user.role)) {
-      const staff = await this.prisma.staff.findFirst({
+    if (['PHARMACIST', 'CASHIER', 'NURSE', 'DOCTOR', 'RECEPTIONIST'].includes(user.role)) {
+      // Check for regular staff (Pharmacy Branch)
+      let staff = await this.prisma.staff.findFirst({
         where: { userId: user.id },
         include: {
           branch: {
@@ -192,56 +233,92 @@ export class AuthService {
         },
       });
 
-      if (!staff) {
-        throw new UnauthorizedException('Staff profile not found');
-      }
-
-      if (staff.status !== 'ACTIVE') {
-        throw new UnauthorizedException(
-          'Your account has been deactivated. Please contact your branch manager.',
-        );
-      }
-
-      // Check branch status
-      if (staff.branch.branchStatus !== 'APPROVED') {
-        throw new UnauthorizedException(
-          'Branch is not yet approved. Please wait for approval.',
-        );
-      }
-
-      // Check if using temporary password
-      const isUsingTempPassword =
-        staff.tempPasswordHash &&
-        (await bcrypt.compare(dto.password, staff.tempPasswordHash));
-
-      if (isUsingTempPassword) {
-        if (staff.tempPasswordExpiry && staff.tempPasswordExpiry < new Date()) {
-          throw new ForbiddenException(
-            'Temporary password expired. Contact your branch manager to resend credentials.',
+      if (staff) {
+        if (staff.status !== 'ACTIVE') {
+          throw new UnauthorizedException(
+            'Your account has been deactivated. Please contact your branch manager.',
           );
         }
+
+        if (staff.branch.branchStatus !== 'APPROVED') {
+          throw new UnauthorizedException(
+            'Branch is not yet approved. Please wait for approval.',
+          );
+        }
+
+        const isUsingTempPassword =
+          staff.tempPasswordHash &&
+          (await bcrypt.compare(dto.password, staff.tempPasswordHash));
+
+        if (isUsingTempPassword) {
+          if (staff.tempPasswordExpiry && staff.tempPasswordExpiry < new Date()) {
+            throw new ForbiddenException(
+              'Temporary password expired. Contact your branch manager to resend credentials.',
+            );
+          }
+        }
+
+        const tokens = await this.generateTokens(user.id, user.email, user.role);
+        await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+        return {
+          user: {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            branchId: staff.branchId,
+            branchName: staff.branch.name,
+            pharmacyName: staff.branch.pharmacy.name,
+            status: staff.status,
+            permissions: staff.permissions?.permissions || [],
+            requiresPasswordChange: !!isUsingTempPassword,
+          },
+          ...tokens,
+          message: isUsingTempPassword
+            ? 'Please change your password for security purposes.'
+            : null,
+        };
       }
 
-      const tokens = await this.generateTokens(user.id, user.email, user.role);
-      await this.updateRefreshToken(user.id, tokens.refreshToken);
+      // Check for hospital staff
+      const hospitalStaff = await this.prisma.hospitalStaff.findFirst({
+        where: { userId: user.id },
+        include: { hospital: true },
+      });
 
-      return {
-        user: {
-          id: user.id,
-          email: user.email,
-          role: user.role,
-          branchId: staff.branchId,
-          branchName: staff.branch.name,
-          pharmacyName: staff.branch.pharmacy.name,
-          status: staff.status,
-          permissions: staff.permissions?.permissions || [],
-          requiresPasswordChange: !!isUsingTempPassword,
-        },
-        ...tokens,
-        message: isUsingTempPassword
-          ? 'Please change your password for security purposes.'
-          : null,
-      };
+      if (hospitalStaff) {
+        if (hospitalStaff.status !== 'ACTIVE') {
+          throw new UnauthorizedException('Your account has been deactivated.');
+        }
+
+        const isUsingTempPassword =
+          hospitalStaff.tempPasswordHash &&
+          (await bcrypt.compare(dto.password, hospitalStaff.tempPasswordHash));
+
+        if (isUsingTempPassword) {
+          if (hospitalStaff.tempPasswordExpiry && hospitalStaff.tempPasswordExpiry < new Date()) {
+            throw new ForbiddenException('Temporary password expired.');
+          }
+        }
+
+        const tokens = await this.generateTokens(user.id, user.email, user.role);
+        await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+        return {
+          user: {
+            id: user.id,
+            email: user.email,
+            role: user.role,
+            hospitalId: hospitalStaff.hospitalId,
+            hospitalName: hospitalStaff.hospital.name,
+            status: hospitalStaff.status,
+            requiresPasswordChange: !!isUsingTempPassword,
+          },
+          ...tokens,
+        };
+      }
+
+      throw new UnauthorizedException('Staff profile not found');
     }
 
     // Generate tokens for PATIENT
@@ -281,9 +358,8 @@ export class AuthService {
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
 
-    // Generate 5-digit verification code
     const verificationCode = this.generateVerificationCode();
-    const verificationCodeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000); // 24 hours
+    const verificationCodeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
     const user = await this.prisma.user.create({
       data: {
@@ -311,37 +387,24 @@ export class AuthService {
       include: { patient: true },
     });
 
-    // Send verification email
     try {
       await this.notificationsService.sendVerificationEmail(
         user.email,
         verificationCode,
       );
-      console.log(
-        `✅ Verification code sent to ${user.email}: ${verificationCode}`,
-      );
     } catch (error) {
       console.error('❌ Failed to send verification email:', error);
-      if (this.configService.get('NODE_ENV') === 'development') {
-        console.log(
-          `🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`,
-        );
-      }
     }
 
     return {
-      message:
-        'Registration successful! Please check your email for the verification code.',
+      message: 'Registration successful! Please check your email for the verification code.',
       userId: user.id,
       email: user.email,
-      ...(this.configService.get('NODE_ENV') === 'development' && {
-        verificationCode,
-      }),
     };
   }
 
   // ========================================
-  // REGISTER PHARMACY (WITH EMAIL VERIFICATION)
+  // REGISTER PHARMACY
   // ========================================
 
   async registerPharmacy(dto: RegisterPharmacyDto) {
@@ -355,8 +418,6 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-
-    // Generate 5-digit verification code for pharmacy email verification
     const verificationCode = this.generateVerificationCode();
     const verificationCodeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
@@ -367,7 +428,7 @@ export class AuthService {
         role: 'PHARMACY',
         verificationCode,
         verificationCodeExpiry,
-        isVerified: false, // Must verify email before admin approval
+        isVerified: false,
         pharmacy: {
           create: {
             name: dto.pharmacyName,
@@ -387,38 +448,160 @@ export class AuthService {
       include: { pharmacy: true },
     });
 
-    // Send email verification
     try {
       await this.notificationsService.sendVerificationEmail(
         user.email,
         verificationCode,
       );
-      console.log(
-        `✅ Pharmacy verification code sent to ${user.email}: ${verificationCode}`,
-      );
     } catch (error) {
       console.error('❌ Failed to send verification email:', error);
-      if (this.configService.get('NODE_ENV') === 'development') {
-        console.log(
-          `🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`,
-        );
-      }
     }
 
     return {
-      message:
-        'Registration successful! Please verify your email, then wait for admin approval.',
+      message: 'Registration successful! Please verify your email, then wait for admin approval.',
       userId: user.id,
       pharmacyId: user.pharmacy.id,
       status: 'PENDING',
-      ...(this.configService.get('NODE_ENV') === 'development' && {
-        verificationCode,
-      }),
     };
   }
 
   // ========================================
-  // VERIFY EMAIL WITH 5-DIGIT CODE
+  // REGISTER HOSPITAL
+  // ========================================
+
+  async registerHospital(dto: RegisterHospitalDto) {
+    const existingUser = await this.usersService.findByEmail(dto.email);
+    if (existingUser) {
+      throw new ConflictException('Email already registered');
+    }
+
+    if (dto.password !== dto.confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.password, 10);
+    const verificationCode = this.generateVerificationCode();
+    const verificationCodeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
+
+    const user = await this.prisma.user.create({
+      data: {
+        email: dto.email,
+        password: hashedPassword,
+        role: 'HOSPITAL_ADMIN',
+        verificationCode,
+        verificationCodeExpiry,
+        isVerified: false,
+        hospital: {
+          create: {
+            name: dto.hospitalName,
+            representativeName: dto.representativeName,
+            phone: dto.phone,
+            address: dto.address,
+            latitude: dto.latitude,
+            longitude: dto.longitude,
+            dateOfIncorporation: dto.dateOfIncorporation ? new Date(dto.dateOfIncorporation) : null,
+            rdbCertificate: dto.rdbCertificate,
+            pharmacyLicense: dto.pharmacyLicense,
+            businessRegistration: dto.businessRegistration,
+            status: 'PENDING',
+          },
+        },
+      },
+      include: { hospital: true },
+    });
+
+    try {
+      await this.notificationsService.sendVerificationEmail(
+        user.email,
+        verificationCode,
+      );
+      console.log(`✅ Hospital verification code sent to ${user.email}: ${verificationCode}`);
+    } catch (error) {
+      console.error('❌ Failed to send verification email:', error);
+    }
+
+    return {
+      message: 'Registration successful! Please verify your email, then wait for admin approval.',
+      userId: user.id,
+      hospitalId: user.hospital.id,
+      status: 'PENDING',
+    };
+  }
+
+  // ========================================
+  // ONBOARD HOSPITAL STAFF
+  // ========================================
+
+  async onboardHospitalStaff(
+    hospitalAdminUserId: string,
+    dto: OnboardHospitalStaffDto,
+  ) {
+    const hospital = await this.prisma.hospital.findFirst({
+      where: { userId: hospitalAdminUserId },
+    });
+
+    if (!hospital) {
+      throw new ForbiddenException('Only hospital admins can onboard staff');
+    }
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.email },
+    });
+
+    if (existingUser) {
+      throw new ConflictException('Email already in use');
+    }
+
+    const tempPassword = this.generateVerificationCode();
+    const hashedPassword = await bcrypt.hash(tempPassword, 12);
+    const tempPasswordExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+
+    const result = await this.prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          email: dto.email,
+          password: hashedPassword,
+          role: dto.role as any,
+          isVerified: true,
+        },
+      });
+
+      const staff = await tx.hospitalStaff.create({
+        data: {
+          userId: user.id,
+          hospitalId: hospital.id,
+          firstName: dto.firstName,
+          lastName: dto.lastName,
+          phone: dto.phone,
+          status: 'ACTIVE',
+          tempPasswordHash: hashedPassword,
+          tempPasswordExpiry,
+        },
+      });
+
+      return { user, staff };
+    });
+
+    try {
+      await this.notificationsService.sendStaffCredentials(
+        dto.email,
+        tempPassword,
+        hospital.name,
+        'Main Hospital',
+        dto.role,
+      );
+    } catch (error) {
+      console.error('❌ Failed to send staff credentials email:', error);
+    }
+
+    return {
+      message: 'Hospital staff member onboarded successfully.',
+      userId: result.user.id,
+    };
+  }
+
+  // ========================================
+  // VERIFY EMAIL
   // ========================================
 
   async verifyEmail(dto: VerifyEmailDto) {
@@ -427,23 +610,17 @@ export class AuthService {
         email: dto.email,
         verificationCode: dto.code,
       },
-      include: { pharmacy: true },
+      include: { hospital: true, pharmacy: true },
     });
 
     if (!user) {
       throw new BadRequestException('Invalid verification code or email');
     }
 
-    if (
-      user.verificationCodeExpiry &&
-      user.verificationCodeExpiry < new Date()
-    ) {
-      throw new BadRequestException(
-        'Verification code has expired. Please request a new one.',
-      );
+    if (user.verificationCodeExpiry && user.verificationCodeExpiry < new Date()) {
+      throw new BadRequestException('Verification code has expired.');
     }
 
-    // Verify user
     await this.prisma.user.update({
       where: { id: user.id },
       data: {
@@ -453,15 +630,18 @@ export class AuthService {
       },
     });
 
-    // Notify super admins if this is a pharmacy
     if (user.role === 'PHARMACY' && user.pharmacy) {
+      await this.notificationsService.notifySuperAdminsNewPharmacy(
+        user.pharmacy.id,
+        user.pharmacy.name,
+      );
+    }
+
+    if (user.role === 'HOSPITAL_ADMIN' && user.hospital) {
       try {
-        await this.notificationsService.notifySuperAdminsNewPharmacy(
-          user.pharmacy.id,
-          user.pharmacy.name,
-        );
-        console.log(
-          `✅ Super admins notified about verified pharmacy: ${user.pharmacy.name}`,
+        await this.notificationsService.notifySuperAdminsNewHospital(
+          user.hospital.id,
+          user.hospital.name,
         );
       } catch (error) {
         console.error('❌ Failed to notify super admins:', error);
@@ -469,10 +649,9 @@ export class AuthService {
     }
 
     return {
-      message:
-        user.role === 'PHARMACY'
-          ? 'Email verified! Your pharmacy will be reviewed by our admin team.'
-          : 'Email verified successfully! You can now login.',
+      message: user.role === 'PHARMACY'
+        ? 'Email verified! Your pharmacy will be reviewed by our admin team.'
+        : 'Email verified successfully! You can now login.',
       verified: true,
     };
   }
@@ -508,24 +687,11 @@ export class AuthService {
         user.email,
         verificationCode,
       );
-      console.log(
-        `✅ New verification code sent to ${user.email}: ${verificationCode}`,
-      );
     } catch (error) {
       console.error('❌ Failed to send verification email:', error);
-      if (this.configService.get('NODE_ENV') === 'development') {
-        console.log(
-          `🔑 VERIFICATION CODE FOR ${user.email}: ${verificationCode}`,
-        );
-      }
     }
 
-    return {
-      message: 'New verification code sent to your email',
-      ...(this.configService.get('NODE_ENV') === 'development' && {
-        verificationCode,
-      }),
-    };
+    return { message: 'New verification code sent to your email' };
   }
 
   // ========================================
@@ -536,16 +702,11 @@ export class AuthService {
     const user = await this.usersService.findByEmail(dto.email);
 
     if (!user) {
-      // Don't reveal if email exists for security
-      return {
-        message:
-          'If your email is registered, you will receive a password reset code.',
-      };
+      return { message: 'If your email is registered, you will receive a password reset code.' };
     }
 
-    // Generate 6-digit reset code
     const resetCode = this.generateResetCode();
-    const resetCodeExpiry = new Date(Date.now() + 60 * 60 * 1000); // 1 hour
+    const resetCodeExpiry = new Date(Date.now() + 60 * 60 * 1000);
 
     await this.prisma.user.update({
       where: { id: user.id },
@@ -556,19 +717,12 @@ export class AuthService {
     });
 
     try {
-      await this.notificationsService.sendPasswordResetEmail(
-        user.email,
-        resetCode,
-      );
-      console.log(`✅ Password reset code sent to ${user.email}: ${resetCode}`);
+      await this.notificationsService.sendPasswordResetEmail(user.email, resetCode);
     } catch (error) {
       console.error('❌ Failed to send reset email:', error);
     }
 
-    return {
-      message:
-        'If your email is registered, you will receive a password reset code.',
-    };
+    return { message: 'If your email is registered, you will receive a password reset code.' };
   }
 
   // ========================================
@@ -591,13 +745,8 @@ export class AuthService {
       throw new BadRequestException('Invalid reset code or email');
     }
 
-    if (
-      user.verificationCodeExpiry &&
-      user.verificationCodeExpiry < new Date()
-    ) {
-      throw new BadRequestException(
-        'Reset code has expired. Please request a new one.',
-      );
+    if (user.verificationCodeExpiry && user.verificationCodeExpiry < new Date()) {
+      throw new BadRequestException('Reset code has expired.');
     }
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 10);
@@ -608,14 +757,11 @@ export class AuthService {
         password: hashedPassword,
         verificationCode: null,
         verificationCodeExpiry: null,
-        refreshToken: null, // Invalidate all sessions
+        refreshToken: null,
       },
     });
 
-    return {
-      message:
-        'Password reset successfully! You can now login with your new password.',
-    };
+    return { message: 'Password reset successfully!' };
   }
 
   // ========================================
@@ -632,10 +778,7 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const isCurrentPasswordValid = await bcrypt.compare(
-      dto.currentPassword,
-      user.password,
-    );
+    const isCurrentPasswordValid = await bcrypt.compare(dto.currentPassword, user.password);
     if (!isCurrentPasswordValid) {
       throw new BadRequestException('Current password is incorrect');
     }
@@ -650,38 +793,22 @@ export class AuthService {
       },
     });
 
-    return {
-      message:
-        'Password changed successfully! Please login again with your new password.',
-    };
+    return { message: 'Password changed successfully!' };
   }
 
-  async changeBranchPassword(
-    userId: string,
-    dto: { tempPassword: string; newPassword: string; confirmPassword: string },
-  ) {
+  async changeBranchPassword(userId: string, dto: ChangeBranchPasswordDto) {
     if (dto.newPassword !== dto.confirmPassword) {
       throw new BadRequestException('Passwords do not match');
     }
 
     const branch = await this.prisma.branch.findFirst({
       where: { managerId: userId },
-      select: { id: true, tempPasswordHash: true, tempPasswordExpiry: true },
     });
 
     if (!branch) throw new BadRequestException('Branch not found');
-    if (!branch.tempPasswordHash)
-      throw new BadRequestException('No temporary password set');
 
-    const isValid = await bcrypt.compare(
-      dto.tempPassword,
-      branch.tempPasswordHash,
-    );
+    const isValid = await bcrypt.compare(dto.tempPassword, branch.tempPasswordHash);
     if (!isValid) throw new BadRequestException('Invalid temporary password');
-
-    if (branch.tempPasswordExpiry && branch.tempPasswordExpiry < new Date()) {
-      throw new ForbiddenException('Temporary password expired');
-    }
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
 
@@ -702,12 +829,9 @@ export class AuthService {
   async uploadBranchLicense(userId: string, licenseUrl: string) {
     const branch = await this.prisma.branch.findFirst({
       where: { managerId: userId },
-      select: { id: true, branchStatus: true },
     });
 
     if (!branch) throw new BadRequestException('Branch not found');
-    if (branch.branchStatus === 'APPROVED')
-      throw new BadRequestException('Branch already approved');
 
     await this.prisma.branch.update({
       where: { id: branch.id },
@@ -727,26 +851,12 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    const isRefreshTokenValid = await bcrypt.compare(
-      refreshToken,
-      user.refreshToken,
-    );
+    const isRefreshTokenValid = await bcrypt.compare(refreshToken, user.refreshToken);
     if (!isRefreshTokenValid) {
       throw new UnauthorizedException('Access denied');
     }
 
-    let pharmacyStatus: string | undefined;
-    if (user.role === 'PHARMACY') {
-      const pharmacy = await this.pharmaciesService.findByUserId(user.id);
-      pharmacyStatus = pharmacy?.status;
-    }
-
-    const tokens = await this.generateTokens(
-      user.id,
-      user.email,
-      user.role,
-      pharmacyStatus,
-    );
+    const tokens = await this.generateTokens(user.id, user.email, user.role);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
@@ -766,7 +876,7 @@ export class AuthService {
   }
 
   // ========================================
-  // HELPER FUNCTIONS
+  // HELPERS
   // ========================================
 
   private generateVerificationCode(): string {
@@ -777,18 +887,8 @@ export class AuthService {
     return randomInt(100000, 999999).toString();
   }
 
-  private async generateTokens(
-    userId: string,
-    email: string,
-    role: string,
-    pharmacyStatus?: string,
-  ) {
-    const payload: Record<string, any> = { sub: userId, email, role };
-
-    if (pharmacyStatus) {
-      payload.pharmacyStatus = pharmacyStatus;
-    }
-
+  private async generateTokens(userId: string, email: string, role: string, status?: string) {
+    const payload = { sub: userId, email, role, status };
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get('JWT_SECRET'),
