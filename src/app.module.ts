@@ -24,6 +24,8 @@ import { AttendanceModule } from './attendance/attendance.module';
 import { StockTransfersModule } from './stock-transfers/stock-transfers.module';
 import { TriangulationModule } from './triangulation/triangulation.module';
 import { LocationModule } from './location/location.module';
+import { InvoicesModule } from './invoices/invoices.module';
+import { SupportModule } from './support/support.module';
 
 @Module({
   imports: [
@@ -50,6 +52,8 @@ import { LocationModule } from './location/location.module';
     StockTransfersModule,
     TriangulationModule,
     LocationModule,
+    InvoicesModule,
+    SupportModule,
   ],
   controllers: [AppController],
   providers: [AppService],
