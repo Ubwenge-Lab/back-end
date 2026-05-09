@@ -25,6 +25,7 @@ model User {
   pharmacy               Pharmacy? @relation("PharmacyOwner")
   hospital               Hospital? @relation("HospitalOwner")
   staff                  Staff?
+  SupportTickets         SupportTicket[]
   hospitalStaff          HospitalStaff?
 
   @@index([email])
@@ -596,4 +597,41 @@ enum AttendanceStatus {
   CLOCKED_OUT
   COMPLETED
   REJECTED
+}
+
+
+// --- Support Ticket Enums ---
+
+enum SupportTicketCategory {
+  order_issue
+  billing
+  technical
+  account
+  other
+}
+
+enum SupportTicketStatus {
+  OPEN
+  IN_PROGRESS
+  RESOLVED
+  CLOSED
+}
+
+// --- Support Ticket Model ---
+
+model SupportTicket {
+  id           String                @id @default(uuid())
+  ticketNumber String                @unique
+  name         String
+  email        String
+  phone        String?
+  category     SupportTicketCategory
+  message      String
+  status       SupportTicketStatus   @default(OPEN)
+  userId       String?
+  user         User?                 @relation(fields: [userId], references: [id])
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@map("support_tickets")
 }
