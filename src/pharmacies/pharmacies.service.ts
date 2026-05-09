@@ -1068,10 +1068,8 @@ export class PharmaciesService {
       }),
     ];
 
-    return {
-      pharmacies: all,
-      total: all.length,
-    };
+    return all;
+    
   }
   // ========================================
   // ADMIN&PATIENT: GET PHARMACY DETAILS (FOR MAP VIEW)
