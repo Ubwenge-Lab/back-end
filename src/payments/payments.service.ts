@@ -58,6 +58,14 @@ export class PaymentsService {
       throw new BadRequestException('Cannot pay for cancelled order');
     }
 
+    const existingPayment = await this.prisma.payment.findUnique({
+      where: { orderId: order.id },
+    });
+
+    if (existingPayment && existingPayment.status === 'COMPLETED') {
+      throw new BadRequestException('A completed payment already exists for this order');
+    }
+
     // Create payment record
     const payment = await this.prisma.payment.create({
       data: {
@@ -657,7 +665,7 @@ export class PaymentsService {
     if (existingPayment && existingPayment.status === 'COMPLETED') {
       throw new BadRequestException('Order payment has already been completed');
     }
-    
+
 
     await this.prisma.$transaction(
       async (tx) => {
