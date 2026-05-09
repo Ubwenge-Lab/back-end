@@ -123,6 +123,7 @@ model HospitalStaff {
   hospitalId             String
   firstName              String
   lastName               String
+  specialty              String?
   phone                  String?
   status                 StaffStatus       @default(ACTIVE)
   tempPasswordHash       String?
