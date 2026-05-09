@@ -1,12 +1,14 @@
 // backend/src/payments/flutterwave.service.ts
 
-import { Injectable, BadRequestException } from '@nestjs/common';
+import { Injectable, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
 
+
 @Injectable()
-export class FlutterwaveService {
+export class FlutterwaveService implements OnModuleInit {
+  private readonly logger = new Logger(FlutterwaveService.name);
   private readonly baseUrl = 'https://api.flutterwave.com/v3';
   private readonly secretKey: string;
   private readonly publicKey: string;
@@ -19,6 +21,27 @@ export class FlutterwaveService {
     this.secretKey = this.configService.get('FLUTTERWAVE_SECRET_KEY')!;
     this.publicKey = this.configService.get('FLUTTERWAVE_PUBLIC_KEY')!;
     this.encryptionKey = this.configService.get('FLUTTERWAVE_ENCRYPTION_KEY')!;
+  }
+
+  onModuleInit() {
+    this.verifyEnvKeys();
+  }
+
+  private verifyEnvKeys() {
+    const keys = {
+      secret: this.secretKey,
+      public: this.publicKey,
+      encryption: this.encryptionKey,
+    };
+
+    for (const [name, value] of Object.entries(keys)) {
+      if (!value) {
+        this.logger.error(`CRITICAL: ${name.toUpperCase()} key is missing from .env!`);
+      } else {
+        // Log only the first few characters to be safe
+        this.logger.log(`Verified: ${name.toUpperCase()} key is loaded (starts with: ${value.substring(0, 8)}...)`);
+      }
+    }
   }
 
   // ========================================

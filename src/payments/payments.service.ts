@@ -654,6 +654,11 @@ export class PaymentsService {
       where: { orderId: order.id },
     });
 
+    if (existingPayment && existingPayment.status === 'COMPLETED') {
+      throw new BadRequestException('Order payment has already been completed');
+    }
+    
+
     await this.prisma.$transaction(
       async (tx) => {
         if (existingPayment) {
