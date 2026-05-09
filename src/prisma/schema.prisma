@@ -23,9 +23,10 @@ model User {
   managedBranch          Branch?   @relation("BranchManager")
   patient                Patient?
   pharmacy               Pharmacy? @relation("PharmacyOwner")
+  hospital               Hospital? @relation("HospitalOwner")
   staff                  Staff?
   SupportTickets         SupportTicket[]
-
+  hospitalStaff          HospitalStaff?
 
   @@index([email])
   @@map("users")
@@ -91,6 +92,48 @@ model Pharmacy {
   @@index([status])
   @@index([userId])
   @@map("pharmacies")
+}
+
+model Hospital {
+  id                   String         @id @default(uuid())
+  userId               String         @unique
+  name                 String
+  representativeName   String?
+  address              String
+  phone                String
+  latitude             Float?
+  longitude            Float?
+  dateOfIncorporation  DateTime?
+  rdbCertificate       String?
+  pharmacyLicense      String?
+  businessRegistration String?
+  status               PharmacyStatus @default(PENDING)
+  createdAt            DateTime       @default(now())
+  updatedAt            DateTime       @updatedAt
+  user                 User           @relation("HospitalOwner", fields: [userId], references: [id], onDelete: Cascade)
+  staff                HospitalStaff[]
+
+  @@index([userId])
+  @@map("hospitals")
+}
+
+model HospitalStaff {
+  id                     String            @id @default(uuid())
+  userId                 String            @unique
+  hospitalId             String
+  firstName              String
+  lastName               String
+  phone                  String?
+  status                 StaffStatus       @default(ACTIVE)
+  tempPasswordHash       String?
+  tempPasswordExpiry     DateTime?
+  createdAt              DateTime          @default(now())
+  updatedAt              DateTime          @updatedAt
+  hospital               Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  user                   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([hospitalId])
+  @@map("hospital_staff")
 }
 
 model Branch {
@@ -457,6 +500,10 @@ enum UserRole {
   BRANCH_MANAGER
   PHARMACIST
   CASHIER
+  HOSPITAL_ADMIN
+  DOCTOR
+  RECEPTIONIST
+  NURSE
 }
 
 enum PharmacyStatus {
