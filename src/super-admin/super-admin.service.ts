@@ -381,8 +381,6 @@ export class SuperAdminService {
   async getUnverifiedLocations() {
     return this.prisma.pharmacy.findMany({
       where: {
-        latitude: { not: null },
-        longitude: { not: null },
         isLocationVerified: false,
       },
       include: {

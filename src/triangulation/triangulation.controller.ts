@@ -6,7 +6,7 @@ import {
   UseGuards,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { ApiTags, ApiOperation, ApiBearerAuth, ApiResponse } from '@nestjs/swagger';
 import { TriangulationService } from './triangulation.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -14,6 +14,9 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
 import { MapDataQueryDto } from './dto/map-data-query.dto';
 import { Request } from 'express';
+import { CurrentUser } from '../auth/decorators/current-user.decorator';
+import { PharmacyLocationDto } from '../pharmacies/dto/pharmacy_location.dto';
+
 
 @ApiTags('Triangulation')
 @Controller('triangulation')
@@ -83,5 +86,35 @@ export class TriangulationController {
   async getManagerTriangulation(@Req() req: Request) {
     const user = req.user as any;
     return this.triangulationService.getManagerTriangulation(user.sub);
+  }
+
+  /**
+   * BRANCH_MANAGER ONLY: Get nearby competitor pharmacies
+   */
+  @Get('competitors')
+  @Roles(Role.BRANCH_MANAGER)
+  @ApiOperation({
+    summary: 'Get nearby competitor pharmacies for branch manager',
+    description: 'Returns competitor pharmacies within proximity radius, excluding manager\'s own network'
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of competitor pharmacies with distances',
+    type: [PharmacyLocationDto]
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized - authentication required'
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - Branch Manager role required'
+  })
+  async getCompetitors(@CurrentUser() user: any): Promise<PharmacyLocationDto[]> {
+    if (!user || !user.sub) {
+      throw new Error('User not found in token');
+    }
+    
+    return this.triangulationService.getCompetitors(user.sub);
   }
 }
