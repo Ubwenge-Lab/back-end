@@ -12,7 +12,6 @@ import {
 import { toPharmacyLocationDto } from '../pharmacies/utils/pharmacy.mapper';
 import { PharmacyLocationDto } from '../pharmacies/dto/pharmacy_location.dto';
 
-
 @Injectable()
 export class TriangulationService {
   private readonly logger = new Logger(TriangulationService.name);
@@ -152,7 +151,7 @@ export class TriangulationService {
         ...b,
         name: `${b.pharmacy.name} - ${b.name}`,
         type: 'BRANCH',
-        status: b.branchStatus as any,
+        status: String(b.branchStatus),
       })),
     ];
 
@@ -168,7 +167,13 @@ export class TriangulationService {
       .filter((loc) => loc.distance <= radius)
       .sort((a, b) => a.distance - b.distance)
       .map((loc) => {
-        const todayHours = loc.operatingHours ? (loc.operatingHours as any)[dayOfWeek] : null;
+        const operatingHoursMap = loc.operatingHours as Record<
+          string,
+          { open?: string; close?: string } | undefined
+        > | null;
+        const todayHours = operatingHoursMap
+          ? operatingHoursMap[dayOfWeek]
+          : null;
         const hoursString =
           todayHours && todayHours.open && todayHours.close
             ? `${todayHours.open}-${todayHours.close}`
@@ -186,7 +191,8 @@ export class TriangulationService {
             isActive:
               loc.type === 'MAIN'
                 ? loc.status === 'APPROVED'
-                : (loc as any).isActive && loc.status === 'APPROVED',
+                : (loc as { isActive?: boolean }).isActive === true &&
+                  loc.status === 'APPROVED',
           },
           loc.distance,
         );
