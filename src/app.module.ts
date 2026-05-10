@@ -26,6 +26,8 @@ import { TriangulationModule } from './triangulation/triangulation.module';
 import { LocationModule } from './location/location.module';
 import { InvoicesModule } from './invoices/invoices.module';
 import { SupportModule } from './support/support.module';
+import { HospitalsModule } from './hospitals/hospitals.module';
+import { AppointmentsModule } from './appointments/appointments.module';
 
 @Module({
   imports: [
@@ -54,6 +56,8 @@ import { SupportModule } from './support/support.module';
     LocationModule,
     InvoicesModule,
     SupportModule,
+    HospitalsModule,
+    AppointmentsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
