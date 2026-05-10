@@ -9,27 +9,153 @@ datasource db {
 }
 
 model User {
-  id                     String    @id @default(uuid())
-  email                  String    @unique
+  id                     String          @id @default(uuid())
+  email                  String          @unique
   password               String
   role                   UserRole
-  isVerified             Boolean   @default(false)
+  isVerified             Boolean         @default(false)
   verificationCode       String?
   verificationCodeExpiry DateTime?
   refreshToken           String?
-  createdAt              DateTime  @default(now())
-  updatedAt              DateTime  @updatedAt
-  isActive               Boolean   @default(true)
-  managedBranch          Branch?   @relation("BranchManager")
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  isActive               Boolean         @default(true)
+  managedBranch          Branch?         @relation("BranchManager")
   patient                Patient?
-  pharmacy               Pharmacy? @relation("PharmacyOwner")
-  hospital               Hospital? @relation("HospitalOwner")
+  pharmacy               Pharmacy?       @relation("PharmacyOwner")
   staff                  Staff?
-  SupportTickets         SupportTicket[]
+  doctor                 Doctor?
+  hospital               Hospital?       @relation("HospitalOwner")
   hospitalStaff          HospitalStaff?
+  SupportTickets         SupportTicket[]
 
   @@index([email])
   @@map("users")
+}
+
+model Hospital {
+  id                   String              @id @default(uuid())
+  userId               String              @unique
+  name                 String
+  representativeName   String?
+  address              String
+  phone                String
+  latitude             Float?
+  longitude            Float?
+  dateOfIncorporation  DateTime?
+  rdbCertificate       String?
+  pharmacyLicense      String?
+  businessRegistration String?
+  status               PharmacyStatus      @default(PENDING)
+  createdAt            DateTime            @default(now())
+  updatedAt            DateTime            @updatedAt
+  user                 User                @relation("HospitalOwner", fields: [userId], references: [id], onDelete: Cascade)
+  staff                HospitalStaff[]
+  doctors              Doctor[]
+  patients             Patient[]           @relation("HospitalToPatient")
+  appointments         Appointment[]
+  drugStock            HospitalDrugStock[]
+  invoices             Invoice[]
+
+  @@index([userId])
+  @@map("hospitals")
+}
+
+model Doctor {
+  id             String  @id @default(uuid())
+  userId         String  @unique
+  hospitalId     String
+  specialization String
+  licenseNumber  String  @unique
+  bio            String?
+
+  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hospital      Hospital       @relation(fields: [hospitalId], references: [id])
+  appointments  Appointment[]
+  prescriptions Prescription[] @relation("DoctorToPrescription")
+
+  @@index([hospitalId])
+  @@map("doctors")
+}
+
+model HospitalStaff {
+  id                 String      @id @default(uuid())
+  userId             String      @unique
+  hospitalId         String
+  firstName          String
+  lastName           String
+  phone              String?
+  status             StaffStatus @default(ACTIVE)
+  tempPasswordHash   String?
+  tempPasswordExpiry DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+  hospital           Hospital    @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([hospitalId])
+  @@map("hospital_staff")
+}
+
+model Appointment {
+  id          String            @id @default(uuid())
+  patientId   String
+  doctorId    String
+  hospitalId  String
+  scheduledAt DateTime
+  reason      String
+  status      AppointmentStatus @default(SCHEDULED)
+  notes       String?
+  createdAt   DateTime          @default(now())
+  updatedAt   DateTime          @updatedAt
+  patient     Patient           @relation(fields: [patientId], references: [id])
+  doctor      Doctor            @relation(fields: [doctorId], references: [id])
+  hospital    Hospital          @relation(fields: [hospitalId], references: [id])
+
+  @@index([patientId])
+  @@index([doctorId])
+  @@map("appointments")
+}
+
+model HospitalDrugStock {
+  hospitalId String
+  drugId     String
+  quantity   Int      @default(0)
+  unitPrice  Float
+  expiryDate DateTime
+  hospital   Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  @@id([drugId, hospitalId])
+  @@map("hospital_drug_stock")
+}
+
+model Invoice {
+  id          String        @id @default(uuid())
+  hospitalId  String
+  patientId   String
+  totalAmount Float
+  status      InvoiceStatus @default(UNPAID)
+  dueDate     DateTime
+  createdAt   DateTime      @default(now())
+  paymentId   String?
+  hospital    Hospital      @relation(fields: [hospitalId], references: [id])
+  patient     Patient       @relation(fields: [patientId], references: [id])
+  items       InvoiceItem[]
+  payment     Payment?      @relation(fields: [paymentId], references: [id])
+
+  @@map("invoices")
+}
+
+model InvoiceItem {
+  id          String  @id @default(uuid())
+  invoiceId   String
+  description String
+  quantity    Int
+  unitPrice   Float
+  subtotal    Float
+  invoice     Invoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+
+  @@map("invoice_items")
 }
 
 model Patient {
@@ -41,6 +167,8 @@ model Patient {
   dateOfBirth       DateTime?
   gender            String?
   address           String?
+  mrn               String         @unique
+  hospitalId        String?
   nationalId        String?
   insuranceProvider String?
   insurancePolicy   String?
@@ -51,9 +179,12 @@ model Patient {
   lastLat           Float?
   lastLng           Float?
   cartItems         CartItem[]
+  appointments      Appointment[]
+  invoices          Invoice[]
   notifications     Notification[]
   orders            Order[]
   user              User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  hospital          Hospital?      @relation("HospitalToPatient", fields: [hospitalId], references: [id])
   prescriptions     Prescription[]
 
   @@index([userId])
@@ -94,48 +225,6 @@ model Pharmacy {
   @@map("pharmacies")
 }
 
-model Hospital {
-  id                   String         @id @default(uuid())
-  userId               String         @unique
-  name                 String
-  representativeName   String?
-  address              String
-  phone                String
-  latitude             Float?
-  longitude            Float?
-  dateOfIncorporation  DateTime?
-  rdbCertificate       String?
-  pharmacyLicense      String?
-  businessRegistration String?
-  status               PharmacyStatus @default(PENDING)
-  createdAt            DateTime       @default(now())
-  updatedAt            DateTime       @updatedAt
-  user                 User           @relation("HospitalOwner", fields: [userId], references: [id], onDelete: Cascade)
-  staff                HospitalStaff[]
-
-  @@index([userId])
-  @@map("hospitals")
-}
-
-model HospitalStaff {
-  id                     String            @id @default(uuid())
-  userId                 String            @unique
-  hospitalId             String
-  firstName              String
-  lastName               String
-  phone                  String?
-  status                 StaffStatus       @default(ACTIVE)
-  tempPasswordHash       String?
-  tempPasswordExpiry     DateTime?
-  createdAt              DateTime          @default(now())
-  updatedAt              DateTime          @updatedAt
-  hospital               Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  user                   User              @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([hospitalId])
-  @@map("hospital_staff")
-}
-
 model Branch {
   id                 String          @id @default(uuid())
   pharmacyId         String
@@ -154,8 +243,8 @@ model Branch {
   tempPasswordExpiry DateTime?
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
-  isLocationVerified   Boolean        @default(false)
-  locationVerifiedAt   DateTime?
+  isLocationVerified Boolean         @default(false)
+  locationVerifiedAt DateTime?
   attendances        Attendance[]
   manager            User?           @relation("BranchManager", fields: [managerId], references: [id])
   pharmacy           Pharmacy        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
@@ -354,6 +443,7 @@ model OrderItem {
 model Prescription {
   id                      String                   @id @default(uuid())
   patientId               String
+  doctorId                String?
   fileUrl                 String
   fileName                String
   fileType                String
@@ -369,6 +459,7 @@ model Prescription {
   order                   Order?
   prescriptionMedications PrescriptionMedication[]
   patient                 Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor                  Doctor?                  @relation("DoctorToPrescription", fields: [doctorId], references: [id])
 
   @@index([patientId])
   @@index([status])
@@ -433,6 +524,7 @@ model Payment {
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
   order                 Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  invoices              Invoice[]
 
   @@index([orderId])
   @@index([transactionId])
@@ -491,6 +583,23 @@ model Attendance {
   @@index([clockInTime])
   @@index([status])
   @@map("attendance")
+}
+
+model SupportTicket {
+  id           String                @id @default(uuid())
+  ticketNumber String                @unique
+  name         String
+  email        String
+  phone        String?
+  category     SupportTicketCategory
+  message      String
+  status       SupportTicketStatus   @default(OPEN)
+  userId       String?
+  user         User?                 @relation(fields: [userId], references: [id])
+  createdAt    DateTime              @default(now())
+  updatedAt    DateTime              @updatedAt
+
+  @@map("support_tickets")
 }
 
 enum UserRole {
@@ -599,8 +708,19 @@ enum AttendanceStatus {
   REJECTED
 }
 
+enum AppointmentStatus {
+  SCHEDULED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
 
-// --- Support Ticket Enums ---
+enum InvoiceStatus {
+  UNPAID
+  PARTIAL
+  PAID
+  VOID
+}
 
 enum SupportTicketCategory {
   order_issue
@@ -615,23 +735,4 @@ enum SupportTicketStatus {
   IN_PROGRESS
   RESOLVED
   CLOSED
-}
-
-// --- Support Ticket Model ---
-
-model SupportTicket {
-  id           String                @id @default(uuid())
-  ticketNumber String                @unique
-  name         String
-  email        String
-  phone        String?
-  category     SupportTicketCategory
-  message      String
-  status       SupportTicketStatus   @default(OPEN)
-  userId       String?
-  user         User?                 @relation(fields: [userId], references: [id])
-  createdAt    DateTime              @default(now())
-  updatedAt    DateTime              @updatedAt
-
-  @@map("support_tickets")
 }
