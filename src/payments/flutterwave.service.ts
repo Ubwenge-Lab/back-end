@@ -1,10 +1,14 @@
 // backend/src/payments/flutterwave.service.ts
 
-import { Injectable, BadRequestException, OnModuleInit, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  BadRequestException,
+  OnModuleInit,
+  Logger,
+} from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { HttpService } from '@nestjs/axios';
 import { firstValueFrom } from 'rxjs';
-
 
 @Injectable()
 export class FlutterwaveService implements OnModuleInit {
@@ -36,10 +40,14 @@ export class FlutterwaveService implements OnModuleInit {
 
     for (const [name, value] of Object.entries(keys)) {
       if (!value) {
-        this.logger.error(`CRITICAL: ${name.toUpperCase()} key is missing from .env!`);
+        this.logger.error(
+          `CRITICAL: ${name.toUpperCase()} key is missing from .env!`,
+        );
       } else {
         // Log only the first few characters to be safe
-        this.logger.log(`Verified: ${name.toUpperCase()} key is loaded (starts with: ${value.substring(0, 8)}...)`);
+        this.logger.log(
+          `Verified: ${name.toUpperCase()} key is loaded (starts with: ${value.substring(0, 8)}...)`,
+        );
       }
     }
   }

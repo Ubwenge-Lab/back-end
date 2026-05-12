@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -37,5 +37,31 @@ export class HospitalsController {
   @ApiNotFoundResponse({ description: 'Hospital not found' })
   findOne(@Param('id') id: string) {
     return this.hospitalsService.findOne(id);
+  }
+
+  // 1. Staff finds the patient using this
+  @Post(':id/patients/search')
+  @Roles(Role.HOSPITAL_ADMIN, Role.RECEPTIONIST, Role.DOCTOR, Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Search for a global patient by National ID or Phone',
+  })
+  async searchPatient(
+    @Param('id') hospitalId: string,
+    @Body('identifier') identifier: string,
+  ) {
+    return this.hospitalsService.searchPatient(identifier);
+  }
+
+  // 2. Staff clicks "Register" and triggers this
+  @Post(':id/patients/register')
+  @Roles(Role.HOSPITAL_ADMIN, Role.RECEPTIONIST)
+  @ApiOperation({
+    summary: 'Link a global patient to this hospital and generate MRN',
+  })
+  async registerPatient(
+    @Param('id') hospitalId: string,
+    @Body('patientId') patientId: string,
+  ) {
+    return this.hospitalsService.linkPatientToHospital(hospitalId, patientId);
   }
 }

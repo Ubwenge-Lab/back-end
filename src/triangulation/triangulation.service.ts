@@ -161,7 +161,12 @@ export class TriangulationService {
 
     return allLocations
       .map((loc) => {
-        const distance = this.calculateHaversine(lat, lng, loc.latitude, loc.longitude);
+        const distance = this.calculateHaversine(
+          lat,
+          lng,
+          loc.latitude,
+          loc.longitude,
+        );
         return { ...loc, distance: parseFloat(distance.toFixed(1)) };
       })
       .filter((loc) => loc.distance <= radius)
@@ -265,7 +270,9 @@ export class TriangulationService {
       );
 
       if (!coords) {
-        this.logger.warn(`Could not resolve coordinates for patient ${patient.id}, skipping.`);
+        this.logger.warn(
+          `Could not resolve coordinates for patient ${patient.id}, skipping.`,
+        );
         continue;
       }
 
@@ -286,10 +293,30 @@ export class TriangulationService {
     }
 
     const districtMap: Record<DistrictName, DistrictGroup> = {
-      Gasabo:    { name: 'Gasabo',    pharmacies: [], branches: [], totalNearbyPatients: 0 },
-      Kicukiro:  { name: 'Kicukiro',  pharmacies: [], branches: [], totalNearbyPatients: 0 },
-      Nyarugenge:{ name: 'Nyarugenge',pharmacies: [], branches: [], totalNearbyPatients: 0 },
-      Other:     { name: 'Other',     pharmacies: [], branches: [], totalNearbyPatients: 0 },
+      Gasabo: {
+        name: 'Gasabo',
+        pharmacies: [],
+        branches: [],
+        totalNearbyPatients: 0,
+      },
+      Kicukiro: {
+        name: 'Kicukiro',
+        pharmacies: [],
+        branches: [],
+        totalNearbyPatients: 0,
+      },
+      Nyarugenge: {
+        name: 'Nyarugenge',
+        pharmacies: [],
+        branches: [],
+        totalNearbyPatients: 0,
+      },
+      Other: {
+        name: 'Other',
+        pharmacies: [],
+        branches: [],
+        totalNearbyPatients: 0,
+      },
     };
 
     for (const pharmacy of pharmacies) {
@@ -311,7 +338,11 @@ export class TriangulationService {
 
       for (const branch of pharmacy.branches) {
         if (!branch.latitude || !branch.longitude) continue;
-        const branchDistrict = getDistrict(branch.latitude, branch.longitude, branch.address);
+        const branchDistrict = getDistrict(
+          branch.latitude,
+          branch.longitude,
+          branch.address,
+        );
         const nearbyPatients: PatientMapPoint[] = [];
 
         for (const patient of resolvedPatients) {
@@ -345,7 +376,8 @@ export class TriangulationService {
           nearbyPatients,
         });
 
-        districtMap[branchDistrict].totalNearbyPatients += nearbyPatients.length;
+        districtMap[branchDistrict].totalNearbyPatients +=
+          nearbyPatients.length;
       }
     }
 
@@ -455,10 +487,14 @@ export class TriangulationService {
           pharmacyId: true,
           latitude: true,
           longitude: true,
-        }
+        },
       });
 
-      if (!managerBranch || !managerBranch.latitude || !managerBranch.longitude) {
+      if (
+        !managerBranch ||
+        !managerBranch.latitude ||
+        !managerBranch.longitude
+      ) {
         return [];
       }
 
@@ -469,7 +505,7 @@ export class TriangulationService {
       const allBranches = await this.prisma.branch.findMany({
         where: {
           isActive: true,
-          pharmacy: { status: 'APPROVED' }
+          pharmacy: { status: 'APPROVED' },
         },
         select: {
           id: true,
@@ -491,20 +527,29 @@ export class TriangulationService {
             managerBranch.latitude,
             managerBranch.longitude,
             b.latitude,
-            b.longitude
+            b.longitude,
           );
 
           if (distance <= PROXIMITY_RADIUS_KM) {
-            const todayHours = b.operatingHours ? (b.operatingHours as any)[dayOfWeek] : null;
-            const hoursString = todayHours?.open && todayHours?.close
-              ? `${todayHours.open}-${todayHours.close}`
+            const todayHours = b.operatingHours
+              ? (b.operatingHours as any)[dayOfWeek]
               : null;
+            const hoursString =
+              todayHours?.open && todayHours?.close
+                ? `${todayHours.open}-${todayHours.close}`
+                : null;
 
             competitors.push(
               toPharmacyLocationDto(
-                { ...b, hours: hoursString, region: null, rating: null, isActive: true },
-                parseFloat(distance.toFixed(2))
-              )
+                {
+                  ...b,
+                  hours: hoursString,
+                  region: null,
+                  rating: null,
+                  isActive: true,
+                },
+                parseFloat(distance.toFixed(2)),
+              ),
             );
           }
         }
@@ -512,9 +557,11 @@ export class TriangulationService {
 
       competitors.sort((a, b) => a.distance - b.distance);
       return competitors;
-
     } catch (error) {
-      this.logger.error(`Error fetching competitors for user ${userId}:`, error);
+      this.logger.error(
+        `Error fetching competitors for user ${userId}:`,
+        error,
+      );
       throw new Error('Failed to fetch competitor data');
     }
   }
