@@ -212,6 +212,7 @@ export class BranchesService {
     where: { managerId: managerUserId },
     select: {
       id: true,
+      pharmacyId: true,
       name: true,
       address: true,
       latitude: true,
