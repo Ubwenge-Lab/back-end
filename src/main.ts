@@ -6,6 +6,7 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { QueryLoggerInterceptor } from './common/interceptors/query-logger.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule, { bodyParser: false });
@@ -44,6 +45,9 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
+  // Request timing & slow-query monitoring
+  app.useGlobalInterceptors(new QueryLoggerInterceptor());
 
   // Swagger API Documentation
   const config = new DocumentBuilder()

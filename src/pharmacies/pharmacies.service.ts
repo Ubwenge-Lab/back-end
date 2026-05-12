@@ -74,65 +74,54 @@ export class PharmaciesService {
     const monthlyRevenue = monthlyRevenueResult._sum.total ?? 0;
     const totalRevenue = totalRevenueResult._sum.total ?? 0;
 
-    // Revenue overtime (last 6 months)
-    const revenueOverTime = await Promise.all(
-      Array.from({ length: 6 }, (_, i) => {
-        const date = new Date(now.getFullYear(), now.getMonth() - (5 - i), 1);
-        const start = new Date(date.getFullYear(), date.getMonth(), 1);
-        const end = new Date(
-          date.getFullYear(),
-          date.getMonth() + 1,
-          0,
-          23,
-          59,
-          59,
-          999,
-        );
-        return this.prisma.order
-          .aggregate({
-            where: {
-              pharmacyId: pharmacy.id,
-              status: 'COMPLETED',
-              createdAt: { gte: start, lte: end },
-            },
-            _sum: { total: true },
-          })
-          .then((result) => ({
-            month: date.toLocaleString('default', { month: 'short' }),
-            revenue: result._sum.total ?? 0,
-          }));
-      }),
-    );
+    // ── Revenue over time: 1 GROUP BY query replaces 6 sequential round-trips ──
+    type MonthRevRow = { month_label: string; revenue: string };
+    const monthRevRows = await this.prisma.$queryRaw<MonthRevRow[]>`
+      SELECT TO_CHAR(DATE_TRUNC('month', "createdAt"), 'Mon') AS month_label,
+             COALESCE(SUM(total), 0)                          AS revenue
+      FROM   orders
+      WHERE  "pharmacyId" = ${pharmacy.id}
+        AND  status       = 'COMPLETED'
+        AND  "createdAt" >= NOW() - INTERVAL '6 months'
+      GROUP  BY DATE_TRUNC('month', "createdAt")
+      ORDER  BY DATE_TRUNC('month', "createdAt") ASC
+    `;
+    const revenueOverTime = monthRevRows.map(r => ({
+      month:   r.month_label,
+      revenue: Number(r.revenue),
+    }));
 
-    // Revenue by branch
+    // Fetch branches (needed for name resolution below)
     const branches = await this.prisma.branch.findMany({
       where: { pharmacyId: pharmacy.id },
       select: { id: true, name: true },
     });
 
-    const revenueByBranch = await Promise.all(
-      branches.map(async (branch) => {
-        const result = await this.prisma.order.aggregate({
-          where: {
-            branchId: branch.id,
-            status: 'COMPLETED',
-            createdAt: { gte: startOfMonth, lte: endOfMonth },
-          },
-          _sum: { total: true },
-        });
-        return { name: branch.name, revenue: result._sum.total ?? 0 };
-      }),
-    );
+    // ── Revenue by branch: 1 GROUP BY query replaces N sequential aggregates ──
+    type BranchRevRow = { branchId: string; revenue: string };
+    const branchRevRows = await this.prisma.$queryRaw<BranchRevRow[]>`
+      SELECT "branchId",
+             COALESCE(SUM(total), 0) AS revenue
+      FROM   orders
+      WHERE  "pharmacyId" = ${pharmacy.id}
+        AND  status       = 'COMPLETED'
+        AND  "createdAt" >= ${startOfMonth}
+        AND  "createdAt" <= ${endOfMonth}
+      GROUP  BY "branchId"
+    `;
+    const branchRevMap = new Map(branchRevRows.map(r => [r.branchId, Number(r.revenue)]));
+    const revenueByBranch = branches.map(b => ({ name: b.name, revenue: branchRevMap.get(b.id) ?? 0 }));
 
-    // medication count per branch
-    const inventoryDistribution = await Promise.all(
-      branches.map(async (branch) => {
-        const value = await this.prisma.medication.count({
-          where: { branchId: branch.id },
-        });
-        return { name: branch.name, value };
-      }),
-    );
+    // ── Medication count per branch: 1 GROUP BY query ──
+    type BranchMedRow = { branchId: string; value: string };
+    const branchMedRows = await this.prisma.$queryRaw<BranchMedRow[]>`
+      SELECT "branchId", COUNT(*)::text AS value
+      FROM   medications
+      WHERE  "pharmacyId" = ${pharmacy.id}
+      GROUP  BY "branchId"
+    `;
+    const branchMedMap = new Map(branchMedRows.map(r => [r.branchId, Number(r.value)]));
+    const inventoryDistribution = branches.map(b => ({ name: b.name, value: branchMedMap.get(b.id) ?? 0 }));
 
     // low stock alerts
     const lowStockMeds = await this.prisma.medication.findMany({
@@ -294,67 +283,64 @@ export class PharmaciesService {
     thirtyDaysAgo.setDate(now.getDate() - 29);
     thirtyDaysAgo.setHours(0, 0, 0, 0);
 
-    // Fetch all branches for this pharmacy
-    const branches = await this.prisma.branch.findMany({
-      where: { pharmacyId: pharmacy.id },
-      select: { id: true, name: true },
-    });
-
-    // Build a day-by-day array for the last 30 days
+    // Build the day-label array for the response shape (CPU-only, no DB)
     const days: { date: string; label: string }[] = [];
     for (let i = 0; i < 30; i++) {
       const d = new Date(thirtyDaysAgo);
       d.setDate(thirtyDaysAgo.getDate() + i);
       days.push({
         date: d.toISOString().split('T')[0],
-        label: d.toLocaleDateString('en-US', {
-          month: 'short',
-          day: 'numeric',
-        }),
+        label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
       });
     }
 
-    // For each day fetch total revenue across all branches (pharmacy-wide)
-    const dailyTotal = await Promise.all(
-      days.map(async ({ date, label }) => {
-        const start = new Date(date + 'T00:00:00.000Z');
-        const end = new Date(date + 'T23:59:59.999Z');
-        const result = await this.prisma.order.aggregate({
-          where: {
-            pharmacyId: pharmacy.id,
-            status: 'COMPLETED',
-            createdAt: { gte: start, lte: end },
-          },
-          _sum: { total: true },
-        });
-        return { date, label, revenue: result._sum.total ?? 0 };
-      }),
-    );
+    // ── SINGLE QUERY: replaces 30 + (30×N_branches) sequential aggregates ──
+    type DailyRow = { day: Date; branchId: string; revenue: string };
+    const rows = await this.prisma.$queryRaw<DailyRow[]>`
+      SELECT DATE_TRUNC('day', "createdAt") AS day,
+             "branchId",
+             COALESCE(SUM(total), 0)        AS revenue
+      FROM   orders
+      WHERE  "pharmacyId" = ${pharmacy.id}
+        AND  status       = 'COMPLETED'
+        AND  "createdAt" >= ${thirtyDaysAgo}
+      GROUP  BY DATE_TRUNC('day', "createdAt"), "branchId"
+      ORDER  BY day ASC
+    `;
 
-    // Per-branch daily breakdown
-    const branchDaily = await Promise.all(
-      branches.map(async (branch) => {
-        const data = await Promise.all(
-          days.map(async ({ date, label }) => {
-            const start = new Date(date + 'T00:00:00.000Z');
-            const end = new Date(date + 'T23:59:59.999Z');
-            const result = await this.prisma.order.aggregate({
-              where: {
-                branchId: branch.id,
-                status: 'COMPLETED',
-                createdAt: { gte: start, lte: end },
-              },
-              _sum: { total: true },
-            });
-            return { date, label, revenue: result._sum.total ?? 0 };
-          }),
-        );
-        return { branchId: branch.id, branchName: branch.name, data };
-      }),
-    );
+    // Build in-memory lookup: dateStr → { branchId → revenue }
+    const lookup = new Map<string, Map<string, number>>();
+    for (const r of rows) {
+      const dateStr = new Date(r.day).toISOString().split('T')[0];
+      if (!lookup.has(dateStr)) lookup.set(dateStr, new Map());
+      lookup.get(dateStr)!.set(r.branchId, Number(r.revenue));
+    }
+
+    // Pharmacy-wide daily totals (sum across all branches for each day)
+    const dailyTotal = days.map(({ date, label }) => {
+      const branchMap = lookup.get(date);
+      const revenue = branchMap ? Array.from(branchMap.values()).reduce((s, v) => s + v, 0) : 0;
+      return { date, label, revenue };
+    });
+
+    // Fetch branch names for the per-branch breakdown
+    const branches = await this.prisma.branch.findMany({
+      where: { pharmacyId: pharmacy.id },
+      select: { id: true, name: true },
+    });
+
+    const branchDaily = branches.map(branch => ({
+      branchId: branch.id,
+      branchName: branch.name,
+      data: days.map(({ date, label }) => ({
+        date,
+        label,
+        revenue: lookup.get(date)?.get(branch.id) ?? 0,
+      })),
+    }));
 
     return {
-      days: days.map((d) => d.label),
+      days: days.map(d => d.label),
       dailyTotal,
       branchDaily,
     };
@@ -375,58 +361,66 @@ export class PharmaciesService {
       const end = new Date(now);
       end.setDate(now.getDate() - w * 7);
       end.setHours(23, 59, 59, 999);
-
       const start = new Date(end);
       start.setDate(end.getDate() - 6);
       start.setHours(0, 0, 0, 0);
-
       const label = `${start.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} – ${end.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
       weeks.push({ label, start, end });
     }
 
-    // Fetch all branches
+    const oldestStart = weeks[0].start;
+
+    // ── SINGLE QUERY: replaces 4 + (4×N_branches) sequential aggregates ──
+    type WeekRow = { week_start: Date; branchId: string; revenue: string };
+    const rows = await this.prisma.$queryRaw<WeekRow[]>`
+      SELECT DATE_TRUNC('week', "createdAt") AS week_start,
+             "branchId",
+             COALESCE(SUM(total), 0)         AS revenue
+      FROM   orders
+      WHERE  "pharmacyId" = ${pharmacy.id}
+        AND  status       = 'COMPLETED'
+        AND  "createdAt" >= ${oldestStart}
+      GROUP  BY DATE_TRUNC('week', "createdAt"), "branchId"
+      ORDER  BY week_start ASC
+    `;
+
+    // Build in-memory lookup: ISO week-start string → { branchId → revenue }
+    const lookup = new Map<string, Map<string, number>>();
+    for (const r of rows) {
+      const key = new Date(r.week_start).toISOString();
+      if (!lookup.has(key)) lookup.set(key, new Map());
+      lookup.get(key)!.set(r.branchId, Number(r.revenue));
+    }
+
+    // Resolve each week to its lookup key (normalize to Monday 00:00:00 UTC)
+    const weekKeys = weeks.map(w => {
+      const d = new Date(w.start);
+      d.setUTCHours(0, 0, 0, 0);
+      return d.toISOString();
+    });
+
+    const weeklyTotal = weeks.map(({ label }, i) => {
+      const branchMap = lookup.get(weekKeys[i]);
+      const revenue = branchMap ? Array.from(branchMap.values()).reduce((s, v) => s + v, 0) : 0;
+      return { label, revenue };
+    });
+
     const branches = await this.prisma.branch.findMany({
       where: { pharmacyId: pharmacy.id },
       select: { id: true, name: true },
     });
 
-    // Pharmacy-wide weekly totals
-    const weeklyTotal = await Promise.all(
-      weeks.map(async ({ label, start, end }) => {
-        const result = await this.prisma.order.aggregate({
-          where: {
-            pharmacyId: pharmacy.id,
-            status: 'COMPLETED',
-            createdAt: { gte: start, lte: end },
-          },
-          _sum: { total: true },
-        });
-        return { label, revenue: result._sum.total ?? 0 };
-      }),
-    );
-
-    // Per-branch weekly breakdown
-    const branchWeekly = await Promise.all(
-      branches.map(async (branch) => {
-        const data = await Promise.all(
-          weeks.map(async ({ label, start, end }) => {
-            const result = await this.prisma.order.aggregate({
-              where: {
-                branchId: branch.id,
-                status: 'COMPLETED',
-                createdAt: { gte: start, lte: end },
-              },
-              _sum: { total: true },
-            });
-            return { label, revenue: result._sum.total ?? 0 };
-          }),
-        );
-        return { branchId: branch.id, branchName: branch.name, data };
-      }),
-    );
+    const branchWeekly = branches.map(branch => ({
+      branchId: branch.id,
+      branchName: branch.name,
+      data: weeks.map(({ label }, i) => ({
+        label,
+        revenue: lookup.get(weekKeys[i])?.get(branch.id) ?? 0,
+      })),
+    }));
 
     return {
-      weeks: weeks.map((w) => w.label),
+      weeks: weeks.map(w => w.label),
       weeklyTotal,
       branchWeekly,
     };
@@ -533,67 +527,66 @@ export class PharmaciesService {
   // VIEW ALL PAST PATIENTS
   // ========================================
 
-  async getPatients(userId: string) {
+  async getPatients(userId: string, page = 1, limit = 20) {
     const pharmacy = await this.findByUserId(userId);
+    const skip = (page - 1) * limit;
 
-    // Get all unique patients who have ordered from this pharmacy
-    const orders = await this.prisma.order.findMany({
-      where: { pharmacyId: pharmacy.id },
-      include: {
-        patient: {
-          include: {
-            user: {
-              select: { email: true },
+    // Paginated query — avoids loading all orders + all items into memory
+    const [total, patientRows] = await Promise.all([
+      this.prisma.patient.count({
+        where: { orders: { some: { pharmacyId: pharmacy.id } } },
+      }),
+      this.prisma.patient.findMany({
+        where: { orders: { some: { pharmacyId: pharmacy.id } } },
+        skip,
+        take: limit,
+        select: {
+          id: true,
+          firstName: true,
+          lastName: true,
+          phone: true,
+          user: { select: { email: true } },
+          orders: {
+            where: { pharmacyId: pharmacy.id },
+            orderBy: { createdAt: 'desc' },
+            select: {
+              id: true,
+              orderNumber: true,
+              status: true,
+              total: true,
+              createdAt: true,
+              _count: { select: { orderItems: true } },
             },
           },
         },
-        orderItems: true,
-      },
-      orderBy: { createdAt: 'desc' },
-    });
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
 
-    // Group by patient
-    const patientMap = new Map();
-
-    for (const order of orders) {
-      const patientId = order.patientId;
-
-      if (!patientMap.has(patientId)) {
-        patientMap.set(patientId, {
-          id: order.patient.id,
-          firstName: order.patient.firstName,
-          lastName: order.patient.lastName,
-          email: order.patient.user.email,
-          phone: order.patient.phone,
-          totalOrders: 0,
-          totalSpent: 0,
-          lastOrderDate: order.createdAt,
-          orders: [],
-        });
-      }
-
-      const patientData = patientMap.get(patientId);
-      patientData.totalOrders++;
-      patientData.totalSpent += order.total;
-      patientData.orders.push({
-        id: order.id,
-        orderNumber: order.orderNumber,
-        status: order.status,
-        total: order.total,
-        createdAt: order.createdAt,
-        itemCount: order.orderItems.length,
-      });
-    }
-
-    // Convert map to array and sort by last order date
-    const patients = Array.from(patientMap.values()).sort(
-      (a, b) =>
-        new Date(b.lastOrderDate).getTime() -
-        new Date(a.lastOrderDate).getTime(),
-    );
+    const patients = patientRows.map(p => ({
+      id: p.id,
+      firstName: p.firstName,
+      lastName: p.lastName,
+      email: p.user.email,
+      phone: p.phone,
+      totalOrders: p.orders.length,
+      totalSpent: p.orders.reduce((s, o) => s + o.total, 0),
+      lastOrderDate: p.orders[0]?.createdAt ?? null,
+      orders: p.orders.map(o => ({
+        id: o.id,
+        orderNumber: o.orderNumber,
+        status: o.status,
+        total: o.total,
+        createdAt: o.createdAt,
+        itemCount: o._count.orderItems,
+      })),
+    }));
 
     return {
-      totalPatients: patients.length,
+      totalPatients: total,
+      page,
+      limit,
+      totalPages: Math.ceil(total / limit),
       patients,
     };
   }

@@ -114,6 +114,8 @@ model Appointment {
 
   @@index([patientId])
   @@index([doctorId])
+  @@index([hospitalId])
+  @@index([scheduledAt])
   @@map("appointments")
 }
 
@@ -143,6 +145,8 @@ model Invoice {
   items       InvoiceItem[]
   payment     Payment?      @relation(fields: [paymentId], references: [id])
 
+  @@index([hospitalId, patientId])
+  @@index([patientId, status])
   @@map("invoices")
 }
 
@@ -352,6 +356,9 @@ model Medication {
   @@index([pharmacyId])
   @@index([branchId])
   @@index([registryId])
+  // Composite indexes for low-stock alert queries
+  @@index([pharmacyId, quantity])
+  @@index([branchId, quantity])
   @@map("medications")
 }
 
@@ -422,6 +429,11 @@ model Order {
   @@index([branchId])
   @@index([orderNumber])
   @@index([status])
+  // Composite indexes for multi-column dashboard queries
+  @@index([pharmacyId, status, createdAt])
+  @@index([branchId, status, createdAt])
+  @@index([pharmacyId, createdAt])
+  @@index([branchId, createdAt])
   @@map("orders")
 }
 
@@ -550,6 +562,9 @@ model Notification {
   @@index([pharmacyId])
   @@index([orderId])
   @@index([isRead])
+  // Composite indexes for unread notification badge queries
+  @@index([pharmacyId, isRead])
+  @@index([patientId, isRead])
   @@map("notifications")
 }
 
@@ -582,6 +597,8 @@ model Attendance {
   @@index([branchId])
   @@index([clockInTime])
   @@index([status])
+  // Composite index for attendance summary queries (branchId + status + date)
+  @@index([branchId, status, clockInTime])
   @@map("attendance")
 }
 
@@ -599,6 +616,8 @@ model SupportTicket {
   createdAt    DateTime              @default(now())
   updatedAt    DateTime              @updatedAt
 
+  @@index([userId, status])
+  @@index([status])
   @@map("support_tickets")
 }
 
