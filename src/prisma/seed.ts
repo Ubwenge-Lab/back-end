@@ -23,6 +23,8 @@ const IDS = {
     bob: "00000000-0000-0000-0000-000000000010",
     claire: "00000000-0000-0000-0000-000000000012",
     david: "00000000-0000-0000-0000-000000000013",
+    hospitalAdmin: "00000000-0000-0000-0000-000000000014",
+    drSmith: "00000000-0000-0000-0000-000000000015",
   },
   pharmacies: {
     medplus: "10000000-0000-0000-0000-000000000001",
@@ -35,6 +37,12 @@ const IDS = {
     medplusRemera: "20000000-0000-0000-0000-000000000002",
     ubumweKimironko: "20000000-0000-0000-0000-000000000003",
     kigaliCentralMain: "20000000-0000-0000-0000-000000000004",
+  },
+  hospitals: {
+    cityHospital: "50000000-0000-0000-0000-000000000001",
+  },
+  doctors: {
+    drSmithDoc: "60000000-0000-0000-0000-000000000001",
   }
 };
 
@@ -66,6 +74,8 @@ async function main() {
     { id: IDS.users.bob, email: 'bob@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
     { id: IDS.users.claire, email: 'claire@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
     { id: IDS.users.david, email: 'david@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
+    { id: IDS.users.hospitalAdmin, email: 'admin@cityhospital.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
+    { id: IDS.users.drSmith, email: 'dr.smith@cityhospital.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
   ];
 
   for (const u of users) {
