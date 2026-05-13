@@ -400,7 +400,7 @@ async function main() {
     });
   }
 
-  console.log('\n✅ Seed completed successfully!');
+  console.log('\n✅ Nelly\'s branch conflict resolved and updated with Dev branch!');
 }
 
 main()
