@@ -1,9 +1,9 @@
 import { IsOptional, IsString, IsUUID } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
-export class GetDoctorsQueryDto {
+export class DoctorQueryDto {
   @ApiPropertyOptional({
-    description: 'Filter doctors by their specialization',
+    description: 'Filter doctors by specialty (e.g., Cardiology)',
     example: 'Cardiology',
   })
   @IsOptional()
@@ -11,8 +11,8 @@ export class GetDoctorsQueryDto {
   specialty?: string;
 
   @ApiPropertyOptional({
-    description: 'Filter doctors by the hospital ID they belong to',
-    example: 'uuid-string',
+    description: 'Filter doctors by hospital ID',
+    example: '123e4567-e89b-12d3-a456-426614174000',
   })
   @IsOptional()
   @IsUUID()

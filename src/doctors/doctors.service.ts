@@ -1,13 +1,15 @@
 import { Injectable } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
-import { GetDoctorsQueryDto } from './dto/get-doctors-query.dto';
+import { DoctorQueryDto } from './dto/doctor-query.dto';
 
 @Injectable()
 export class DoctorsService {
-  constructor(private prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {}
 
-  async findAll(query: GetDoctorsQueryDto) {
-    const where: any = {};
+  async findAll(query: DoctorQueryDto) {
+    const where: any = {
+      user: { role: 'DOCTOR' },
+    };
 
     if (query.specialty) {
       where.specialization = {
@@ -23,30 +25,51 @@ export class DoctorsService {
     const doctors = await this.prisma.doctor.findMany({
       where,
       include: {
-        user: {
-          select: {
-            email: true,
-          },
+        hospital: { 
+          select: { 
+            id: true, 
+            name: true, 
+            phone: true 
+          } 
         },
-        hospital: {
-          select: {
-            name: true,
-            address: true,
-          },
+        user: { 
+          select: { 
+            email: true,
+            hospitalStaff: {
+              select: {
+                firstName: true,
+                lastName: true,
+                phone: true,
+                status: true,
+                createdAt: true,
+                updatedAt: true
+              }
+            }
+          } 
         },
       },
+      orderBy: { user: { hospitalStaff: { lastName: 'asc' } } },
     });
 
-    return doctors.map((doc) => ({
-      id: doc.id,
-      userId: doc.userId,
-      hospitalId: doc.hospitalId,
-      specialization: doc.specialization,
-      licenseNumber: doc.licenseNumber,
-      bio: doc.bio,
-      email: doc.user?.email || null,
-      hospitalName: doc.hospital?.name || null,
-      hospitalAddress: doc.hospital?.address || null,
-    }));
+    return doctors.map((doctor) => {
+      const hospitalStaff = doctor.user.hospitalStaff;
+
+      return {
+        id: doctor.id,
+        firstName: hospitalStaff?.firstName || 'Doctor',
+        lastName: hospitalStaff?.lastName || doctor.specialization,
+        specialty: doctor.specialization,
+        email: doctor.user.email,
+        phone: hospitalStaff?.phone || doctor.hospital.phone,
+        hospitalId: doctor.hospitalId,
+        hospitalName: doctor.hospital.name,
+        hospitalPhone: doctor.hospital.phone,
+        status: hospitalStaff?.status || 'ACTIVE',
+        createdAt: hospitalStaff?.createdAt || new Date(),
+        updatedAt: hospitalStaff?.updatedAt || new Date(),
+        licenseNumber: doctor.licenseNumber,
+        bio: doctor.bio || '',
+      };
+    });
   }
 }
