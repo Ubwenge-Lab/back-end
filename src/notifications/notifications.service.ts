@@ -157,6 +157,20 @@ export class NotificationsService {
     );
   }
 
+  async sendHospitalStaffCredentials(
+    email: string,
+    tempPassword: string,
+    hospitalName: string,
+    role: string,
+  ) {
+    await this.emailService.sendHospitalStaffCredentials(
+      email,
+      tempPassword,
+      hospitalName,
+      role,
+    );
+  }
+
   async notifySuperAdminsNewHospital(hospitalId: string, hospitalName: string) {
     const superAdmins = await this.prisma.user.findMany({
       where: { role: 'SUPER_ADMIN' },

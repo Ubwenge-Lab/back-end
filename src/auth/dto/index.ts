@@ -12,3 +12,4 @@ export * from './change-branch-password.dto';
 export * from './upload-branch-license.dto';
 export * from './register-hospital.dto';
 export * from './onboard-hospital-staff.dto';
+export * from './activate-hospital-staff.dto';
