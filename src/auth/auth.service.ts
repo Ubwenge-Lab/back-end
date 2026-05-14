@@ -554,6 +554,20 @@ export class AuthService {
       throw new ForbiddenException('Only hospital admins can onboard staff');
     }
 
+    if (dto.role === 'DOCTOR') {
+      if (!dto.specialization || !dto.licenseNumber) {
+        throw new BadRequestException(
+          'specialization and licenseNumber are required when onboarding a Doctor',
+        );
+      }
+      const existingLicense = await this.prisma.doctor.findUnique({
+        where: { licenseNumber: dto.licenseNumber },
+      });
+      if (existingLicense) {
+        throw new ConflictException('License number already registered');
+      }
+    }
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -576,7 +590,7 @@ export class AuthService {
         },
       });
 
-      const staff = await tx.hospitalStaff.create({
+      await tx.hospitalStaff.create({
         data: {
           userId: user.id,
           hospitalId: hospital.id,
@@ -589,7 +603,19 @@ export class AuthService {
         },
       });
 
-      return { user, staff };
+      if (dto.role === 'DOCTOR') {
+        await tx.doctor.create({
+          data: {
+            userId: user.id,
+            hospitalId: hospital.id,
+            specialization: dto.specialization!,
+            licenseNumber: dto.licenseNumber!,
+            bio: dto.bio,
+          },
+        });
+      }
+
+      return { user };
     });
 
     try {
@@ -604,7 +630,7 @@ export class AuthService {
     }
 
     return {
-      message: 'Hospital staff member onboarded successfully.',
+      message: `${dto.role === 'DOCTOR' ? 'Doctor' : 'Staff member'} onboarded successfully.`,
       userId: result.user.id,
     };
   }

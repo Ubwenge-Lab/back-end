@@ -62,12 +62,16 @@ model Hospital {
 }
 
 model Doctor {
-  id             String  @id @default(uuid())
-  userId         String  @unique
+  id             String   @id @default(uuid())
+  userId         String   @unique
   hospitalId     String
   specialization String
-  licenseNumber  String  @unique
+  licenseNumber  String   @unique
   bio            String?
+  rating         Float    @default(0)
+  isAvailable    Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
   user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
   hospital      Hospital       @relation(fields: [hospitalId], references: [id])
@@ -75,6 +79,7 @@ model Doctor {
   prescriptions Prescription[] @relation("DoctorToPrescription")
 
   @@index([hospitalId])
+  @@index([specialization])
   @@map("doctors")
 }
 

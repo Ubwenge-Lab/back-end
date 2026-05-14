@@ -5,7 +5,6 @@ import { PrismaService } from '../prisma/prisma.service';
 export class HospitalsService {
   constructor(private readonly prisma: PrismaService) {}
 
-  // GET ALL HOSPITALS
   async findAll() {
     return this.prisma.hospital.findMany({
       orderBy: { name: 'asc' },
@@ -16,5 +15,26 @@ export class HospitalsService {
     const hospital = await this.prisma.hospital.findUnique({ where: { id } });
     if (!hospital) throw new NotFoundException('Hospital not found');
     return hospital;
+  }
+
+  async findDoctors(hospitalId: string, specialty?: string, available?: boolean) {
+    const hospital = await this.prisma.hospital.findUnique({ where: { id: hospitalId } });
+    if (!hospital) throw new NotFoundException('Hospital not found');
+
+    const where: any = { hospitalId };
+    if (specialty) where.specialization = { contains: specialty, mode: 'insensitive' };
+    if (available !== undefined) where.isAvailable = available;
+
+    return this.prisma.doctor.findMany({
+      where,
+      include: {
+        user: {
+          include: {
+            hospitalStaff: { select: { firstName: true, lastName: true, phone: true } },
+          },
+        },
+      },
+      orderBy: [{ rating: 'desc' }, { specialization: 'asc' }],
+    });
   }
 }
