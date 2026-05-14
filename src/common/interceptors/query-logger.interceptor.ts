@@ -8,7 +8,9 @@ import {
 import { Observable } from 'rxjs';
 import { tap } from 'rxjs/operators';
 
-const SLOW_THRESHOLD_MS = 500;
+// Production threshold (Render → Supabase same region): 500ms
+// Development threshold (localhost → remote Supabase): 2000ms
+const SLOW_THRESHOLD_MS = process.env.NODE_ENV === 'production' ? 500 : 2000;
 
 @Injectable()
 export class QueryLoggerInterceptor implements NestInterceptor {
