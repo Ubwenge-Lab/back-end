@@ -230,6 +230,10 @@ export class BranchesService {
     },
   });
 
+  if (!branch) {
+    throw new NotFoundException('Branch not found');
+  }
+
     if (!branch) {
       throw new NotFoundException('Branch not found');
     }
