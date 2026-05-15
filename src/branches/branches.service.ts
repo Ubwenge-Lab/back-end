@@ -218,6 +218,17 @@ export class BranchesService {
         longitude: true,
       },
     });
+  const branch = await this.prisma.branch.findUnique({
+    where: { managerId: managerUserId },
+    select: {
+      id: true,
+      pharmacyId: true,
+      name: true,
+      address: true,
+      latitude: true,
+      longitude: true,
+    },
+  });
 
     if (!branch) {
       throw new NotFoundException('Branch not found');

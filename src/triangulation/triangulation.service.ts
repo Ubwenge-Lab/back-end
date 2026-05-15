@@ -108,8 +108,6 @@ export class TriangulationService {
       this.prisma.pharmacy.findMany({
         where: {
           status: 'APPROVED',
-          latitude: { not: null },
-          longitude: { not: null },
         },
         select: {
           id: true,
@@ -126,8 +124,6 @@ export class TriangulationService {
         where: {
           isActive: true,
           branchStatus: 'APPROVED',
-          latitude: { not: null },
-          longitude: { not: null },
           pharmacy: { status: 'APPROVED' },
         },
         select: {
