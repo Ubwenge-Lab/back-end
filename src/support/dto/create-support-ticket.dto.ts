@@ -1,10 +1,10 @@
-import { 
-  IsEmail, 
-  IsEnum, 
-  IsNotEmpty, 
-  IsOptional, 
-  IsString, 
-  MinLength 
+import {
+  IsEmail,
+  IsEnum,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  MinLength,
 } from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 import { SupportTicketCategory } from '@prisma/client';
@@ -25,16 +25,16 @@ export class CreateSupportTicketDto {
   @IsOptional()
   phone?: string;
 
-  @ApiProperty({ 
-    enum: SupportTicketCategory, 
-    example: 'technical' 
+  @ApiProperty({
+    enum: SupportTicketCategory,
+    example: 'technical',
   })
   @IsEnum(SupportTicketCategory)
   @IsNotEmpty()
   category: SupportTicketCategory;
 
-  @ApiProperty({ 
-    example: 'I am having trouble accessing my dashboard.' 
+  @ApiProperty({
+    example: 'I am having trouble accessing my dashboard.',
   })
   @IsString()
   @IsNotEmpty()

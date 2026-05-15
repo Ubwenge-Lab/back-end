@@ -1,4 +1,10 @@
-import { PrismaClient, UserRole, PharmacyStatus, BranchStatus } from '@prisma/client';
+import {
+  PrismaClient,
+  UserRole,
+  PharmacyStatus,
+  BranchStatus,
+} from '@prisma/client';
+import { generateMRN } from '../utils/hospital';
 import * as bcrypt from 'bcrypt';
 import 'dotenv/config';
 
@@ -10,42 +16,44 @@ const DEFAULT_PASSWORD = 'Test@1234';
 // Fixed IDs for Idempotency
 const IDS = {
   users: {
-    superAdmin: "00000000-0000-0000-0000-000000000001",
-    medplusOwner: "00000000-0000-0000-0000-000000000002",
-    medplusManager: "00000000-0000-0000-0000-000000000003",
-    medplusPharmacist: "00000000-0000-0000-0000-000000000004",
-    medplusCashier: "00000000-0000-0000-0000-000000000005",
-    ubumweOwner: "00000000-0000-0000-0000-000000000006",
-    ubumweManager: "00000000-0000-0000-0000-000000000007",
-    remeraOwner: "00000000-0000-0000-0000-000000000008",
-    kigaliCentralOwner: "00000000-0000-0000-0000-000000000011",
-    alice: "00000000-0000-0000-0000-000000000009",
-    bob: "00000000-0000-0000-0000-000000000010",
-    claire: "00000000-0000-0000-0000-000000000012",
-    david: "00000000-0000-0000-0000-000000000013",
+    superAdmin: '00000000-0000-0000-0000-000000000001',
+    medplusOwner: '00000000-0000-0000-0000-000000000002',
+    medplusManager: '00000000-0000-0000-0000-000000000003',
+    medplusPharmacist: '00000000-0000-0000-0000-000000000004',
+    medplusCashier: '00000000-0000-0000-0000-000000000005',
+    ubumweOwner: '00000000-0000-0000-0000-000000000006',
+    ubumweManager: '00000000-0000-0000-0000-000000000007',
+    remeraOwner: '00000000-0000-0000-0000-000000000008',
+    kigaliCentralOwner: '00000000-0000-0000-0000-000000000011',
+    alice: '00000000-0000-0000-0000-000000000009',
+    bob: '00000000-0000-0000-0000-000000000010',
+    claire: '00000000-0000-0000-0000-000000000012',
+    david: '00000000-0000-0000-0000-000000000013',
   },
   pharmacies: {
-    medplus: "10000000-0000-0000-0000-000000000001",
-    ubumwe: "10000000-0000-0000-0000-000000000002",
-    remera: "10000000-0000-0000-0000-000000000003",
-    kigaliCentral: "10000000-0000-0000-0000-000000000004",
+    medplus: '10000000-0000-0000-0000-000000000001',
+    ubumwe: '10000000-0000-0000-0000-000000000002',
+    remera: '10000000-0000-0000-0000-000000000003',
+    kigaliCentral: '10000000-0000-0000-0000-000000000004',
   },
   branches: {
-    medplusMain: "20000000-0000-0000-0000-000000000001",
-    medplusRemera: "20000000-0000-0000-0000-000000000002",
-    ubumweKimironko: "20000000-0000-0000-0000-000000000003",
-    kigaliCentralMain: "20000000-0000-0000-0000-000000000004",
-  }
+    medplusMain: '20000000-0000-0000-0000-000000000001',
+    medplusRemera: '20000000-0000-0000-0000-000000000002',
+    ubumweKimironko: '20000000-0000-0000-0000-000000000003',
+    kigaliCentralMain: '20000000-0000-0000-0000-000000000004',
+  },
 };
 
 async function main() {
   console.log('🌱 Starting idempotent seed (Upsert Mode)...\n');
 
   const password = await bcrypt.hash(DEFAULT_PASSWORD, HASH_ROUNDS);
-  
+
   // Use .env for Super Admin
   const ADMIN_EMAIL = process.env.SUPER_ADMIN_EMAIL || 'admin@evuze.rw';
-  const ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD ? await bcrypt.hash(process.env.SUPER_ADMIN_PASSWORD, HASH_ROUNDS) : password;
+  const ADMIN_PASSWORD = process.env.SUPER_ADMIN_PASSWORD
+    ? await bcrypt.hash(process.env.SUPER_ADMIN_PASSWORD, HASH_ROUNDS)
+    : password;
 
   // ==========================================
   // 1. USERS
@@ -53,26 +61,111 @@ async function main() {
   console.log('👤 Syncing users...');
 
   const users = [
-    { id: IDS.users.superAdmin, email: ADMIN_EMAIL, role: UserRole.SUPER_ADMIN, isVerified: true, pass: ADMIN_PASSWORD },
-    { id: IDS.users.medplusOwner, email: 'owner@medplus.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
-    { id: IDS.users.medplusManager, email: 'manager@medplus.com', role: UserRole.BRANCH_MANAGER, isVerified: true, pass: password },
-    { id: IDS.users.medplusPharmacist, email: 'pharmacist@medplus.com', role: UserRole.PHARMACIST, isVerified: true, pass: password },
-    { id: IDS.users.medplusCashier, email: 'cashier@medplus.com', role: UserRole.CASHIER, isVerified: true, pass: password },
-    { id: IDS.users.ubumweOwner, email: 'owner@ubumwepharma.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
-    { id: IDS.users.ubumweManager, email: 'manager@ubumwepharma.com', role: UserRole.BRANCH_MANAGER, isVerified: true, pass: password },
-    { id: IDS.users.remeraOwner, email: 'owner@remerahealth.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
-    { id: IDS.users.kigaliCentralOwner, email: 'owner@kigalicentralpharma.com', role: UserRole.PHARMACY, isVerified: true, pass: password },
-    { id: IDS.users.alice, email: 'alice@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
-    { id: IDS.users.bob, email: 'bob@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
-    { id: IDS.users.claire, email: 'claire@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
-    { id: IDS.users.david, email: 'david@patient.com', role: UserRole.PATIENT, isVerified: true, pass: password },
+    {
+      id: IDS.users.superAdmin,
+      email: ADMIN_EMAIL,
+      role: UserRole.SUPER_ADMIN,
+      isVerified: true,
+      pass: ADMIN_PASSWORD,
+    },
+    {
+      id: IDS.users.medplusOwner,
+      email: 'owner@medplus.com',
+      role: UserRole.PHARMACY,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.medplusManager,
+      email: 'manager@medplus.com',
+      role: UserRole.BRANCH_MANAGER,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.medplusPharmacist,
+      email: 'pharmacist@medplus.com',
+      role: UserRole.PHARMACIST,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.medplusCashier,
+      email: 'cashier@medplus.com',
+      role: UserRole.CASHIER,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.ubumweOwner,
+      email: 'owner@ubumwepharma.com',
+      role: UserRole.PHARMACY,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.ubumweManager,
+      email: 'manager@ubumwepharma.com',
+      role: UserRole.BRANCH_MANAGER,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.remeraOwner,
+      email: 'owner@remerahealth.com',
+      role: UserRole.PHARMACY,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.kigaliCentralOwner,
+      email: 'owner@kigalicentralpharma.com',
+      role: UserRole.PHARMACY,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.alice,
+      email: 'alice@patient.com',
+      role: UserRole.PATIENT,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.bob,
+      email: 'bob@patient.com',
+      role: UserRole.PATIENT,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.claire,
+      email: 'claire@patient.com',
+      role: UserRole.PATIENT,
+      isVerified: true,
+      pass: password,
+    },
+    {
+      id: IDS.users.david,
+      email: 'david@patient.com',
+      role: UserRole.PATIENT,
+      isVerified: true,
+      pass: password,
+    },
   ];
 
   for (const u of users) {
     await prisma.user.upsert({
       where: { email: u.email },
       update: { role: u.role, isVerified: u.isVerified, isActive: true },
-      create: { id: u.id, email: u.email, role: u.role, isVerified: u.isVerified, password: u.pass, isActive: true },
+      create: {
+        id: u.id,
+        email: u.email,
+        role: u.role,
+        isVerified: u.isVerified,
+        password: u.pass,
+        isActive: true,
+      },
     });
   }
 
@@ -125,7 +218,7 @@ async function main() {
       representativeName: 'Mugisha Emmanuel',
       phone: '+250788000003',
       address: 'KN 3 Rd, City Centre, Nyarugenge, Kigali',
-      latitude: -1.9500,
+      latitude: -1.95,
       longitude: 30.0588,
       dateOfIncorporation: new Date('2020-01-10'),
       rdbCertificate: 'RDB-2020-005566',
@@ -146,7 +239,7 @@ async function main() {
       rdbCertificate: 'RDB-2023-009988',
       pharmacyLicense: 'LIC-2023-PH-099',
       status: PharmacyStatus.PENDING,
-    }
+    },
   ];
 
   for (const p of pharmacies) {
@@ -230,17 +323,20 @@ async function main() {
       name: 'Kigali Central Main Branch',
       address: 'KN 3 Rd, City Centre, Nyarugenge, Kigali',
       phone: '+250788000040',
-      latitude: -1.9500,
+      latitude: -1.95,
       longitude: 30.0588,
       isActive: true,
       branchStatus: BranchStatus.APPROVED,
       branchManagerEmail: 'manager@kigalicentralpharma.com',
-    }
+    },
   ];
 
   for (const b of branches) {
     const { pharmacyEmail, managerEmail, ...bData } = b;
-    const owner = await prisma.user.findUnique({ where: { email: pharmacyEmail }, include: { pharmacy: true } });
+    const owner = await prisma.user.findUnique({
+      where: { email: pharmacyEmail },
+      include: { pharmacy: true },
+    });
     const pharmacyId = owner?.pharmacy?.id;
     if (!pharmacyId) continue;
 
@@ -265,10 +361,38 @@ async function main() {
   console.log('🧑‍🤝‍🧑 Syncing patients & staff...');
 
   const patients = [
-    { email: 'alice@patient.com', firstName: 'Alice', lastName: 'Mukamana', address: 'KG 7 Ave, Kimironko, Gasabo, Kigali', insuranceProvider: 'RSSB', coverage: 80 },
-    { email: 'bob@patient.com', firstName: 'Bob', lastName: 'Habimana', address: 'KN 4 Ave, Nyarugenge, Kigali', insuranceProvider: null, coverage: 0 },
-    { email: 'claire@patient.com', firstName: 'Claire', lastName: 'Ingabire', address: 'KG 12 Ave, Remera, Gasabo, Kigali', insuranceProvider: 'MMI', coverage: 60 },
-    { email: 'david@patient.com', firstName: 'David', lastName: 'Nshuti', address: 'Kicukiro District, Kigali, Rwanda', insuranceProvider: null, coverage: 0 },
+    {
+      email: 'alice@patient.com',
+      firstName: 'Alice',
+      lastName: 'Mukamana',
+      address: 'KG 7 Ave, Kimironko, Gasabo, Kigali',
+      insuranceProvider: 'RSSB',
+      coverage: 80,
+    },
+    {
+      email: 'bob@patient.com',
+      firstName: 'Bob',
+      lastName: 'Habimana',
+      address: 'KN 4 Ave, Nyarugenge, Kigali',
+      insuranceProvider: null,
+      coverage: 0,
+    },
+    {
+      email: 'claire@patient.com',
+      firstName: 'Claire',
+      lastName: 'Ingabire',
+      address: 'KG 12 Ave, Remera, Gasabo, Kigali',
+      insuranceProvider: 'MMI',
+      coverage: 60,
+    },
+    {
+      email: 'david@patient.com',
+      firstName: 'David',
+      lastName: 'Nshuti',
+      address: 'Kicukiro District, Kigali, Rwanda',
+      insuranceProvider: null,
+      coverage: 0,
+    },
   ];
 
   for (const p of patients) {
@@ -277,21 +401,28 @@ async function main() {
 
     await prisma.patient.upsert({
       where: { userId },
-      update: { firstName: p.firstName, lastName: p.lastName, address: p.address },
+      update: {
+        firstName: p.firstName,
+        lastName: p.lastName,
+        address: p.address,
+      },
       create: {
         user: { connect: { id: userId } },
         firstName: p.firstName,
         lastName: p.lastName,
+        mrn: generateMRN(),
         phone: '+250788' + Math.floor(Math.random() * 9000000 + 1000000),
         address: p.address,
         insuranceProvider: p.insuranceProvider,
         insuranceCoverage: p.coverage,
-      }
+      },
     });
   }
 
   const pharmId = await getUserId('pharmacist@medplus.com');
-  const medPlusMain = await prisma.branch.findFirst({ where: { name: 'MedPlus Main Branch' } });
+  const medPlusMain = await prisma.branch.findFirst({
+    where: { name: 'MedPlus Main Branch' },
+  });
 
   if (pharmId && medPlusMain) {
     await prisma.staff.upsert({
@@ -304,7 +435,7 @@ async function main() {
         lastName: 'Nkurunziza',
         phone: '+250788100001',
         status: 'ACTIVE',
-      }
+      },
     });
   }
 
@@ -320,7 +451,7 @@ async function main() {
         lastName: 'Uwimana',
         phone: '+250788100002',
         status: 'ACTIVE',
-      }
+      },
     });
   }
 
@@ -329,7 +460,7 @@ async function main() {
   // ==========================================
   console.log('🛒 Syncing medications & orders...');
 
-  const medId = "30000000-0000-0000-0000-000000000001";
+  const medId = '30000000-0000-0000-0000-000000000001';
   if (medPlusMain && medPlusMain.pharmacyId) {
     await prisma.medication.upsert({
       where: { id: medId },
@@ -342,35 +473,86 @@ async function main() {
         category: 'Antibiotics',
         price: 2500,
         quantity: 200,
-      }
+      },
     });
 
-    const aliceP = await prisma.patient.findFirst({ where: { firstName: 'Alice' } });
-    const bobP = await prisma.patient.findFirst({ where: { firstName: 'Bob' } });
+    const aliceP = await prisma.patient.findFirst({
+      where: { firstName: 'Alice' },
+    });
+    const bobP = await prisma.patient.findFirst({
+      where: { firstName: 'Bob' },
+    });
 
     if (aliceP && bobP) {
       const orders = [
-        { orderNumber: 'ORD-2026-0001', patientId: aliceP.id, status: 'COMPLETED', paymentMethod: 'MTN_MOMO', paymentStatus: 'COMPLETED', patientPayment: 1200 },
-        { orderNumber: 'ORD-2026-0002', patientId: bobP.id, status: 'PENDING', paymentMethod: 'CARD', paymentStatus: 'PENDING', patientPayment: 5600 },
-        { orderNumber: 'ORD-2026-0003', patientId: aliceP.id, status: 'ACCEPTED', paymentMethod: 'CARD', paymentStatus: 'PENDING', patientPayment: 11000 },
-        { orderNumber: 'ORD-2026-0004', patientId: aliceP.id, status: 'READY_FOR_PICKUP', paymentMethod: 'MTN_MOMO', paymentStatus: 'COMPLETED', patientPayment: 1600 },
-        { orderNumber: 'ORD-2026-0005', patientId: bobP.id, status: 'READY_FOR_PICKUP', paymentMethod: 'CASH', paymentStatus: 'PENDING', patientPayment: 4500 },
-        { orderNumber: 'ORD-2026-0006', patientId: bobP.id, status: 'PREPARING', paymentMethod: 'CARD', paymentStatus: 'PENDING', patientPayment: 11000 },
+        {
+          orderNumber: 'ORD-2026-0001',
+          patientId: aliceP.id,
+          status: 'COMPLETED',
+          paymentMethod: 'MTN_MOMO',
+          paymentStatus: 'COMPLETED',
+          patientPayment: 1200,
+        },
+        {
+          orderNumber: 'ORD-2026-0002',
+          patientId: bobP.id,
+          status: 'PENDING',
+          paymentMethod: 'CARD',
+          paymentStatus: 'PENDING',
+          patientPayment: 5600,
+        },
+        {
+          orderNumber: 'ORD-2026-0003',
+          patientId: aliceP.id,
+          status: 'ACCEPTED',
+          paymentMethod: 'CARD',
+          paymentStatus: 'PENDING',
+          patientPayment: 11000,
+        },
+        {
+          orderNumber: 'ORD-2026-0004',
+          patientId: aliceP.id,
+          status: 'READY_FOR_PICKUP',
+          paymentMethod: 'MTN_MOMO',
+          paymentStatus: 'COMPLETED',
+          patientPayment: 1600,
+        },
+        {
+          orderNumber: 'ORD-2026-0005',
+          patientId: bobP.id,
+          status: 'READY_FOR_PICKUP',
+          paymentMethod: 'CASH',
+          paymentStatus: 'PENDING',
+          patientPayment: 4500,
+        },
+        {
+          orderNumber: 'ORD-2026-0006',
+          patientId: bobP.id,
+          status: 'PREPARING',
+          paymentMethod: 'CARD',
+          paymentStatus: 'PENDING',
+          patientPayment: 11000,
+        },
       ];
 
       for (const o of orders) {
         await prisma.order.upsert({
           where: { orderNumber: o.orderNumber },
-          update: { status: o.status as any, paymentMethod: o.paymentMethod as any },
+          update: {
+            status: o.status as any,
+            paymentMethod: o.paymentMethod as any,
+          },
           create: {
-            ...o as any,
+            ...(o as any),
             pharmacyId: medPlusMain.pharmacyId,
             branchId: medPlusMain.id,
             type: 'PICKUP',
             subtotal: 5000,
             total: 5000,
-            orderItems: { create: [{ medicationId: medId, quantity: 1, price: 2500 }] }
-          }
+            orderItems: {
+              create: [{ medicationId: medId, quantity: 1, price: 2500 }],
+            },
+          },
         });
       }
     }
@@ -381,26 +563,30 @@ async function main() {
   // ==========================================
   console.log('🕐 Syncing attendance & misc...');
 
-  const staffG = await prisma.staff.findFirst({ where: { firstName: 'Grace' } });
+  const staffG = await prisma.staff.findFirst({
+    where: { firstName: 'Grace' },
+  });
   if (staffG && medPlusMain) {
     const today = new Date();
     today.setHours(8, 0, 0, 0);
-    
+
     await prisma.attendance.upsert({
-      where: { id: "40000000-0000-0000-0000-000000000001" },
+      where: { id: '40000000-0000-0000-0000-000000000001' },
       update: { status: 'COMPLETED' },
       create: {
-        id: "40000000-0000-0000-0000-000000000001",
+        id: '40000000-0000-0000-0000-000000000001',
         staffId: staffG.id,
         branchId: medPlusMain.id,
         clockInTime: today,
         status: 'COMPLETED',
         clockInLocation: { lat: -1.9441, lng: 30.0619, accuracy: 10 },
-      }
+      },
     });
   }
 
-  console.log('\n✅ Nelly\'s branch conflict resolved and updated with Dev branch!');
+  console.log(
+    "\n✅ Nelly's branch conflict resolved and updated with Dev branch!",
+  );
 }
 
 main()
