@@ -207,17 +207,6 @@ export class BranchesService {
     });
   }
 
-  async getMyBranchDetails(managerUserId: string) {
-    const branch = await this.prisma.branch.findUnique({
-      where: { managerId: managerUserId },
-      select: {
-        id: true,
-        name: true,
-        address: true,
-        latitude: true,
-        longitude: true,
-      },
-    });
   const branch = await this.prisma.branch.findUnique({
     where: { managerId: managerUserId },
     select: {
@@ -229,10 +218,6 @@ export class BranchesService {
       longitude: true,
     },
   });
-
-  if (!branch) {
-    throw new NotFoundException('Branch not found');
-  }
 
     if (!branch) {
       throw new NotFoundException('Branch not found');
