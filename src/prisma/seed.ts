@@ -279,11 +279,12 @@ async function main() {
       where: { userId },
       update: { firstName: p.firstName, lastName: p.lastName, address: p.address },
       create: {
-        userId,
+        user: { connect: { id: userId } },
         firstName: p.firstName,
         lastName: p.lastName,
         phone: '+250788' + Math.floor(Math.random() * 9000000 + 1000000),
         address: p.address,
+        mrn: `MRN-${Math.floor(Math.random() * 1000000).toString().padStart(6, '0')}`,
         insuranceProvider: p.insuranceProvider,
         insuranceCoverage: p.coverage,
       }

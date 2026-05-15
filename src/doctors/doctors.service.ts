@@ -7,9 +7,7 @@ export class DoctorsService {
   constructor(private readonly prisma: PrismaService) {}
 
   async findAll(query: DoctorQueryDto) {
-    const where: any = {
-      user: { role: 'DOCTOR' },
-    };
+    const where: any = { }
 
     if (query.specialty) {
       where.specialization = {
@@ -35,38 +33,23 @@ export class DoctorsService {
         user: { 
           select: { 
             email: true,
-            hospitalStaff: {
-              select: {
-                firstName: true,
-                lastName: true,
-                phone: true,
-                status: true,
-                createdAt: true,
-                updatedAt: true
-              }
-            }
           } 
         },
       },
-      orderBy: { user: { hospitalStaff: { lastName: 'asc' } } },
+
+       orderBy: { specialization: 'asc' },
     });
 
     return doctors.map((doctor) => {
-      const hospitalStaff = doctor.user.hospitalStaff;
 
       return {
         id: doctor.id,
-        firstName: hospitalStaff?.firstName || 'Doctor',
-        lastName: hospitalStaff?.lastName || doctor.specialization,
         specialty: doctor.specialization,
         email: doctor.user.email,
-        phone: hospitalStaff?.phone || doctor.hospital.phone,
+        phone: doctor.hospital.phone,
         hospitalId: doctor.hospitalId,
         hospitalName: doctor.hospital.name,
         hospitalPhone: doctor.hospital.phone,
-        status: hospitalStaff?.status || 'ACTIVE',
-        createdAt: hospitalStaff?.createdAt || new Date(),
-        updatedAt: hospitalStaff?.updatedAt || new Date(),
         licenseNumber: doctor.licenseNumber,
         bio: doctor.bio || '',
       };
