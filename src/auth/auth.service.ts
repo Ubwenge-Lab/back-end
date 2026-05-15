@@ -28,8 +28,9 @@ import {
   UploadBranchLicenseDto,
   RegisterHospitalDto,
   OnboardHospitalStaffDto,
+  ActivateHospitalStaffDto,
 } from './dto';
-import { randomInt } from 'crypto';
+import { randomInt, randomBytes } from 'crypto';
 
 @Injectable()
 export class AuthService {
@@ -151,6 +152,7 @@ export class AuthService {
         user.email,
         user.role,
         hospital.status,
+        hospital.id,
       );
       await this.updateRefreshToken(user.id, tokens.refreshToken);
 
@@ -160,6 +162,7 @@ export class AuthService {
           email: user.email,
           role: user.role,
           isVerified: user.isVerified,
+          hospitalId: hospital.id,
           profile: hospital,
           hospitalStatus: hospital.status,
         },
@@ -323,6 +326,8 @@ export class AuthService {
           user.id,
           user.email,
           user.role,
+          undefined,
+          hospitalStaff.hospitalId,
         );
         await this.updateRefreshToken(user.id, tokens.refreshToken);
 
@@ -574,6 +579,20 @@ export class AuthService {
       throw new ForbiddenException('Only hospital admins can onboard staff');
     }
 
+    if (dto.role === 'DOCTOR') {
+      if (!dto.specialization || !dto.licenseNumber) {
+        throw new BadRequestException(
+          'specialization and licenseNumber are required when onboarding a Doctor',
+        );
+      }
+      const existingLicense = await this.prisma.doctor.findUnique({
+        where: { licenseNumber: dto.licenseNumber },
+      });
+      if (existingLicense) {
+        throw new ConflictException('License number already registered');
+      }
+    }
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -582,7 +601,7 @@ export class AuthService {
       throw new ConflictException('Email already in use');
     }
 
-    const tempPassword = this.generateVerificationCode();
+    const tempPassword = this.generateTempPassword();
     const hashedPassword = await bcrypt.hash(tempPassword, 12);
     const tempPasswordExpiry = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
 
@@ -596,7 +615,7 @@ export class AuthService {
         },
       });
 
-      const staff = await tx.hospitalStaff.create({
+      await tx.hospitalStaff.create({
         data: {
           userId: user.id,
           hospitalId: hospital.id,
@@ -609,24 +628,86 @@ export class AuthService {
         },
       });
 
-      return { user, staff };
+      if (dto.role === 'DOCTOR') {
+        await tx.doctor.create({
+          data: {
+            userId: user.id,
+            hospitalId: hospital.id,
+            specialization: dto.specialization!,
+            licenseNumber: dto.licenseNumber!,
+            bio: dto.bio,
+          },
+        });
+      }
+
+      return { user };
     });
 
     try {
-      await this.notificationsService.sendStaffCredentials(
+      await this.notificationsService.sendHospitalStaffCredentials(
         dto.email,
         tempPassword,
         hospital.name,
-        'Main Hospital',
         dto.role,
       );
     } catch (error) {
-      console.error('❌ Failed to send staff credentials email:', error);
+      console.error('❌ Failed to send hospital staff credentials email:', error);
     }
 
     return {
-      message: 'Hospital staff member onboarded successfully.',
+      message: `${dto.role === 'DOCTOR' ? 'Doctor' : 'Staff member'} onboarded successfully.`,
       userId: result.user.id,
+    };
+  }
+
+  // ========================================
+  // ACTIVATE HOSPITAL STAFF (no token required — called from email link)
+  // ========================================
+
+  async activateHospitalStaff(dto: ActivateHospitalStaffDto) {
+    if (dto.newPassword !== dto.confirmPassword) {
+      throw new BadRequestException('Passwords do not match');
+    }
+
+    const user = await this.usersService.findByEmail(dto.email);
+    if (!user) {
+      throw new BadRequestException('Invalid email or temporary password');
+    }
+
+    const isTempPasswordValid = await bcrypt.compare(dto.tempPassword, user.password);
+    if (!isTempPasswordValid) {
+      throw new BadRequestException('Invalid email or temporary password');
+    }
+
+    const hospitalStaff = await this.prisma.hospitalStaff.findFirst({
+      where: { userId: user.id },
+    });
+
+    if (!hospitalStaff || !hospitalStaff.tempPasswordHash) {
+      throw new BadRequestException('No pending activation found for this account');
+    }
+
+    if (hospitalStaff.tempPasswordExpiry && hospitalStaff.tempPasswordExpiry < new Date()) {
+      throw new ForbiddenException(
+        'Temporary password has expired. Contact your hospital admin to resend your credentials.',
+      );
+    }
+
+    const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
+
+    await this.prisma.$transaction([
+      this.prisma.user.update({
+        where: { id: user.id },
+        data: { password: hashedPassword, refreshToken: null },
+      }),
+      this.prisma.hospitalStaff.update({
+        where: { id: hospitalStaff.id },
+        data: { tempPasswordHash: null, tempPasswordExpiry: null },
+      }),
+    ]);
+
+    return {
+      message: 'Password set successfully. You can now log in with your new password.',
     };
   }
 
@@ -836,11 +917,20 @@ export class AuthService {
 
     await this.prisma.user.update({
       where: { id: userId },
-      data: {
-        password: hashedPassword,
-        refreshToken: null,
-      },
+      data: { password: hashedPassword, refreshToken: null },
     });
+
+    // Clear temp password if this user is hospital staff
+    const hospitalStaff = await this.prisma.hospitalStaff.findFirst({
+      where: { userId },
+      select: { id: true, tempPasswordHash: true },
+    });
+    if (hospitalStaff?.tempPasswordHash) {
+      await this.prisma.hospitalStaff.update({
+        where: { id: hospitalStaff.id },
+        data: { tempPasswordHash: null, tempPasswordExpiry: null },
+      });
+    }
 
     return { message: 'Password changed successfully!' };
   }
@@ -911,10 +1001,36 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    const tokens = await this.generateTokens(user.id, user.email, user.role);
+    const hospitalId = await this.getHospitalIdForUser(user.id, user.role);
+    const tokens = await this.generateTokens(user.id, user.email, user.role, undefined, hospitalId);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
+  }
+
+  private async getHospitalIdForUser(userId: string, role: string): Promise<string | undefined> {
+    if (role === 'HOSPITAL_ADMIN') {
+      const hospital = await this.prisma.hospital.findUnique({
+        where: { userId },
+        select: { id: true },
+      });
+      return hospital?.id;
+    }
+    if (['DOCTOR', 'NURSE', 'RECEPTIONIST'].includes(role)) {
+      const hospitalStaff = await this.prisma.hospitalStaff.findFirst({
+        where: { userId },
+        select: { hospitalId: true },
+      });
+      if (hospitalStaff) return hospitalStaff.hospitalId;
+      if (role === 'DOCTOR') {
+        const doctor = await this.prisma.doctor.findUnique({
+          where: { userId },
+          select: { hospitalId: true },
+        });
+        return doctor?.hospitalId;
+      }
+    }
+    return undefined;
   }
 
   // ========================================
@@ -942,13 +1058,22 @@ export class AuthService {
     return randomInt(100000, 999999).toString();
   }
 
+  // Produces a 12-char password: Ev + 8 base64url chars + 1!
+  // Always contains uppercase, lowercase, digit, and special character.
+  private generateTempPassword(): string {
+    return `Ev${randomBytes(6).toString('base64url')}1!`;
+  }
+
   private async generateTokens(
     userId: string,
     email: string,
     role: string,
     status?: string,
+    hospitalId?: string,
   ) {
-    const payload = { sub: userId, email, role, status };
+    const payload: Record<string, any> = { sub: userId, email, role };
+    if (status !== undefined) payload.status = status;
+    if (hospitalId) payload.hospitalId = hospitalId;
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get('JWT_SECRET'),

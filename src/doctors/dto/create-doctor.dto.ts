@@ -1,13 +1,7 @@
-import {
-  IsString,
-  IsEmail,
-  IsNotEmpty,
-  IsEnum,
-  IsOptional,
-} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, IsPhoneNumber } from 'class-validator';
 
-export class OnboardHospitalStaffDto {
+export class CreateDoctorDto {
   @ApiProperty({ example: 'dr.mutoni@cityhospital.com' })
   @IsEmail()
   email: string;
@@ -27,19 +21,15 @@ export class OnboardHospitalStaffDto {
   @IsString()
   phone?: string;
 
-  @ApiProperty({ enum: ['DOCTOR', 'NURSE', 'RECEPTIONIST'] })
-  @IsEnum(['DOCTOR', 'NURSE', 'RECEPTIONIST'])
-  role: 'DOCTOR' | 'NURSE' | 'RECEPTIONIST';
-
-  @ApiPropertyOptional({ example: 'Cardiology', description: 'Required when role is DOCTOR' })
-  @IsOptional()
+  @ApiProperty({ example: 'Cardiology' })
   @IsString()
-  specialization?: string;
+  @IsNotEmpty()
+  specialization: string;
 
-  @ApiPropertyOptional({ example: 'RW-MED-2024-001', description: 'Required when role is DOCTOR' })
-  @IsOptional()
+  @ApiProperty({ example: 'RW-MED-2024-001' })
   @IsString()
-  licenseNumber?: string;
+  @IsNotEmpty()
+  licenseNumber: string;
 
   @ApiPropertyOptional({ example: 'Specialist in interventional cardiology with 10 years of experience.' })
   @IsOptional()

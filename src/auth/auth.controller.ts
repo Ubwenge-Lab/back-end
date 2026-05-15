@@ -25,6 +25,7 @@ import {
   UploadBranchLicenseDto,
   RegisterHospitalDto,
   OnboardHospitalStaffDto,
+  ActivateHospitalStaffDto,
 } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
@@ -67,6 +68,13 @@ export class AuthController {
   })
   onboardHospitalStaff(@Req() req: any, @Body() dto: OnboardHospitalStaffDto) {
     return this.authService.onboardHospitalStaff(req.user.sub, dto);
+  }
+
+  @Post('hospital-staff/activate')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Set permanent password from email link (no login required)' })
+  activateHospitalStaff(@Body() dto: ActivateHospitalStaffDto) {
+    return this.authService.activateHospitalStaff(dto);
   }
 
   @Post('verify-email')

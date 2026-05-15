@@ -22,7 +22,6 @@ export class HospitalsService {
     return hospital;
   }
 
-  // Now properly inside the class
   async searchPatient(identifier: string) {
     const patient = await this.prisma.patient.findFirst({
       where: {
@@ -67,13 +66,34 @@ export class HospitalsService {
       );
     }
 
-    // Create the registration in the new join table
+    // Create the registration in the join table
     return this.prisma.hospitalPatientRegistration.create({
       data: {
         hospitalId,
         patientId,
         mrn: generateMRN(),
       },
+    });
+  }
+
+  async findDoctors(hospitalId: string, specialty?: string, available?: boolean) {
+    const hospital = await this.prisma.hospital.findUnique({ where: { id: hospitalId } });
+    if (!hospital) throw new NotFoundException('Hospital not found');
+
+    const where: any = { hospitalId };
+    if (specialty) where.specialization = { contains: specialty, mode: 'insensitive' };
+    if (available !== undefined) where.isAvailable = available;
+
+    return this.prisma.doctor.findMany({
+      where,
+      include: {
+        user: {
+          include: {
+            hospitalStaff: { select: { firstName: true, lastName: true, phone: true } },
+          },
+        },
+      },
+      orderBy: [{ rating: 'desc' }, { specialization: 'asc' }],
     });
   }
 }
