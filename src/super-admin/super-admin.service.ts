@@ -368,7 +368,7 @@ export class SuperAdminService {
     }, {});
 
     return {
-      totalRevenue: payments.reduce((sum, p) => sum + p.amount, 0),
+      totalRevenue: payments.reduce((sum, p) => sum + Number(p.amount), 0),
       transactionCount: payments.length,
       revenueByDate,
     };

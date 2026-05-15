@@ -386,7 +386,6 @@ export class AuthService {
             dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
             gender: dto.gender,
             address: dto.address,
-            mrn: `EV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             insuranceProvider: dto.insuranceProvider,
             insurancePolicy: dto.insurancePolicy,
             lastLat: dto.latitude,
