@@ -164,9 +164,13 @@ model Pharmacy {
   rdbCertificate       String?
   pharmacyLicense      String?
   businessRegistration String?
+  representativeName   String?
+  rejectionReason      String?
   status               PharmacyStatus @default(PENDING)
   createdAt            DateTime       @default(now())
   updatedAt            DateTime       @updatedAt
+  operatingHours       Json?
+  isActive             Boolean        @default(true)
   branches             Branch[]
   user                 User           @relation("PharmacyOwner", fields: [userId], references: [id], onDelete: Cascade)
   cartItems            CartItem[]
@@ -178,24 +182,31 @@ model Pharmacy {
 }
 
 model Branch {
-  id            String       @id @default(uuid())
-  pharmacyId    String
-  name          String
-  address       String
-  phone         String
-  latitude      Float?
-  longitude     Float?
-  managerId     String?      @unique
-  status        BranchStatus @default(INVITED)
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
-  attendance    Attendance[]
-  manager       User?        @relation("BranchManager", fields: [managerId], references: [id])
-  pharmacy      Pharmacy     @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
-  medications   Medication[]
-  staff         Staff[]
-  transfersFrom Transfer[]   @relation("FromBranch")
-  transfersTo   Transfer[]   @relation("ToBranch")
+  id                 String       @id @default(uuid())
+  pharmacyId         String
+  name               String
+  address            String
+  phone              String
+  latitude           Float?
+  longitude          Float?
+  managerId          String?      @unique
+  status             BranchStatus @default(INVITED)
+  createdAt          DateTime     @default(now())
+  updatedAt          DateTime     @updatedAt
+  operatingHours     Json?
+  isActive           Boolean      @default(true)
+  branchStatus       BranchStatus @default(INVITED)
+  isLocationVerified Boolean      @default(false)
+  branchManagerEmail String?
+  branchManagerName  String?
+  licenseUrl         String?
+  attendance         Attendance[]
+  manager            User?        @relation("BranchManager", fields: [managerId], references: [id])
+  pharmacy           Pharmacy     @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  medications        Medication[]
+  staff              Staff[]
+  transfersFrom      Transfer[]   @relation("FromBranch")
+  transfersTo        Transfer[]   @relation("ToBranch")
 
   @@index([pharmacyId])
   @@map("branches")
