@@ -43,7 +43,7 @@ export class HospitalsService {
     return patient;
   }
 
-  // Now properly inside the class
+  // Updated to use Nissi's Join Table (HospitalPatientRegistration)
   async linkPatientToHospital(hospitalId: string, patientId: string) {
     const patient = await this.prisma.patient.findUnique({
       where: { id: patientId },
@@ -51,16 +51,27 @@ export class HospitalsService {
 
     if (!patient) throw new NotFoundException('Patient record not found');
 
-    if (patient.hospitalId === hospitalId) {
+    // Check if registration already exists in the join table
+    const existingRegistration = await this.prisma.hospitalPatientRegistration.findUnique({
+      where: {
+        patientId_hospitalId: {
+          patientId,
+          hospitalId,
+        },
+      },
+    });
+
+    if (existingRegistration) {
       throw new ConflictException(
         'Patient is already registered at this hospital',
       );
     }
 
-    return this.prisma.patient.update({
-      where: { id: patientId },
+    // Create the registration in the new join table
+    return this.prisma.hospitalPatientRegistration.create({
       data: {
-        hospitalId: hospitalId,
+        hospitalId,
+        patientId,
         mrn: generateMRN(),
       },
     });

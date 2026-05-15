@@ -67,6 +67,13 @@ scratch/
 src/prisma/backup-data.ts
 src/prisma/data-backup.json
 src/prisma/test-conn.ts
+src/prisma/check-columns.ts
+src/prisma/check-enum.ts
+src/prisma/check-hospitals-columns.ts
+src/prisma/check-tables.ts
+src/prisma/data-state-backup.json
+src/prisma/patch-enum.ts
+src/prisma/restore-data.ts
 get_exact_ids.ts
 get_ids.ts
 test_checkout.ts
