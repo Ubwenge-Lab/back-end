@@ -171,6 +171,17 @@ export class NotificationsService {
     );
   }
 
+  async sendAppointmentConfirmation(data: {
+    patientEmail: string;
+    patientName: string;
+    doctorName: string;
+    hospitalName: string;
+    scheduledAt: Date;
+    reason: string;
+  }) {
+    await this.emailService.sendAppointmentConfirmation(data);
+  }
+
   async notifySuperAdminsNewHospital(hospitalId: string, hospitalName: string) {
     const superAdmins = await this.prisma.user.findMany({
       where: { role: 'SUPER_ADMIN' },
