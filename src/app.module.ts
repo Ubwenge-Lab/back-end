@@ -28,6 +28,7 @@ import { InvoicesModule } from './invoices/invoices.module';
 import { SupportModule } from './support/support.module';
 import { HospitalsModule } from './hospitals/hospitals.module';
 import { AppointmentsModule } from './appointments/appointments.module';
+import { DoctorsModule } from './doctors/doctors.module';
 
 @Module({
   imports: [
@@ -58,6 +59,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
     SupportModule,
     HospitalsModule,
     AppointmentsModule,
+    DoctorsModule,
   ],
   controllers: [AppController],
   providers: [AppService],
