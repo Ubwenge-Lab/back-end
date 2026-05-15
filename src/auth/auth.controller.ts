@@ -62,7 +62,9 @@ export class AuthController {
   @Post('onboard/hospital-staff')
   @UseGuards(JwtAuthGuard)
   @ApiBearerAuth()
-  @ApiOperation({ summary: 'Onboard Hospital Staff (Doctor/Nurse/Receptionist)' })
+  @ApiOperation({
+    summary: 'Onboard Hospital Staff (Doctor/Nurse/Receptionist)',
+  })
   onboardHospitalStaff(@Req() req: any, @Body() dto: OnboardHospitalStaffDto) {
     return this.authService.onboardHospitalStaff(req.user.sub, dto);
   }

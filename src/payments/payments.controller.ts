@@ -72,7 +72,6 @@ export class PaymentsController {
     return this.paymentsService.processMtnPayment(data);
   }
 
-
   @Get(':paymentId/receipt')
   @Roles(Role.CASHIER, Role.PHARMACIST, Role.BRANCH_MANAGER)
   @ApiOperation({ summary: 'Get payment receipt' })
@@ -92,7 +91,9 @@ export class PaymentsController {
 
   @Post('record')
   @Roles(Role.CASHIER, Role.PHARMACIST, Role.BRANCH_MANAGER)
-  @ApiOperation({ summary: 'Record an in-person payment at the branch counter' })
+  @ApiOperation({
+    summary: 'Record an in-person payment at the branch counter',
+  })
   recordPayment(@Req() req: any, @Body() dto: RecordPaymentDto) {
     return this.paymentsService.recordPayment(req.user.sub, dto);
   }

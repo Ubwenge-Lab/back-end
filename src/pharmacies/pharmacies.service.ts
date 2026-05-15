@@ -1029,7 +1029,9 @@ export class PharmaciesService {
   //-----------------------------------
 
   async getPharmacyLocations() {
-    const dayOfWeek = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali", weekday: 'long' }).toLowerCase();
+    const dayOfWeek = new Date()
+      .toLocaleString('en-US', { timeZone: 'Africa/Kigali', weekday: 'long' })
+      .toLowerCase();
 
     const [pharmacies, branches] = await Promise.all([
       this.prisma.pharmacy.findMany({
@@ -1038,14 +1040,21 @@ export class PharmaciesService {
       }),
       this.prisma.branch.findMany({
         where: { branchStatus: 'APPROVED' },
-        include: { pharmacy: { include: { user: { select: { isActive: true } } } } },
+        include: {
+          pharmacy: { include: { user: { select: { isActive: true } } } },
+        },
       }),
     ]);
 
     const all = [
-      ...pharmacies.map(p => {
-        const todayHours = p.operatingHours ? (p.operatingHours as any)[dayOfWeek] : null;
-        const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+      ...pharmacies.map((p) => {
+        const todayHours = p.operatingHours
+          ? (p.operatingHours as any)[dayOfWeek]
+          : null;
+        const hoursString =
+          todayHours && todayHours.open && todayHours.close
+            ? `${todayHours.open}-${todayHours.close}`
+            : null;
         return toPharmacyLocationDto({
           ...p,
           isActive: p.user?.isActive ?? true,
@@ -1054,9 +1063,14 @@ export class PharmaciesService {
           rating: null,
         });
       }),
-      ...branches.map(b => {
-        const todayHours = b.operatingHours ? (b.operatingHours as any)[dayOfWeek] : null;
-        const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+      ...branches.map((b) => {
+        const todayHours = b.operatingHours
+          ? (b.operatingHours as any)[dayOfWeek]
+          : null;
+        const hoursString =
+          todayHours && todayHours.open && todayHours.close
+            ? `${todayHours.open}-${todayHours.close}`
+            : null;
         return toPharmacyLocationDto({
           ...b,
           name: `${b.pharmacy.name} - ${b.name}`,
@@ -1074,7 +1088,9 @@ export class PharmaciesService {
   // ADMIN&PATIENT: GET PHARMACY DETAILS (FOR MAP VIEW)
   // ========================================
   async getPharmacyDetails(id: string) {
-    const dayOfWeek = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali", weekday: 'long' }).toLowerCase();
+    const dayOfWeek = new Date()
+      .toLocaleString('en-US', { timeZone: 'Africa/Kigali', weekday: 'long' })
+      .toLowerCase();
 
     // Check main pharmacy
     const pharmacy = await this.prisma.pharmacy.findUnique({
@@ -1086,8 +1102,13 @@ export class PharmaciesService {
     });
 
     if (pharmacy) {
-      const todayHours = pharmacy.operatingHours ? (pharmacy.operatingHours as any)[dayOfWeek] : null;
-      const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+      const todayHours = pharmacy.operatingHours
+        ? (pharmacy.operatingHours as any)[dayOfWeek]
+        : null;
+      const hoursString =
+        todayHours && todayHours.open && todayHours.close
+          ? `${todayHours.open}-${todayHours.close}`
+          : null;
 
       return toPharmacyLocationDto({
         ...pharmacy,
@@ -1112,8 +1133,13 @@ export class PharmaciesService {
     });
 
     if (branch) {
-      const todayHours = branch.operatingHours ? (branch.operatingHours as any)[dayOfWeek] : null;
-      const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+      const todayHours = branch.operatingHours
+        ? (branch.operatingHours as any)[dayOfWeek]
+        : null;
+      const hoursString =
+        todayHours && todayHours.open && todayHours.close
+          ? `${todayHours.open}-${todayHours.close}`
+          : null;
 
       return toPharmacyLocationDto({
         ...branch,
@@ -1127,6 +1153,4 @@ export class PharmaciesService {
 
     throw new NotFoundException('Pharmacy or Branch not found');
   }
-
-
 }

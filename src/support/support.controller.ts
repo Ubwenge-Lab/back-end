@@ -12,18 +12,21 @@ export class SupportController {
   @Public() // Bypasses mandatory JWT check, making it auth-optional
   @Post()
   @ApiOperation({ summary: 'Submit a support ticket' })
-  @ApiResponse({ 
-    status: 201, 
+  @ApiResponse({
+    status: 201,
     description: 'Ticket created successfully',
     schema: {
       example: {
         message: 'Support ticket submitted successfully',
         ticketNumber: 'SUP-171523200',
-        id: 'uuid-string'
-      }
-    }
+        id: 'uuid-string',
+      },
+    },
   })
-  @ApiResponse({ status: 400, description: 'Validation error (e.g. short message)' })
+  @ApiResponse({
+    status: 400,
+    description: 'Validation error (e.g. short message)',
+  })
   async create(@Body() dto: CreateSupportTicketDto, @Req() req: any) {
     /**
      * Logic: If a valid JWT is present, the global JwtAuthGuard (if configured)
