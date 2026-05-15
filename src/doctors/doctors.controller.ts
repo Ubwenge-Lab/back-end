@@ -2,7 +2,6 @@ import { Controller, Get, Query } from '@nestjs/common';
 import { ApiOperation, ApiQuery, ApiResponse, ApiTags } from '@nestjs/swagger';
 import { DoctorsService } from './doctors.service';
 import { DoctorQueryDto } from './dto/doctor-query.dto';
-import { DoctorResponseDto } from './dto/doctor-response.dto';
 
 @ApiTags('doctors')
 @Controller('doctors')
@@ -27,7 +26,6 @@ export class DoctorsController {
   @ApiResponse({
     status: 200,
     description: 'List of doctors',
-    type: [DoctorResponseDto],
   })
   @ApiResponse({
     status: 500,
