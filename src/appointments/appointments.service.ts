@@ -57,7 +57,7 @@ export class AppointmentsService {
       // FOR UPDATE causes concurrent transactions to wait here until the lock is released.
       const conflicts = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM appointments
-        WHERE "doctorId" = ${dto.doctorId}::uuid
+        WHERE "doctorId" = ${dto.doctorId}
         AND "scheduledAt" = ${scheduledAt}
         AND status != 'CANCELLED'
         FOR UPDATE
@@ -91,7 +91,7 @@ export class AppointmentsService {
           patient: { select: { firstName: true, lastName: true } },
         },
       });
-    });
+    }, { timeout: 30000 });
 
     // Fire confirmation email — non-blocking, never fails the booking
     try {
