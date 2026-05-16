@@ -30,6 +30,7 @@ import { SupportModule } from './support/support.module';
 import { HospitalsModule } from './hospitals/hospitals.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { DoctorsModule } from './doctors/doctors.module';
+import { AvailabilityModule } from './doctors/availability/availability.module';
 import {
   LoggerModule,
   CorrelationIdMiddleware,
@@ -67,6 +68,7 @@ import {
     HospitalsModule,
     AppointmentsModule,
     DoctorsModule,
+    AvailabilityModule, // NEW
   ],
   controllers: [AppController],
   providers: [
