@@ -1,5 +1,5 @@
 // backend/src/auth/auth.service.ts
-
+import { generateMRN } from '../utils/hospital';
 import {
   Injectable,
   UnauthorizedException,
@@ -55,7 +55,9 @@ export class AuthService {
     }
 
     if (user.isActive === false) {
-      throw new UnauthorizedException('Your account has been deactivated. Please contact support.');
+      throw new UnauthorizedException(
+        'Your account has been deactivated. Please contact support.',
+      );
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
@@ -66,7 +68,9 @@ export class AuthService {
     // Check email verification for PATIENT PHARMACY and HOSPITAL_ADMIN
     if (
       !user.isVerified &&
-      (user.role === 'PATIENT' || user.role === 'PHARMACY' || user.role === 'HOSPITAL_ADMIN')
+      (user.role === 'PATIENT' ||
+        user.role === 'PHARMACY' ||
+        user.role === 'HOSPITAL_ADMIN')
     ) {
       throw new UnauthorizedException(
         'Please verify your email first. Check your inbox for the verification code.',
@@ -222,9 +226,13 @@ export class AuthService {
     // ========================================
     // STAFF LOGIN (PHARMACIST, CASHIER, NURSE, DOCTOR, RECEPTIONIST)
     // ========================================
-    if (['PHARMACIST', 'CASHIER', 'NURSE', 'DOCTOR', 'RECEPTIONIST'].includes(user.role)) {
+    if (
+      ['PHARMACIST', 'CASHIER', 'NURSE', 'DOCTOR', 'RECEPTIONIST'].includes(
+        user.role,
+      )
+    ) {
       // Check for regular staff (Pharmacy Branch)
-      let staff = await this.prisma.staff.findFirst({
+      const staff = await this.prisma.staff.findFirst({
         where: { userId: user.id },
         include: {
           branch: {
@@ -254,14 +262,21 @@ export class AuthService {
           (await bcrypt.compare(dto.password, staff.tempPasswordHash));
 
         if (isUsingTempPassword) {
-          if (staff.tempPasswordExpiry && staff.tempPasswordExpiry < new Date()) {
+          if (
+            staff.tempPasswordExpiry &&
+            staff.tempPasswordExpiry < new Date()
+          ) {
             throw new ForbiddenException(
               'Temporary password expired. Contact your branch manager to resend credentials.',
             );
           }
         }
 
-        const tokens = await this.generateTokens(user.id, user.email, user.role);
+        const tokens = await this.generateTokens(
+          user.id,
+          user.email,
+          user.role,
+        );
         await this.updateRefreshToken(user.id, tokens.refreshToken);
 
         return {
@@ -299,7 +314,10 @@ export class AuthService {
           (await bcrypt.compare(dto.password, hospitalStaff.tempPasswordHash));
 
         if (isUsingTempPassword) {
-          if (hospitalStaff.tempPasswordExpiry && hospitalStaff.tempPasswordExpiry < new Date()) {
+          if (
+            hospitalStaff.tempPasswordExpiry &&
+            hospitalStaff.tempPasswordExpiry < new Date()
+          ) {
             throw new ForbiddenException('Temporary password expired.');
           }
         }
@@ -383,10 +401,10 @@ export class AuthService {
             firstName: dto.firstName,
             lastName: dto.lastName,
             phone: dto.phone,
+            mrn: generateMRN(),
             dateOfBirth: dto.dateOfBirth ? new Date(dto.dateOfBirth) : null,
             gender: dto.gender,
             address: dto.address,
-            mrn: `EV-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
             insuranceProvider: dto.insuranceProvider,
             insurancePolicy: dto.insurancePolicy,
             lastLat: dto.latitude,
@@ -407,7 +425,8 @@ export class AuthService {
     }
 
     return {
-      message: 'Registration successful! Please check your email for the verification code.',
+      message:
+        'Registration successful! Please check your email for the verification code.',
       userId: user.id,
       email: user.email,
     };
@@ -468,7 +487,8 @@ export class AuthService {
     }
 
     return {
-      message: 'Registration successful! Please verify your email, then wait for admin approval.',
+      message:
+        'Registration successful! Please verify your email, then wait for admin approval.',
       userId: user.id,
       pharmacyId: user.pharmacy.id,
       status: 'PENDING',
@@ -509,7 +529,9 @@ export class AuthService {
             address: dto.address,
             latitude: dto.latitude,
             longitude: dto.longitude,
-            dateOfIncorporation: dto.dateOfIncorporation ? new Date(dto.dateOfIncorporation) : null,
+            dateOfIncorporation: dto.dateOfIncorporation
+              ? new Date(dto.dateOfIncorporation)
+              : null,
             rdbCertificate: dto.rdbCertificate,
             pharmacyLicense: dto.pharmacyLicense,
             businessRegistration: dto.businessRegistration,
@@ -525,13 +547,16 @@ export class AuthService {
         user.email,
         verificationCode,
       );
-      console.log(`✅ Hospital verification code sent to ${user.email}: ${verificationCode}`);
+      console.log(
+        `✅ Hospital verification code sent to ${user.email}: ${verificationCode}`,
+      );
     } catch (error) {
       console.error('❌ Failed to send verification email:', error);
     }
 
     return {
-      message: 'Registration successful! Please verify your email, then wait for admin approval.',
+      message:
+        'Registration successful! Please verify your email, then wait for admin approval.',
       userId: user.id,
       hospitalId: user.hospital.id,
       status: 'PENDING',
@@ -552,6 +577,20 @@ export class AuthService {
 
     if (!hospital) {
       throw new ForbiddenException('Only hospital admins can onboard staff');
+    }
+
+    if (dto.role === 'DOCTOR') {
+      if (!dto.specialization || !dto.licenseNumber) {
+        throw new BadRequestException(
+          'specialization and licenseNumber are required when onboarding a Doctor',
+        );
+      }
+      const existingLicense = await this.prisma.doctor.findUnique({
+        where: { licenseNumber: dto.licenseNumber },
+      });
+      if (existingLicense) {
+        throw new ConflictException('License number already registered');
+      }
     }
 
     const existingUser = await this.prisma.user.findUnique({
@@ -576,7 +615,7 @@ export class AuthService {
         },
       });
 
-      const staff = await tx.hospitalStaff.create({
+      await tx.hospitalStaff.create({
         data: {
           userId: user.id,
           hospitalId: hospital.id,
@@ -589,7 +628,19 @@ export class AuthService {
         },
       });
 
-      return { user, staff };
+      if (dto.role === 'DOCTOR') {
+        await tx.doctor.create({
+          data: {
+            userId: user.id,
+            hospitalId: hospital.id,
+            specialization: dto.specialization!,
+            licenseNumber: dto.licenseNumber!,
+            bio: dto.bio,
+          },
+        });
+      }
+
+      return { user };
     });
 
     try {
@@ -604,7 +655,7 @@ export class AuthService {
     }
 
     return {
-      message: 'Hospital staff member onboarded successfully.',
+      message: `${dto.role === 'DOCTOR' ? 'Doctor' : 'Staff member'} onboarded successfully.`,
       userId: result.user.id,
     };
   }
@@ -677,7 +728,10 @@ export class AuthService {
       throw new BadRequestException('Invalid verification code or email');
     }
 
-    if (user.verificationCodeExpiry && user.verificationCodeExpiry < new Date()) {
+    if (
+      user.verificationCodeExpiry &&
+      user.verificationCodeExpiry < new Date()
+    ) {
       throw new BadRequestException('Verification code has expired.');
     }
 
@@ -709,9 +763,10 @@ export class AuthService {
     }
 
     return {
-      message: user.role === 'PHARMACY'
-        ? 'Email verified! Your pharmacy will be reviewed by our admin team.'
-        : 'Email verified successfully! You can now login.',
+      message:
+        user.role === 'PHARMACY'
+          ? 'Email verified! Your pharmacy will be reviewed by our admin team.'
+          : 'Email verified successfully! You can now login.',
       verified: true,
     };
   }
@@ -762,7 +817,10 @@ export class AuthService {
     const user = await this.usersService.findByEmail(dto.email);
 
     if (!user) {
-      return { message: 'If your email is registered, you will receive a password reset code.' };
+      return {
+        message:
+          'If your email is registered, you will receive a password reset code.',
+      };
     }
 
     const resetCode = this.generateResetCode();
@@ -777,12 +835,18 @@ export class AuthService {
     });
 
     try {
-      await this.notificationsService.sendPasswordResetEmail(user.email, resetCode);
+      await this.notificationsService.sendPasswordResetEmail(
+        user.email,
+        resetCode,
+      );
     } catch (error) {
       console.error('❌ Failed to send reset email:', error);
     }
 
-    return { message: 'If your email is registered, you will receive a password reset code.' };
+    return {
+      message:
+        'If your email is registered, you will receive a password reset code.',
+    };
   }
 
   // ========================================
@@ -805,7 +869,10 @@ export class AuthService {
       throw new BadRequestException('Invalid reset code or email');
     }
 
-    if (user.verificationCodeExpiry && user.verificationCodeExpiry < new Date()) {
+    if (
+      user.verificationCodeExpiry &&
+      user.verificationCodeExpiry < new Date()
+    ) {
       throw new BadRequestException('Reset code has expired.');
     }
 
@@ -838,7 +905,10 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
-    const isCurrentPasswordValid = await bcrypt.compare(dto.currentPassword, user.password);
+    const isCurrentPasswordValid = await bcrypt.compare(
+      dto.currentPassword,
+      user.password,
+    );
     if (!isCurrentPasswordValid) {
       throw new BadRequestException('Current password is incorrect');
     }
@@ -876,7 +946,10 @@ export class AuthService {
 
     if (!branch) throw new BadRequestException('Branch not found');
 
-    const isValid = await bcrypt.compare(dto.tempPassword, branch.tempPasswordHash);
+    const isValid = await bcrypt.compare(
+      dto.tempPassword,
+      branch.tempPasswordHash,
+    );
     if (!isValid) throw new BadRequestException('Invalid temporary password');
 
     const hashedPassword = await bcrypt.hash(dto.newPassword, 12);
@@ -920,7 +993,10 @@ export class AuthService {
       throw new UnauthorizedException('Access denied');
     }
 
-    const isRefreshTokenValid = await bcrypt.compare(refreshToken, user.refreshToken);
+    const isRefreshTokenValid = await bcrypt.compare(
+      refreshToken,
+      user.refreshToken,
+    );
     if (!isRefreshTokenValid) {
       throw new UnauthorizedException('Access denied');
     }

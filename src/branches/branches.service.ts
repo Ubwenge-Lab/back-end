@@ -28,9 +28,7 @@ export class BranchesService {
     });
     if (!pharmacy) throw new ForbiddenException('Pharmacy not found');
     if (pharmacy.status !== 'APPROVED')
-      throw new ForbiddenException(
-        'Pharmacy must be approved to create branches',
-      );
+      throw new ForbiddenException('Pharmacy must be approved to create branches');
 
     const existingEmail = await this.prisma.branch.findFirst({
       where: { branchManagerEmail: dto.branchManagerEmail },
@@ -59,7 +57,6 @@ export class BranchesService {
       },
     });
 
-    // Notify Super Admin
     try {
       await this.notificationsService.notifySuperAdminsNewBranch(
         branch.name,
@@ -166,7 +163,7 @@ export class BranchesService {
         address: true,
         phone: true,
         latitude: true,
-        longitude: true, 
+        longitude: true,
         branchManagerEmail: true,
         branchStatus: true,
         isActive: true,
@@ -184,9 +181,7 @@ export class BranchesService {
     });
 
     if (!branch) {
-      throw new ForbiddenException(
-        'Only branch managers can access sibling branches',
-      );
+      throw new ForbiddenException('Only branch managers can access sibling branches');
     }
 
     return this.prisma.branch.findMany({
@@ -201,47 +196,38 @@ export class BranchesService {
         name: true,
         address: true,
         latitude: true,
-        longitude: true,  
+        longitude: true,
       },
       orderBy: { name: 'asc' },
     });
   }
 
   async getMyBranchDetails(managerUserId: string) {
-  const branch = await this.prisma.branch.findUnique({
-    where: { managerId: managerUserId },
-    select: {
-      id: true,
-      pharmacyId: true,
-      name: true,
-      address: true,
-      latitude: true,
-      longitude: true,
-    },
-  });
+    const branch = await this.prisma.branch.findUnique({
+      where: { managerId: managerUserId },
+      select: {
+        id: true,
+        pharmacyId: true,
+        name: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
 
-  if (!branch) {
-    throw new NotFoundException('Branch not found');
+    if (!branch) {
+      throw new NotFoundException('Branch not found');
+    }
+
+    return branch;
   }
-
-  return branch;
-}
-
 
   async getBranchDetails(branchId: string, hqUserId: string) {
     await this.validateBranchOwnership(branchId, hqUserId);
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
-    const endOfMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() + 1,
-      0,
-      23,
-      59,
-      59,
-      999,
-    );
+    const endOfMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0, 23, 59, 59, 999);
 
     const [fullBranch, medicationCount, monthlyRevenue] = await Promise.all([
       this.prisma.branch.findUnique({
@@ -323,8 +309,7 @@ export class BranchesService {
   }
 
   private generateSecurePassword(): string {
-    const chars =
-      'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
+    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789!@#$%';
     const bytes = crypto.randomBytes(12);
     let password = '';
     for (let i = 0; i < 12; i++) {

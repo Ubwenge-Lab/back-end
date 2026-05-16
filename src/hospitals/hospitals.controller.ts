@@ -1,4 +1,4 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -6,6 +6,7 @@ import {
   ApiOkResponse,
   ApiNotFoundResponse,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { HospitalsService } from './hospitals.service';
 import { HospitalDto } from './dto/hospital.dto';
@@ -37,5 +38,46 @@ export class HospitalsController {
   @ApiNotFoundResponse({ description: 'Hospital not found' })
   findOne(@Param('id') id: string) {
     return this.hospitalsService.findOne(id);
+  }
+
+  // 1. Staff finds the patient using this
+  @Post(':id/patients/search')
+  @Roles(Role.HOSPITAL_ADMIN, Role.RECEPTIONIST, Role.DOCTOR, Role.SUPER_ADMIN)
+  @ApiOperation({
+    summary: 'Search for a global patient by National ID or Phone',
+  })
+  async searchPatient(
+    @Param('id') hospitalId: string,
+    @Body('identifier') identifier: string,
+  ) {
+    return this.hospitalsService.searchPatient(identifier);
+  }
+
+  // 2. Staff clicks "Register" and triggers this
+  @Post(':id/patients/register')
+  @Roles(Role.HOSPITAL_ADMIN, Role.RECEPTIONIST)
+  @ApiOperation({
+    summary: 'Link a global patient to this hospital and generate MRN',
+  })
+  async registerPatient(
+    @Param('id') hospitalId: string,
+    @Body('patientId') patientId: string,
+  ) {
+    return this.hospitalsService.linkPatientToHospital(hospitalId, patientId);
+  }
+
+  @Get(':id/doctors')
+  @Roles(Role.SUPER_ADMIN, Role.PATIENT, Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST)
+  @ApiOperation({ summary: 'List doctors at a specific hospital, optionally filtered by specialty' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiQuery({ name: 'specialty', required: false, example: 'Cardiology' })
+  @ApiQuery({ name: 'available', required: false, type: Boolean })
+  findDoctors(
+    @Param('id') id: string,
+    @Query('specialty') specialty?: string,
+    @Query('available') available?: string,
+  ) {
+    const availableBool = available === undefined ? undefined : available === 'true';
+    return this.hospitalsService.findDoctors(id, specialty, availableBool);
   }
 }

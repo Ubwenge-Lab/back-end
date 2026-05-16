@@ -662,7 +662,10 @@ export class EmailService {
   // ========================================
 
   private getSuperAdminEmail(): string {
-    return this.configService.get<string>('SUPER_ADMIN_EMAIL') || 'd.ntwali@ubwengelab.rw';
+    return (
+      this.configService.get<string>('SUPER_ADMIN_EMAIL') ||
+      'd.ntwali@ubwengelab.rw'
+    );
   }
 
   async sendSuperAdminAlert(
