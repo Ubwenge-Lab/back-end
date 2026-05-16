@@ -73,6 +73,7 @@ model Doctor {
   bio            String?
   rating         Float    @default(0)
   isAvailable    Boolean  @default(true)
+  schedules      DoctorSchedule[]
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -85,6 +86,25 @@ model Doctor {
   @@index([specialization])
   @@map("doctors")
 }
+
+
+// --- Doctor Schedule ---
+model DoctorSchedule {
+  id        String   @id @default(uuid())
+  doctorId  String
+  dayOfWeek Int      // 0 (Sunday) to 6 (Saturday)
+  startTime String   // e.g., "08:00"
+  endTime   String   // e.g., "17:00"
+
+  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@unique([doctorId, dayOfWeek, startTime])
+  @@map("doctor_schedules")
+}
+
+
+
+
 
 model HospitalStaff {
   id                 String      @id @default(uuid())
