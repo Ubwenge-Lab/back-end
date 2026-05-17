@@ -1,7 +1,8 @@
 // backend/src/app.module.ts
-// UPDATED VERSION - Added StaffModule
+// UPDATED VERSION - Added StaffModule + Logging Pipeline
 
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
@@ -29,6 +30,11 @@ import { SupportModule } from './support/support.module';
 import { HospitalsModule } from './hospitals/hospitals.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { DoctorsModule } from './doctors/doctors.module';
+import {
+  LoggerModule,
+  CorrelationIdMiddleware,
+  LoggingInterceptor,
+} from './logger';
 
 @Module({
   imports: [
@@ -36,6 +42,7 @@ import { DoctorsModule } from './doctors/doctors.module';
       isGlobal: true,
       envFilePath: '.env',
     }),
+    LoggerModule,
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -62,6 +69,16 @@ import { DoctorsModule } from './doctors/doctors.module';
     DoctorsModule,
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: LoggingInterceptor,
+    },
+  ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+  }
+}
