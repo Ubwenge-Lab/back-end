@@ -30,8 +30,12 @@ import {
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 
+// IMPORTS FOR SECURITY THROTTLING
+  import { Throttle, SkipThrottle } from '@nestjs/throttler';
+
 @ApiTags('Authentication')
 @Controller('auth')
+@Throttle({ default: { limit: 5, ttl: 60000 } }) // Limit to 5 requests per 1 minute for all routes in this controller
 export class AuthController {
   constructor(private authService: AuthService) {}
 
@@ -115,6 +119,7 @@ export class AuthController {
   }
 
   @Post('refresh')
+  @SkipThrottle() // Skip rate limiting for active tokens. Refresh tokens should be long-lived and not abused, so we allow more leniency here.
   @UseGuards(JwtRefreshGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()
@@ -124,6 +129,7 @@ export class AuthController {
   }
 
   @Post('logout')
+  @SkipThrottle() // Skip rate limiting for logout to ensure users can always log out even if they hit limits on other routes
   @UseGuards(JwtAuthGuard)
   @HttpCode(HttpStatus.OK)
   @ApiBearerAuth()

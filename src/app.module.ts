@@ -31,12 +31,25 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { AvailabilityModule } from './doctors/availability/availability.module';
 
+// Security imports
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { APP_GUARD } from '@nestjs/core';
+
+
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
     }),
+    // configure rate limiting: max 100 requests every 60,000 ms (1 minute) per IP
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 1 minute
+        limit: 100, // max 100 requests per IP per ttl
+      },
+    ]),
+
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -64,6 +77,13 @@ import { AvailabilityModule } from './doctors/availability/availability.module';
     AvailabilityModule, // NEW
   ],
   controllers: [AppController],
-  providers: [AppService],
+  providers: [
+    AppService,
+    // Bind TrhrottlerGuard globally to apply rate limiting to all routes
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
+    },
+  ],
 })
 export class AppModule {}

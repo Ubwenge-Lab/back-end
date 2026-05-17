@@ -6,16 +6,36 @@ import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
 import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, { bodyParser: false });
+
+  // Tell Express to trust the proxy (important for secure cookies when behind a proxy like Render)
+  app.set('trust proxy', 1);
 
   // Increase payload size limit to 50MB for file uploads (RDB certificates, licenses)
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
-  // Security
-  app.use(helmet());
+  // Security( Upgrade HTTP header Hardening)
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: [`'self'`],
+          // 'unsafe-inline' is required for Swagger UI styles to render properly
+          styleSrc: [`'self'`, `'unsafe-inline'`],
+          // Allows Swagger assets and cross-origin images (like prescription uploads or pharmacy logos)
+          imgSrc: [`'self'`, 'data:', 'validator.swagger.io', 'https:'],
+          // 'unsafe-inline' allows Swagger interactive execution scripts to run
+          scriptSrc: [`'self'`, `'unsafe-inline'`, 'https://cdn.jsdelivr.net'],
+        },
+      },
+      // Allows frontend applications on other origins to safely request backend assets
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
 
   // CORS - Allow frontend on port 3000
   const allowedOrigins = process.env.FRONTEND_URL
