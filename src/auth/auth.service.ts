@@ -6,6 +6,7 @@ import {
   ConflictException,
   BadRequestException,
   ForbiddenException,
+  Logger,
 } from '@nestjs/common';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -34,6 +35,8 @@ import { randomInt, randomBytes } from 'crypto';
 
 @Injectable()
 export class AuthService {
+  private readonly logger = new Logger(AuthService.name);
+
   constructor(
     private prisma: PrismaService,
     private jwtService: JwtService,
@@ -421,7 +424,10 @@ export class AuthService {
         verificationCode,
       );
     } catch (error) {
-      console.error('❌ Failed to send verification email:', error);
+      this.logger.error(
+        'Failed to send patient verification email',
+        error?.message || error,
+      );
     }
 
     return {
@@ -483,7 +489,10 @@ export class AuthService {
         verificationCode,
       );
     } catch (error) {
-      console.error('❌ Failed to send verification email:', error);
+      this.logger.error(
+        'Failed to send pharmacy verification email',
+        error?.message || error,
+      );
     }
 
     return {
@@ -547,11 +556,12 @@ export class AuthService {
         user.email,
         verificationCode,
       );
-      console.log(
-        `✅ Hospital verification code sent to ${user.email}: ${verificationCode}`,
-      );
+      this.logger.log(`Hospital verification email sent to ${user.email}`);
     } catch (error) {
-      console.error('❌ Failed to send verification email:', error);
+      this.logger.error(
+        'Failed to send hospital verification email',
+        error?.message || error,
+      );
     }
 
     return {
@@ -651,7 +661,10 @@ export class AuthService {
         dto.role,
       );
     } catch (error) {
-      console.error('❌ Failed to send hospital staff credentials email:', error);
+      this.logger.error(
+        'Failed to send hospital staff credentials email',
+        error?.message || error,
+      );
     }
 
     return {
@@ -674,7 +687,10 @@ export class AuthService {
       throw new BadRequestException('Invalid email or temporary password');
     }
 
-    const isTempPasswordValid = await bcrypt.compare(dto.tempPassword, user.password);
+    const isTempPasswordValid = await bcrypt.compare(
+      dto.tempPassword,
+      user.password,
+    );
     if (!isTempPasswordValid) {
       throw new BadRequestException('Invalid email or temporary password');
     }
@@ -684,10 +700,15 @@ export class AuthService {
     });
 
     if (!hospitalStaff || !hospitalStaff.tempPasswordHash) {
-      throw new BadRequestException('No pending activation found for this account');
+      throw new BadRequestException(
+        'No pending activation found for this account',
+      );
     }
 
-    if (hospitalStaff.tempPasswordExpiry && hospitalStaff.tempPasswordExpiry < new Date()) {
+    if (
+      hospitalStaff.tempPasswordExpiry &&
+      hospitalStaff.tempPasswordExpiry < new Date()
+    ) {
       throw new ForbiddenException(
         'Temporary password has expired. Contact your hospital admin to resend your credentials.',
       );
@@ -707,7 +728,8 @@ export class AuthService {
     ]);
 
     return {
-      message: 'Password set successfully. You can now log in with your new password.',
+      message:
+        'Password set successfully. You can now log in with your new password.',
     };
   }
 
@@ -758,7 +780,10 @@ export class AuthService {
           user.hospital.name,
         );
       } catch (error) {
-        console.error('❌ Failed to notify super admins:', error);
+        this.logger.error(
+          'Failed to notify super admins about new hospital',
+          error?.message || error,
+        );
       }
     }
 
@@ -803,7 +828,10 @@ export class AuthService {
         verificationCode,
       );
     } catch (error) {
-      console.error('❌ Failed to send verification email:', error);
+      this.logger.error(
+        'Failed to resend verification email',
+        error?.message || error,
+      );
     }
 
     return { message: 'New verification code sent to your email' };
@@ -840,7 +868,10 @@ export class AuthService {
         resetCode,
       );
     } catch (error) {
-      console.error('❌ Failed to send reset email:', error);
+      this.logger.error(
+        'Failed to send password reset email',
+        error?.message || error,
+      );
     }
 
     return {
@@ -1002,13 +1033,22 @@ export class AuthService {
     }
 
     const hospitalId = await this.getHospitalIdForUser(user.id, user.role);
-    const tokens = await this.generateTokens(user.id, user.email, user.role, undefined, hospitalId);
+    const tokens = await this.generateTokens(
+      user.id,
+      user.email,
+      user.role,
+      undefined,
+      hospitalId,
+    );
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
     return tokens;
   }
 
-  private async getHospitalIdForUser(userId: string, role: string): Promise<string | undefined> {
+  private async getHospitalIdForUser(
+    userId: string,
+    role: string,
+  ): Promise<string | undefined> {
     if (role === 'HOSPITAL_ADMIN') {
       const hospital = await this.prisma.hospital.findUnique({
         where: { userId },
