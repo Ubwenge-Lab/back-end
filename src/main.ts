@@ -1,21 +1,47 @@
 // backend/src/main.ts
 
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe } from '@nestjs/common';
+import { ValidationPipe, LoggerService } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import { json, urlencoded } from 'express';
+import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
+import { NestExpressApplication } from '@nestjs/platform-express';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule, { bodyParser: false });
+  const app = await NestFactory.create<NestExpressApplication>(AppModule, {
+    bodyParser: false,
+  });
+
+  const logger = app.get<LoggerService>(WINSTON_MODULE_NEST_PROVIDER);
+  app.useLogger(logger);
+
+  // Tell Express to trust the proxy (important for secure cookies when behind a proxy like Render)
+  app.set('trust proxy', 1);
 
   // Increase payload size limit to 50MB for file uploads (RDB certificates, licenses)
   app.use(json({ limit: '50mb' }));
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
-  // Security
-  app.use(helmet());
+  // Security (Upgrade HTTP header Hardening)
+  app.use(
+    helmet({
+      contentSecurityPolicy: {
+        directives: {
+          defaultSrc: [`'self'`],
+          // 'unsafe-inline' is required for Swagger UI styles to render properly
+          styleSrc: [`'self'`, `'unsafe-inline'`],
+          // Allows Swagger assets and cross-origin images (like prescription uploads or pharmacy logos)
+          imgSrc: [`'self'`, 'data:', 'validator.swagger.io', 'https:'],
+          // 'unsafe-inline' allows Swagger interactive execution scripts to run
+          scriptSrc: [`'self'`, `'unsafe-inline'`, 'https://cdn.jsdelivr.net'],
+        },
+      },
+      // Allows frontend applications on other origins to safely request backend assets
+      crossOriginResourcePolicy: { policy: 'cross-origin' },
+    }),
+  );
 
   // CORS - Allow frontend on port 3000
   const allowedOrigins = process.env.FRONTEND_URL
@@ -30,7 +56,8 @@ async function bootstrap() {
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization'],
+    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id'],
+    exposedHeaders: ['x-request-id'],
   });
 
   // Global prefix
@@ -58,20 +85,19 @@ async function bootstrap() {
   const port = process.env.PORT || 4000;
   await app.listen(port);
 
-  console.log(`
-    ╔═══════════════════════════════════════════════════════════╗
-    ║                                                           ║
-    ║   🏥 E-Vuze Pharmacy API is running!                     ║
-    ║                                                           ║
-    ║   🌐 Local:            http://localhost:${port}            ║
-    ║   📚 API Docs:         http://localhost:${port}/api/docs  ║
-    ║   🗄️  Database:         Connected                         ║
-    ║                                                           ║
-    ╚═══════════════════════════════════════════════════════════╝
-  `);
+  logger.log(
+    `🏥 E-Vuze Pharmacy API is running on http://localhost:${port}`,
+    'Bootstrap',
+  );
+  logger.log(
+    `📚 API Docs available at http://localhost:${port}/api/docs`,
+    'Bootstrap',
+  );
 }
 
 bootstrap().catch((err) => {
-  console.error(err);
+  // Winston not available if bootstrap failed — fall back to stderr
+  // eslint-disable-next-line no-console
+  console.error('❌ Failed to start application:', err);
   process.exit(1);
 });
