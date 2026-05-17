@@ -24,6 +24,9 @@ import {
   SearchMedicationsDto,
 } from './dto';
 
+// Import Throttle decorator for rate limiting
+import { Throttle } from '@nestjs/throttler';
+
 @ApiTags('Medications')
 @Controller('medications')
 export class MedicationsController {
@@ -31,6 +34,7 @@ export class MedicationsController {
 
   // Public - Search medications
   @Get('search')
+  @Throttle({ default: { limit: 20, ttl: 60000 } }) // Limit to 20 requests per 1 minute for this route
   @ApiOperation({ summary: 'Search medications across all pharmacies' })
   search(@Query() dto: SearchMedicationsDto) {
     return this.medicationsService.search(dto);
@@ -38,6 +42,7 @@ export class MedicationsController {
 
   // Registry - Search official FDA database (Public)
   @Get('registry/search')
+  @Throttle({ default: { limit: 20, ttl: 60000 } }) // Limit to 20 requests per 1 minute for this route
   @ApiOperation({ summary: 'Search FDA medication registry' })
   searchRegistry(@Query('query') query: string) {
     return this.medicationsService.searchRegistry(query);

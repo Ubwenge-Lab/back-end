@@ -1,8 +1,8 @@
 // backend/src/app.module.ts
-// UPDATED VERSION - Added StaffModule + Logging Pipeline
+// UPDATED VERSION - Added StaffModule + Logging Pipeline + Rate Limiting
 
 import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
-import { APP_INTERCEPTOR } from '@nestjs/core';
+import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
@@ -30,11 +30,13 @@ import { SupportModule } from './support/support.module';
 import { HospitalsModule } from './hospitals/hospitals.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { DoctorsModule } from './doctors/doctors.module';
+import { AvailabilityModule } from './doctors/availability/availability.module';
 import {
   LoggerModule,
   CorrelationIdMiddleware,
   LoggingInterceptor,
 } from './logger';
+import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
 @Module({
   imports: [
@@ -42,6 +44,13 @@ import {
       isGlobal: true,
       envFilePath: '.env',
     }),
+    // configure rate limiting: max 100 requests every 60,000 ms (1 minute) per IP
+    ThrottlerModule.forRoot([
+      {
+        ttl: 60000, // 1 minute
+        limit: 100, // max 100 requests per IP per ttl
+      },
+    ]),
     LoggerModule,
     PrismaModule,
     AuthModule,
@@ -67,6 +76,7 @@ import {
     HospitalsModule,
     AppointmentsModule,
     DoctorsModule,
+    AvailabilityModule, // NEW
   ],
   controllers: [AppController],
   providers: [
@@ -74,6 +84,11 @@ import {
     {
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,
+    },
+    // Bind ThrottlerGuard globally to apply rate limiting to all routes
+    {
+      provide: APP_GUARD,
+      useClass: ThrottlerGuard,
     },
   ],
 })
