@@ -50,7 +50,9 @@ export class AuthService {
     }
 
     if (user.isActive === false) {
-      throw new UnauthorizedException('Your account has been deactivated. Please contact support.');
+      throw new UnauthorizedException(
+        'Your account has been deactivated. Please contact support.',
+      );
     }
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);

@@ -546,9 +546,17 @@ export class PharmaciesService {
             user: {
               select: { email: true },
             },
+            prescriptions: {
+              orderBy: { createdAt: 'desc' },
+            },
           },
         },
-        orderItems: true,
+        orderItems: {
+          include: {
+            medication: true,
+          },
+        },
+        branch: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -560,22 +568,76 @@ export class PharmaciesService {
       const patientId = order.patientId;
 
       if (!patientMap.has(patientId)) {
+        // Map database prescriptions to frontend-expected formats
+        const rxList = order.patient.prescriptions.map((rx, idx) => ({
+          id: rx.id,
+          rxNumber: `RX-${String(idx + 1).padStart(6, '0')}`,
+          uploadedDate: new Date(rx.createdAt).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }),
+          type: 'doc', // Crucial fix: always map type to 'doc' so the owner consistently sees their prescriptions
+        }));
+
+        // Determine preferred branch
+        const preferredBranchName = order.branch?.name ?? 'MedPlus Main Branch';
+
+        // Extract city from address
+        let city = 'Kigali';
+        if (order.patient.address) {
+          const parts = order.patient.address.split(',');
+          if (parts.length > 0) {
+            const possibleCity = parts[parts.length - 1].trim();
+            if (possibleCity) {
+              city = possibleCity;
+            }
+          }
+        }
+
+        // Determine member status (e.g. VIP if coverage is high or RSSB insurance)
+        const memberStatus = order.patient.insuranceProvider === 'RSSB' ? 'VIP' : 'ACTIVE';
+
         patientMap.set(patientId, {
           id: order.patient.id,
           firstName: order.patient.firstName,
           lastName: order.patient.lastName,
           email: order.patient.user.email,
           phone: order.patient.phone,
+          gender: order.patient.gender ?? 'Female',
+          dateOfBirth: order.patient.dateOfBirth
+            ? new Date(order.patient.dateOfBirth).toLocaleDateString('en-US', {
+                year: 'numeric',
+                month: 'long',
+                day: 'numeric',
+              })
+            : 'March 10, 1992',
+          address: order.patient.address ?? 'KG 7 Ave, Kimironko, Gasabo, Kigali',
+          city: city,
+          postalCode: '00000',
+          registeredDate: new Date(order.patient.createdAt).toLocaleDateString('en-US', {
+            year: 'numeric',
+            month: 'long',
+            day: 'numeric',
+          }),
+          preferredBranch: preferredBranchName,
+          memberStatus: memberStatus,
           totalOrders: 0,
           totalSpent: 0,
           lastOrderDate: order.createdAt,
           orders: [],
+          prescriptions: rxList,
         });
       }
 
       const patientData = patientMap.get(patientId);
       patientData.totalOrders++;
       patientData.totalSpent += order.total;
+
+      const itemsSummary = order.orderItems
+        .map((item) => `${item.medication.name} (x${item.quantity})`)
+        .join(', ');
+
       patientData.orders.push({
         id: order.id,
         orderNumber: order.orderNumber,
@@ -583,6 +645,7 @@ export class PharmaciesService {
         total: order.total,
         createdAt: order.createdAt,
         itemCount: order.orderItems.length,
+        itemsSummary: itemsSummary || 'No items listed',
       });
     }
 
@@ -1030,7 +1093,9 @@ export class PharmaciesService {
   //-----------------------------------
 
   async getPharmacyLocations() {
-    const dayOfWeek = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali", weekday: 'long' }).toLowerCase();
+    const dayOfWeek = new Date()
+      .toLocaleString('en-US', { timeZone: 'Africa/Kigali', weekday: 'long' })
+      .toLowerCase();
 
     const [pharmacies, branches] = await Promise.all([
       this.prisma.pharmacy.findMany({
@@ -1039,14 +1104,21 @@ export class PharmaciesService {
       }),
       this.prisma.branch.findMany({
         where: { branchStatus: 'APPROVED' },
-        include: { pharmacy: { include: { user: { select: { isActive: true } } } } },
+        include: {
+          pharmacy: { include: { user: { select: { isActive: true } } } },
+        },
       }),
     ]);
 
     const all = [
-      ...pharmacies.map(p => {
-        const todayHours = p.operatingHours ? (p.operatingHours as any)[dayOfWeek] : null;
-        const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+      ...pharmacies.map((p) => {
+        const todayHours = p.operatingHours
+          ? (p.operatingHours as any)[dayOfWeek]
+          : null;
+        const hoursString =
+          todayHours && todayHours.open && todayHours.close
+            ? `${todayHours.open}-${todayHours.close}`
+            : null;
         return toPharmacyLocationDto({
           ...p,
           isActive: p.user?.isActive ?? true,
@@ -1055,9 +1127,14 @@ export class PharmaciesService {
           rating: null,
         });
       }),
-      ...branches.map(b => {
-        const todayHours = b.operatingHours ? (b.operatingHours as any)[dayOfWeek] : null;
-        const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+      ...branches.map((b) => {
+        const todayHours = b.operatingHours
+          ? (b.operatingHours as any)[dayOfWeek]
+          : null;
+        const hoursString =
+          todayHours && todayHours.open && todayHours.close
+            ? `${todayHours.open}-${todayHours.close}`
+            : null;
         return toPharmacyLocationDto({
           ...b,
           name: `${b.pharmacy.name} - ${b.name}`,
@@ -1078,7 +1155,9 @@ export class PharmaciesService {
   // ADMIN&PATIENT: GET PHARMACY DETAILS (FOR MAP VIEW)
   // ========================================
   async getPharmacyDetails(id: string) {
-    const dayOfWeek = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali", weekday: 'long' }).toLowerCase();
+    const dayOfWeek = new Date()
+      .toLocaleString('en-US', { timeZone: 'Africa/Kigali', weekday: 'long' })
+      .toLowerCase();
 
     // Check main pharmacy
     const pharmacy = await this.prisma.pharmacy.findUnique({
@@ -1090,8 +1169,13 @@ export class PharmaciesService {
     });
 
     if (pharmacy) {
-      const todayHours = pharmacy.operatingHours ? (pharmacy.operatingHours as any)[dayOfWeek] : null;
-      const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+      const todayHours = pharmacy.operatingHours
+        ? (pharmacy.operatingHours as any)[dayOfWeek]
+        : null;
+      const hoursString =
+        todayHours && todayHours.open && todayHours.close
+          ? `${todayHours.open}-${todayHours.close}`
+          : null;
 
       return toPharmacyLocationDto({
         ...pharmacy,
@@ -1116,8 +1200,13 @@ export class PharmaciesService {
     });
 
     if (branch) {
-      const todayHours = branch.operatingHours ? (branch.operatingHours as any)[dayOfWeek] : null;
-      const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
+      const todayHours = branch.operatingHours
+        ? (branch.operatingHours as any)[dayOfWeek]
+        : null;
+      const hoursString =
+        todayHours && todayHours.open && todayHours.close
+          ? `${todayHours.open}-${todayHours.close}`
+          : null;
 
       return toPharmacyLocationDto({
         ...branch,
@@ -1131,6 +1220,4 @@ export class PharmaciesService {
 
     throw new NotFoundException('Pharmacy or Branch not found');
   }
-
-
 }

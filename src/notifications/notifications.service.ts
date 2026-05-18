@@ -121,7 +121,7 @@ export class NotificationsService {
       title,
       message,
       'Review Pharmacy',
-      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/pharmacies`
+      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/pharmacies`,
     );
   }
 
@@ -148,7 +148,7 @@ export class NotificationsService {
       title,
       message,
       'Verify Location',
-      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/branches`
+      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/branches`,
     );
   }
 }

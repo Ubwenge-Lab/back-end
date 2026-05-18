@@ -109,8 +109,8 @@ model Branch {
   tempPasswordExpiry DateTime?
   createdAt          DateTime        @default(now())
   updatedAt          DateTime        @updatedAt
-  isLocationVerified   Boolean        @default(false)
-  locationVerifiedAt   DateTime?
+  isLocationVerified Boolean         @default(false)
+  locationVerifiedAt DateTime?
   attendances        Attendance[]
   manager            User?           @relation("BranchManager", fields: [managerId], references: [id])
   pharmacy           Pharmacy        @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
@@ -482,8 +482,8 @@ enum PaymentMethod {
   MTN_MOMO
   AIRTEL_MONEY
   CARD
-  CASH
   INSURANCE
+  CASH
 }
 
 enum PaymentStatus {

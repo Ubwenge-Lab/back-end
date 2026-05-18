@@ -26,6 +26,7 @@ async function bootstrap() {
     origin: [
       ...allowedOrigins, // pulls from Render env variable
       'http://localhost:3000',
+      /^http:\/\/192\.168\.\d+\.\d+:3000$/,
       /^https:\/\/.*\.vercel\.app$/,
     ],
     credentials: true,

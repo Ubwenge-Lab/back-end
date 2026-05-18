@@ -417,30 +417,30 @@ export class SuperAdminService {
       where: {
         isLocationVerified: false,
       },
-    select: {
-      id: true,
-      name: true,
-      address: true,
-      latitude: true,
-      longitude: true,
-      createdAt: true,
-    },
-    orderBy: { createdAt: 'desc' },
-  });
-}
+      select: {
+        id: true,
+        name: true,
+        address: true,
+        latitude: true,
+        longitude: true,
+        createdAt: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 
-async verifyBranchLocation(id: string, dto: VerifyLocationDto) {
-  const branch = await this.prisma.branch.findUnique({ where: { id } });
-  if (!branch) throw new NotFoundException('Branch not found');
+  async verifyBranchLocation(id: string, dto: VerifyLocationDto) {
+    const branch = await this.prisma.branch.findUnique({ where: { id } });
+    if (!branch) throw new NotFoundException('Branch not found');
 
-  return this.prisma.branch.update({
-    where: { id },
-    data: {
-      isLocationVerified: dto.verified,
-      locationVerifiedAt: dto.verified ? new Date() : null,
-    },
-  });
-}
+    return this.prisma.branch.update({
+      where: { id },
+      data: {
+        isLocationVerified: dto.verified,
+        locationVerifiedAt: dto.verified ? new Date() : null,
+      },
+    });
+  }
   async getPendingBranches() {
     return this.prisma.branch.findMany({
       where: { branchStatus: 'PENDING' },

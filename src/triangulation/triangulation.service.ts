@@ -11,7 +11,6 @@ import {
 } from './triangulation.types';
 import { toPharmacyLocationDto } from '../pharmacies/utils/pharmacy.mapper';
 
-
 @Injectable()
 export class TriangulationService {
   private readonly logger = new Logger(TriangulationService.name);
@@ -175,7 +174,9 @@ export class TriangulationService {
       })),
     ];
 
-    const dayOfWeek = new Date().toLocaleString("en-US", { timeZone: "Africa/Kigali", weekday: 'long' }).toLowerCase();
+    const dayOfWeek = new Date()
+      .toLocaleString('en-US', { timeZone: 'Africa/Kigali', weekday: 'long' })
+      .toLowerCase();
 
     // 4. Calculate distance, filter by radius, sort, and map to DTO
     return allLocations
@@ -193,17 +194,31 @@ export class TriangulationService {
       })
       .filter((loc) => loc.distance <= radius)
       .sort((a, b) => a.distance - b.distance)
-      .map(loc => {
-        const todayHours = loc.operatingHours ? (loc.operatingHours as any)[dayOfWeek] : null;
-        const hoursString = todayHours && todayHours.open && todayHours.close ? `${todayHours.open}-${todayHours.close}` : null;
-        
-        return toPharmacyLocationDto({
-          ...loc,
-          hours: hoursString,
-          region: loc.latitude && loc.longitude ? getDistrict(loc.latitude, loc.longitude, loc.address) : 'Unknown',
-          rating: null,
-          isActive: loc.type === 'MAIN' ? loc.status === 'APPROVED' : (loc as any).isActive && loc.status === 'APPROVED',
-        }, loc.distance);
+      .map((loc) => {
+        const todayHours = loc.operatingHours
+          ? (loc.operatingHours as any)[dayOfWeek]
+          : null;
+        const hoursString =
+          todayHours && todayHours.open && todayHours.close
+            ? `${todayHours.open}-${todayHours.close}`
+            : null;
+
+        return toPharmacyLocationDto(
+          {
+            ...loc,
+            hours: hoursString,
+            region:
+              loc.latitude && loc.longitude
+                ? getDistrict(loc.latitude, loc.longitude, loc.address)
+                : 'Unknown',
+            rating: null,
+            isActive:
+              loc.type === 'MAIN'
+                ? loc.status === 'APPROVED'
+                : (loc as any).isActive && loc.status === 'APPROVED',
+          },
+          loc.distance,
+        );
       });
   }
 
