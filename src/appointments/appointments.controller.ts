@@ -17,7 +17,7 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { AppointmentsService } from './appointments.service';
-import { BookAppointmentDto, UpdateAppointmentStatusDto } from './dto';
+import { BookAppointmentDto, UpdateAppointmentStatusDto, CompleteConsultDto } from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -62,6 +62,23 @@ export class AppointmentsController {
   @ApiParam({ name: 'id', description: 'Appointment UUID' })
   findOne(@Req() req: any, @Param('id') id: string) {
     return this.appointmentsService.findOne(id, req.user.sub, req.user.role);
+  }
+
+  // ========================================
+  // POST /appointments/:id/consult — doctor completes consult, auto-generates invoice
+  // ========================================
+
+  @Post(':id/consult')
+  @Roles(Role.DOCTOR)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Complete consultation and generate invoice (Doctor only)' })
+  @ApiParam({ name: 'id', description: 'Appointment UUID' })
+  completeConsult(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: CompleteConsultDto,
+  ) {
+    return this.appointmentsService.completeConsult(id, req.user.sub, dto);
   }
 
   // ========================================

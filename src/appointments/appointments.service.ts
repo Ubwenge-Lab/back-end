@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { BookAppointmentDto, UpdateAppointmentStatusDto } from './dto';
+import { BookAppointmentDto, UpdateAppointmentStatusDto, CompleteConsultDto } from './dto';
 import { AppointmentStatus } from '@prisma/client';
 
 @Injectable()
@@ -217,6 +217,109 @@ export class AppointmentsService {
     }
 
     return appointment;
+  }
+
+  // ========================================
+  // COMPLETE CONSULT — doctor marks done, invoice auto-generated
+  // ========================================
+
+  async completeConsult(id: string, doctorUserId: string, dto: CompleteConsultDto) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+      include: {
+        patient: true,
+        hospital: { select: { id: true, name: true } },
+      },
+    });
+    if (!appointment) throw new NotFoundException('Appointment not found');
+
+    const doctor = await this.prisma.doctor.findUnique({ where: { userId: doctorUserId } });
+    if (!doctor || appointment.doctorId !== doctor.id) {
+      throw new ForbiddenException('You can only complete your own appointments');
+    }
+
+    if (appointment.status === AppointmentStatus.COMPLETED) {
+      throw new BadRequestException('Appointment is already completed');
+    }
+    if (appointment.status === AppointmentStatus.CANCELLED) {
+      throw new BadRequestException('Cannot complete a cancelled appointment');
+    }
+
+    const config = await this.prisma.hospitalConfig.findUnique({
+      where: { hospitalId: appointment.hospitalId },
+    });
+
+    type LineItem = { description: string; quantity: number; unitCost: number; subtotal: number };
+    const lineItems: LineItem[] = [];
+
+    if (config) {
+      lineItems.push({
+        description: 'Consultation fee',
+        quantity: 1,
+        unitCost: Number(config.consultationFee),
+        subtotal: Number(config.consultationFee),
+      });
+      lineItems.push({
+        description: 'Triage fee',
+        quantity: 1,
+        unitCost: Number(config.triageFee),
+        subtotal: Number(config.triageFee),
+      });
+    }
+
+    if (dto.items?.length) {
+      dto.items.forEach((item) => {
+        lineItems.push({
+          description: item.description,
+          quantity: item.quantity,
+          unitCost: item.unitCost,
+          subtotal: item.quantity * item.unitCost,
+        });
+      });
+    }
+
+    if (!lineItems.length) {
+      throw new BadRequestException(
+        'No line items to invoice. Provide items in the request or configure hospital fees first.',
+      );
+    }
+
+    const totalAmount = lineItems.reduce((sum, item) => sum + item.subtotal, 0);
+    const coveragePct = appointment.patient.insuranceCoverage ?? 0;
+    const hasInsurance = coveragePct > 0 && !!appointment.patient.insuranceProvider;
+    const insuranceCoveredAmount = hasInsurance
+      ? Math.floor((totalAmount * coveragePct) / 100)
+      : 0;
+
+    const invoice = await this.prisma.$transaction(async (tx) => {
+      await tx.appointment.update({
+        where: { id },
+        data: { status: AppointmentStatus.COMPLETED, ...(dto.notes && { notes: dto.notes }) },
+      });
+
+      return tx.hospitalInvoice.create({
+        data: {
+          appointmentId: id,
+          hospitalId: appointment.hospitalId,
+          patientId: appointment.patientId,
+          totalAmount,
+          insuranceCovered: hasInsurance,
+          paymentStatus: hasInsurance ? 'INSURANCE_PENDING' : 'UNPAID',
+          items: { create: lineItems },
+        },
+        include: { items: true },
+      });
+    }, { timeout: 30000 });
+
+    return {
+      message: 'Consultation completed and invoice generated.',
+      invoice,
+      billing: {
+        totalAmount,
+        insuranceCoverage: { percentage: coveragePct, amount: insuranceCoveredAmount },
+        patientOwes: totalAmount - insuranceCoveredAmount,
+      },
+    };
   }
 
   // ========================================
