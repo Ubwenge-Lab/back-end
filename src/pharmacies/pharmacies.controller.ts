@@ -274,7 +274,6 @@ export class PharmaciesController {
     );
   }
 
-
   @Get(':id')
   @UseGuards(JwtAuthGuard, RolesGuard)
   @Roles(Role.PATIENT, Role.SUPER_ADMIN) // Accessible to Patient and Super Admin
@@ -283,6 +282,4 @@ export class PharmaciesController {
   async getPharmacyById(@Param('id') id: string) {
     return this.pharmaciesService.getPharmacyDetails(id);
   }
-
-
 }
