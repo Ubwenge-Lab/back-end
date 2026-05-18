@@ -33,8 +33,17 @@ export class DoctorsController {
   constructor(private readonly doctorsService: DoctorsService) {}
 
   @Get()
-  @Roles(Role.SUPER_ADMIN, Role.PATIENT, Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST)
-  @ApiOperation({ summary: 'List all doctors with optional specialty / availability filter' })
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.PATIENT,
+    Role.HOSPITAL_ADMIN,
+    Role.DOCTOR,
+    Role.NURSE,
+    Role.RECEPTIONIST,
+  )
+  @ApiOperation({
+    summary: 'List all doctors with optional specialty / availability filter',
+  })
   @ApiQuery({ name: 'specialty', required: false, example: 'Cardiology' })
   @ApiQuery({ name: 'available', required: false, type: Boolean })
   findAll(@Query() filters: DoctorFilterDto) {
@@ -42,7 +51,14 @@ export class DoctorsController {
   }
 
   @Get(':id')
-  @Roles(Role.SUPER_ADMIN, Role.PATIENT, Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST)
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.PATIENT,
+    Role.HOSPITAL_ADMIN,
+    Role.DOCTOR,
+    Role.NURSE,
+    Role.RECEPTIONIST,
+  )
   @ApiOperation({ summary: 'Get a single doctor profile' })
   @ApiParam({ name: 'id', description: 'Doctor UUID' })
   findOne(@Param('id') id: string) {
@@ -51,16 +67,25 @@ export class DoctorsController {
 
   @Patch(':id')
   @Roles(Role.HOSPITAL_ADMIN)
-  @ApiOperation({ summary: 'Update a doctor profile — specialty, bio, rating, availability (Hospital Admin only)' })
+  @ApiOperation({
+    summary:
+      'Update a doctor profile — specialty, bio, rating, availability (Hospital Admin only)',
+  })
   @ApiParam({ name: 'id', description: 'Doctor UUID' })
-  update(@Req() req: any, @Param('id') id: string, @Body() dto: UpdateDoctorDto) {
+  update(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateDoctorDto,
+  ) {
     return this.doctorsService.update(req.user.sub, id, dto);
   }
 
   @Delete(':id')
   @Roles(Role.HOSPITAL_ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Remove a doctor from your hospital (Hospital Admin only)' })
+  @ApiOperation({
+    summary: 'Remove a doctor from your hospital (Hospital Admin only)',
+  })
   @ApiParam({ name: 'id', description: 'Doctor UUID' })
   remove(@Req() req: any, @Param('id') id: string) {
     return this.doctorsService.remove(req.user.sub, id);

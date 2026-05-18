@@ -31,17 +31,26 @@ export class OnboardHospitalStaffDto {
   @IsEnum(['DOCTOR', 'NURSE', 'RECEPTIONIST'])
   role: 'DOCTOR' | 'NURSE' | 'RECEPTIONIST';
 
-  @ApiPropertyOptional({ example: 'Cardiology', description: 'Required when role is DOCTOR' })
+  @ApiPropertyOptional({
+    example: 'Cardiology',
+    description: 'Required when role is DOCTOR',
+  })
   @IsOptional()
   @IsString()
   specialization?: string;
 
-  @ApiPropertyOptional({ example: 'RW-MED-2024-001', description: 'Required when role is DOCTOR' })
+  @ApiPropertyOptional({
+    example: 'RW-MED-2024-001',
+    description: 'Required when role is DOCTOR',
+  })
   @IsOptional()
   @IsString()
   licenseNumber?: string;
 
-  @ApiPropertyOptional({ example: 'Specialist in interventional cardiology with 10 years of experience.' })
+  @ApiPropertyOptional({
+    example:
+      'Specialist in interventional cardiology with 10 years of experience.',
+  })
   @IsOptional()
   @IsString()
   bio?: string;

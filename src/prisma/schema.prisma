@@ -123,6 +123,7 @@ model HospitalStaff {
   @@map("hospital_staff")
 }
 
+
 model Patient {
   id                    String                        @id @default(uuid())
   userId                String                        @unique

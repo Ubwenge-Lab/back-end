@@ -3,7 +3,10 @@ import { IsBoolean, IsOptional, IsString } from 'class-validator';
 import { Transform } from 'class-transformer';
 
 export class DoctorFilterDto {
-  @ApiPropertyOptional({ example: 'Cardiology', description: 'Filter by specialization' })
+  @ApiPropertyOptional({
+    example: 'Cardiology',
+    description: 'Filter by specialization',
+  })
   @IsOptional()
   @IsString()
   specialty?: string;

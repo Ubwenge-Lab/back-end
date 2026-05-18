@@ -30,7 +30,10 @@ export class DoctorsService {
     const where: any = {};
 
     if (filters.specialty) {
-      where.specialization = { contains: filters.specialty, mode: 'insensitive' };
+      where.specialization = {
+        contains: filters.specialty,
+        mode: 'insensitive',
+      };
     }
     if (filters.available !== undefined) {
       where.isAvailable = filters.available;
@@ -48,12 +51,17 @@ export class DoctorsService {
   // ========================================
 
   async findByHospital(hospitalId: string, filters: DoctorFilterDto) {
-    const hospital = await this.prisma.hospital.findUnique({ where: { id: hospitalId } });
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
     if (!hospital) throw new NotFoundException('Hospital not found');
 
     const where: any = { hospitalId };
     if (filters.specialty) {
-      where.specialization = { contains: filters.specialty, mode: 'insensitive' };
+      where.specialization = {
+        contains: filters.specialty,
+        mode: 'insensitive',
+      };
     }
     if (filters.available !== undefined) {
       where.isAvailable = filters.available;
@@ -84,25 +92,35 @@ export class DoctorsService {
   // UPDATE DOCTOR PROFILE (Hospital Admin only)
   // ========================================
 
-  async update(hospitalAdminUserId: string, doctorId: string, dto: UpdateDoctorDto) {
+  async update(
+    hospitalAdminUserId: string,
+    doctorId: string,
+    dto: UpdateDoctorDto,
+  ) {
     const hospital = await this.prisma.hospital.findFirst({
       where: { userId: hospitalAdminUserId },
     });
 
-    if (!hospital) throw new ForbiddenException('Only hospital admins can update doctors');
+    if (!hospital)
+      throw new ForbiddenException('Only hospital admins can update doctors');
 
-    const doctor = await this.prisma.doctor.findUnique({ where: { id: doctorId } });
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { id: doctorId },
+    });
     if (!doctor) throw new NotFoundException('Doctor not found');
 
     if (doctor.hospitalId !== hospital.id) {
-      throw new ForbiddenException('You can only update doctors in your hospital');
+      throw new ForbiddenException(
+        'You can only update doctors in your hospital',
+      );
     }
 
     if (dto.licenseNumber && dto.licenseNumber !== doctor.licenseNumber) {
       const conflict = await this.prisma.doctor.findUnique({
         where: { licenseNumber: dto.licenseNumber },
       });
-      if (conflict) throw new ConflictException('License number already registered');
+      if (conflict)
+        throw new ConflictException('License number already registered');
     }
 
     return this.prisma.doctor.update({
@@ -122,13 +140,18 @@ export class DoctorsService {
       where: { userId: hospitalAdminUserId },
     });
 
-    if (!hospital) throw new ForbiddenException('Only hospital admins can remove doctors');
+    if (!hospital)
+      throw new ForbiddenException('Only hospital admins can remove doctors');
 
-    const doctor = await this.prisma.doctor.findUnique({ where: { id: doctorId } });
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { id: doctorId },
+    });
     if (!doctor) throw new NotFoundException('Doctor not found');
 
     if (doctor.hospitalId !== hospital.id) {
-      throw new ForbiddenException('You can only remove doctors from your hospital');
+      throw new ForbiddenException(
+        'You can only remove doctors from your hospital',
+      );
     }
 
     await this.prisma.user.delete({ where: { id: doctor.userId } });
