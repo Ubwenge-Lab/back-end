@@ -434,92 +434,61 @@ export class PharmaciesService {
     const pharmacy = await this.findByUserId(userId);
 
     const now = new Date();
-    const lastMonth = new Date(
-      now.getFullYear(),
-      now.getMonth() - 1,
-      now.getDate(),
+    const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
+    const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
+    const endOfLastMonth   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+
+    // ── Single GROUP BY query replaces unbounded findMany + in-memory filter ──
+    type MonthRow = {
+      month: Date;
+      total_revenue: string;
+      total_orders: string;
+      items_sold: string;
+    };
+
+    const rows = await this.prisma.$queryRaw<MonthRow[]>`
+      SELECT
+        DATE_TRUNC('month', o."createdAt")   AS month,
+        COALESCE(SUM(o.total), 0)            AS total_revenue,
+        COUNT(DISTINCT o.id)                 AS total_orders,
+        COALESCE(SUM(oi.quantity), 0)        AS items_sold
+      FROM orders o
+      LEFT JOIN order_items oi ON oi."orderId" = o.id
+      WHERE o."pharmacyId" = ${pharmacy.id}
+        AND o."createdAt" >= ${startOfLastMonth}
+      GROUP BY DATE_TRUNC('month', o."createdAt")
+      ORDER BY month ASC
+    `;
+
+    const thisMonth = rows.find(
+      (r) => new Date(r.month) >= startOfThisMonth,
     );
-    const twoMonthsAgo = new Date(
-      now.getFullYear(),
-      now.getMonth() - 2,
-      now.getDate(),
+    const lastMonth = rows.find(
+      (r) => new Date(r.month) >= startOfLastMonth && new Date(r.month) < startOfThisMonth,
     );
 
-    // Fetch all orders
-    const allOrders = await this.prisma.order.findMany({
-      where: {
-        pharmacyId: pharmacy.id,
-        createdAt: { gte: twoMonthsAgo },
-      },
-      include: {
-        orderItems: true,
-      },
-    });
+    const totalRevenue    = Number(thisMonth?.total_revenue ?? 0);
+    const totalOrders     = Number(thisMonth?.total_orders  ?? 0);
+    const avgOrderValue   = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+    const itemsSold       = Number(thisMonth?.items_sold     ?? 0);
 
-    // Current month orders
-    const thisMonthOrders = allOrders.filter(
-      (o) => new Date(o.createdAt) >= lastMonth,
-    );
-    const previousMonthOrders = allOrders.filter(
-      (o) =>
-        new Date(o.createdAt) >= twoMonthsAgo &&
-        new Date(o.createdAt) < lastMonth,
-    );
+    const prevRevenue     = Number(lastMonth?.total_revenue ?? 0);
+    const prevOrders      = Number(lastMonth?.total_orders  ?? 0);
+    const prevAvgOrder    = prevOrders > 0 ? Math.round(prevRevenue / prevOrders) : 0;
+    const prevItemsSold   = Number(lastMonth?.items_sold     ?? 0);
 
-    // Calculate revenue
-    const totalRevenue = thisMonthOrders.reduce((sum, o) => sum + o.total, 0);
-    const prevRevenue = previousMonthOrders.reduce(
-      (sum, o) => sum + o.total,
-      0,
-    );
-    const revenueChange =
-      prevRevenue > 0
-        ? Math.round(((totalRevenue - prevRevenue) / prevRevenue) * 100)
-        : 0;
-
-    // Calculate orders
-    const totalOrders = thisMonthOrders.length;
-    const prevOrders = previousMonthOrders.length;
-    const ordersChange =
-      prevOrders > 0
-        ? Math.round(((totalOrders - prevOrders) / prevOrders) * 100)
-        : 0;
-
-    // Calculate average order value
-    const avgOrderValue =
-      totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
-    const prevAvgOrderValue =
-      prevOrders > 0 ? Math.round(prevRevenue / prevOrders) : 0;
-    const avgValueChange =
-      prevAvgOrderValue > 0
-        ? Math.round(
-            ((avgOrderValue - prevAvgOrderValue) / prevAvgOrderValue) * 100,
-          )
-        : 0;
-
-    // Calculate items sold
-    const itemsSold = thisMonthOrders.reduce(
-      (sum, o) => sum + o.orderItems.reduce((s, i) => s + i.quantity, 0),
-      0,
-    );
-    const prevItemsSold = previousMonthOrders.reduce(
-      (sum, o) => sum + o.orderItems.reduce((s, i) => s + i.quantity, 0),
-      0,
-    );
-    const itemsChange =
-      prevItemsSold > 0
-        ? Math.round(((itemsSold - prevItemsSold) / prevItemsSold) * 100)
-        : 0;
+    const pct = (cur: number, prev: number) =>
+      prev > 0 ? Math.round(((cur - prev) / prev) * 100) : 0;
 
     return {
       totalRevenue,
       totalOrders,
       avgOrderValue,
       itemsSold,
-      revenueChange,
-      ordersChange,
-      avgValueChange,
-      itemsChange,
+      revenueChange:  pct(totalRevenue,  prevRevenue),
+      ordersChange:   pct(totalOrders,   prevOrders),
+      avgValueChange: pct(avgOrderValue, prevAvgOrder),
+      itemsChange:    pct(itemsSold,     prevItemsSold),
     };
   }
 
@@ -667,11 +636,8 @@ export class PharmaciesService {
   async findByUserId(userId: string) {
     const pharmacy = await this.prisma.pharmacy.findUnique({
       where: { userId },
-      include: {
-        _count: {
-          select: { medications: true, orders: true },
-        },
-      },
+      // NOTE: no _count include here — avoids expensive LEFT JOIN aggregations
+      // on every dashboard call. Use targeted queries where counts are needed.
     });
 
     if (!pharmacy) {
