@@ -20,22 +20,35 @@ export class RecordPaymentDto {
   @Min(0)
   amountReceived: number;
 
-  @ApiProperty({ required: false, description: 'Phone number for mobile money payments' })
+  @ApiProperty({
+    required: false,
+    description: 'Phone number for mobile money payments',
+  })
   @IsString()
   @IsOptional()
   phoneNumber?: string;
 
-  @ApiProperty({ required: false, description: 'Insurance provider for insurance payments' })
+  @ApiProperty({
+    required: false,
+    description: 'Insurance provider for insurance payments',
+  })
   @IsString()
   @IsOptional()
   insuranceProvider?: string;
 
-  @ApiProperty({ required: false, description: 'Insurance policy number for insurance payments' })
+  @ApiProperty({
+    required: false,
+    description: 'Insurance policy number for insurance payments',
+  })
   @IsString()
   @IsOptional()
   insurancePolicyNumber?: string;
 
-  @ApiProperty({ required: false, description: 'Optional payment reference for manual card or mobile money receipts' })
+  @ApiProperty({
+    required: false,
+    description:
+      'Optional payment reference for manual card or mobile money receipts',
+  })
   @IsString()
   @IsOptional()
   reference?: string;

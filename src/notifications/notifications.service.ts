@@ -15,7 +15,7 @@ export class NotificationsService {
     const notification = await this.prisma.notification.create({
       data: {
         userId: data.userId,
-        type: data.type as any,
+        type: data.type,
         title: data.title,
         message: data.message,
       },
@@ -112,7 +112,7 @@ export class NotificationsService {
       title,
       message,
       'Review Pharmacy',
-      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/pharmacies`
+      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/pharmacies`,
     );
   }
 
@@ -137,7 +137,7 @@ export class NotificationsService {
       title,
       message,
       'Verify Location',
-      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/branches`
+      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/branches`,
     );
   }
 
@@ -155,6 +155,31 @@ export class NotificationsService {
       branchName,
       role,
     );
+  }
+
+  async sendHospitalStaffCredentials(
+    email: string,
+    tempPassword: string,
+    hospitalName: string,
+    role: string,
+  ) {
+    await this.emailService.sendHospitalStaffCredentials(
+      email,
+      tempPassword,
+      hospitalName,
+      role,
+    );
+  }
+
+  async sendAppointmentConfirmation(data: {
+    patientEmail: string;
+    patientName: string;
+    doctorName: string;
+    hospitalName: string;
+    date: Date;
+    reason: string;
+  }) {
+    await this.emailService.sendAppointmentConfirmation(data);
   }
 
   async notifySuperAdminsNewHospital(hospitalId: string, hospitalName: string) {
@@ -178,7 +203,7 @@ export class NotificationsService {
       title,
       message,
       'Review Hospital',
-      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/hospitals`
+      `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/hospitals`,
     );
   }
 }

@@ -1,4 +1,13 @@
-import { Controller, Get, Param, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
@@ -6,8 +15,10 @@ import {
   ApiOkResponse,
   ApiNotFoundResponse,
   ApiParam,
+  ApiQuery,
 } from '@nestjs/swagger';
 import { HospitalsService } from './hospitals.service';
+import { InvoicesService } from '../invoices/invoices.service';
 import { HospitalDto } from './dto/hospital.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
@@ -19,7 +30,10 @@ import { Role } from '../common/constants/role.enum';
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class HospitalsController {
-  constructor(private readonly hospitalsService: HospitalsService) {}
+  constructor(
+    private readonly hospitalsService: HospitalsService,
+    private readonly invoicesService: InvoicesService,
+  ) {}
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.PATIENT, Role.HOSPITAL_ADMIN, Role.DOCTOR)
@@ -37,5 +51,74 @@ export class HospitalsController {
   @ApiNotFoundResponse({ description: 'Hospital not found' })
   findOne(@Param('id') id: string) {
     return this.hospitalsService.findOne(id);
+  }
+
+  @Post(':id/patients/search')
+  @Roles(Role.HOSPITAL_ADMIN, Role.RECEPTIONIST, Role.DOCTOR, Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Search for a global patient by National ID or Phone' })
+  async searchPatient(
+    @Param('id') hospitalId: string,
+    @Body('identifier') identifier: string,
+  ) {
+    return this.hospitalsService.searchPatient(identifier);
+  }
+
+  @Post(':id/patients/register')
+  @Roles(Role.HOSPITAL_ADMIN, Role.RECEPTIONIST)
+  @ApiOperation({ summary: 'Link a global patient to this hospital and generate MRN' })
+  async registerPatient(
+    @Param('id') hospitalId: string,
+    @Body('patientId') patientId: string,
+  ) {
+    return this.hospitalsService.linkPatientToHospital(hospitalId, patientId);
+  }
+
+  @Get(':id/invoices')
+  @Roles(Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List invoices for a hospital (paginated, filterable)' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiQuery({ name: 'status', required: false, enum: ['UNPAID', 'PAID', 'INSURANCE_PENDING'] })
+  @ApiQuery({ name: 'from', required: false, example: '2026-01-01' })
+  @ApiQuery({ name: 'to', required: false, example: '2026-12-31' })
+  @ApiQuery({ name: 'page', required: false, type: Number })
+  @ApiQuery({ name: 'limit', required: false, type: Number })
+  getInvoices(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Query('status') status?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
+  ) {
+    return this.invoicesService.findByHospital(id, req.user.sub, req.user.role, {
+      status,
+      from,
+      to,
+      page: page ? parseInt(page, 10) : undefined,
+      limit: limit ? parseInt(limit, 10) : undefined,
+    });
+  }
+
+  @Get(':id/doctors')
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.PATIENT,
+    Role.HOSPITAL_ADMIN,
+    Role.DOCTOR,
+    Role.NURSE,
+    Role.RECEPTIONIST,
+  )
+  @ApiOperation({ summary: 'List doctors at a specific hospital, optionally filtered by specialty' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiQuery({ name: 'specialty', required: false, example: 'Cardiology' })
+  @ApiQuery({ name: 'available', required: false, type: Boolean })
+  findDoctors(
+    @Param('id') id: string,
+    @Query('specialty') specialty?: string,
+    @Query('available') available?: string,
+  ) {
+    const availableBool = available === undefined ? undefined : available === 'true';
+    return this.hospitalsService.findDoctors(id, specialty, availableBool);
   }
 }

@@ -63,7 +63,9 @@ export class PaymentsService {
     });
 
     if (existingPayment && existingPayment.status === 'COMPLETED') {
-      throw new BadRequestException('A completed payment already exists for this order');
+      throw new BadRequestException(
+        'A completed payment already exists for this order',
+      );
     }
 
     // Create payment record
@@ -513,7 +515,6 @@ export class PaymentsService {
     });
   }
 
-
   async getReceipt(paymentId: string, staffUserId: string) {
     // 1. Fetch the payment and include the linked order
     const payment = await this.prisma.payment.findUnique({
@@ -552,9 +553,6 @@ export class PaymentsService {
       paymentStatus: payment.status,
     };
   }
-
-
-
 
   // CHECKOUT (Create order + initiate payment in one step)
 
@@ -619,7 +617,9 @@ export class PaymentsService {
     }
 
     if (order.status === 'CANCELLED') {
-      throw new BadRequestException('Cannot record payment for a cancelled order');
+      throw new BadRequestException(
+        'Cannot record payment for a cancelled order',
+      );
     }
 
     if (order.paymentStatus === 'COMPLETED') {
@@ -641,7 +641,8 @@ export class PaymentsService {
     }
 
     if (
-      (dto.paymentMethod === 'MTN_MOMO' || dto.paymentMethod === 'AIRTEL_MONEY') &&
+      (dto.paymentMethod === 'MTN_MOMO' ||
+        dto.paymentMethod === 'AIRTEL_MONEY') &&
       !dto.phoneNumber
     ) {
       throw new BadRequestException(
@@ -652,7 +653,7 @@ export class PaymentsService {
     const branch = await this.resolveBranchForStaff(staffUserId);
     if (!branch || branch.id !== order.branchId) {
       throw new BadRequestException(
-        'Order does not belong to the authenticated staff member\'s branch',
+        "Order does not belong to the authenticated staff member's branch",
       );
     }
 
@@ -666,12 +667,13 @@ export class PaymentsService {
       throw new BadRequestException('Order payment has already been completed');
     }
 
-
     await this.prisma.$transaction(
       async (tx) => {
         if (existingPayment) {
           if (existingPayment.status === 'COMPLETED') {
-            throw new BadRequestException('Order payment has already been completed');
+            throw new BadRequestException(
+              'Order payment has already been completed',
+            );
           }
 
           await tx.payment.update({

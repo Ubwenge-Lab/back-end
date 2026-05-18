@@ -1,7 +1,10 @@
-import { getDistrict } from "../../triangulation/triangulation.helpers";
-import { PharmacyLocationDto } from "../dto/pharmacy_location.dto";
+import { getDistrict } from '../../triangulation/triangulation.helpers';
+import { PharmacyLocationDto } from '../dto/pharmacy_location.dto';
 
-export function toPharmacyLocationDto(pharmacy: any, distanceKm?: number): PharmacyLocationDto {
+export function toPharmacyLocationDto(
+  pharmacy: any,
+  distanceKm?: number,
+): PharmacyLocationDto {
   return {
     id: pharmacy.id,
     name: pharmacy.name,
