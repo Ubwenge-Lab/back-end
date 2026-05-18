@@ -47,7 +47,7 @@ export class AppointmentsController {
 
   @Get()
   @Roles(Role.PATIENT, Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'List appointments (scoped to the caller\'s role)' })
+  @ApiOperation({ summary: "List appointments (scoped to the caller's role)" })
   findAll(@Req() req: any) {
     return this.appointmentsService.findAll(req.user.sub, req.user.role);
   }
@@ -84,13 +84,21 @@ export class AppointmentsController {
   @Patch(':id/status')
   @Roles(Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Update appointment status — COMPLETED, NO_SHOW, etc. (Doctor / Admin)' })
+  @ApiOperation({
+    summary:
+      'Update appointment status — COMPLETED, NO_SHOW, etc. (Doctor / Admin)',
+  })
   @ApiParam({ name: 'id', description: 'Appointment UUID' })
   updateStatus(
     @Req() req: any,
     @Param('id') id: string,
     @Body() dto: UpdateAppointmentStatusDto,
   ) {
-    return this.appointmentsService.updateStatus(id, req.user.sub, req.user.role, dto);
+    return this.appointmentsService.updateStatus(
+      id,
+      req.user.sub,
+      req.user.role,
+      dto,
+    );
   }
 }

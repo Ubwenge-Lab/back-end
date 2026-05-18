@@ -72,7 +72,9 @@ export class AuthController {
 
   @Post('hospital-staff/activate')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Set permanent password from email link (no login required)' })
+  @ApiOperation({
+    summary: 'Set permanent password from email link (no login required)',
+  })
   activateHospitalStaff(@Body() dto: ActivateHospitalStaffDto) {
     return this.authService.activateHospitalStaff(dto);
   }

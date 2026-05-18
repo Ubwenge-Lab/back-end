@@ -28,14 +28,17 @@ export class AppointmentsService {
     const date = new Date(dto.date);
 
     if (date <= new Date()) {
-      throw new BadRequestException('Appointment must be scheduled in the future');
+      throw new BadRequestException(
+        'Appointment must be scheduled in the future',
+      );
     }
 
     // Resolve patient record from the logged-in user
     const patient = await this.prisma.patient.findUnique({
       where: { userId: patientUserId },
     });
-    if (!patient) throw new ForbiddenException('Only patients can book appointments');
+    if (!patient)
+      throw new ForbiddenException('Only patients can book appointments');
 
     // Verify the doctor exists and is available
     const doctor = await this.prisma.doctor.findUnique({
@@ -52,10 +55,11 @@ export class AppointmentsService {
     if (!doctor) throw new NotFoundException('Doctor not found');
 
     // Transaction with pessimistic locking to prevent double-booking
-    const appointment = await this.prisma.$transaction(async (tx) => {
-      // Lock any existing non-cancelled appointments for this doctor at this exact slot.
-      // FOR UPDATE causes concurrent transactions to wait here until the lock is released.
-      const conflicts = await tx.$queryRaw<{ id: string }[]>`
+    const appointment = await this.prisma.$transaction(
+      async (tx) => {
+        // Lock any existing non-cancelled appointments for this doctor at this exact slot.
+        // FOR UPDATE causes concurrent transactions to wait here until the lock is released.
+        const conflicts = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM appointments
         WHERE "doctorId" = ${dto.doctorId}
         AND "date" = ${date}
@@ -63,34 +67,40 @@ export class AppointmentsService {
         FOR UPDATE
       `;
 
-      if (conflicts.length > 0) {
-        throw new ConflictException(
-          'This time slot is already booked. Please choose a different time.',
-        );
-      }
+        if (conflicts.length > 0) {
+          throw new ConflictException(
+            'This time slot is already booked. Please choose a different time.',
+          );
+        }
 
-      return tx.appointment.create({
-        data: {
-          patientId: patient.id,
-          doctorId: dto.doctorId,
-          hospitalId: doctor.hospitalId,
-          date,
-          reason: dto.reason,
-          status: AppointmentStatus.SCHEDULED,
-        },
-        include: {
-          doctor: {
-            include: {
-              user: {
-                include: { hospitalStaff: { select: { firstName: true, lastName: true } } },
+        return tx.appointment.create({
+          data: {
+            patientId: patient.id,
+            doctorId: dto.doctorId,
+            hospitalId: doctor.hospitalId,
+            date,
+            reason: dto.reason,
+            status: AppointmentStatus.SCHEDULED,
+          },
+          include: {
+            doctor: {
+              include: {
+                user: {
+                  include: {
+                    hospitalStaff: {
+                      select: { firstName: true, lastName: true },
+                    },
+                  },
+                },
               },
             },
+            hospital: { select: { name: true, address: true } },
+            patient: { select: { firstName: true, lastName: true } },
           },
-          hospital: { select: { name: true, address: true } },
-          patient: { select: { firstName: true, lastName: true } },
-        },
-      });
-    }, { timeout: 30000 });
+        });
+      },
+      { timeout: 30000 },
+    );
 
     // Fire confirmation email — non-blocking, never fails the booking
     try {
@@ -101,7 +111,12 @@ export class AppointmentsService {
 
       await this.notificationsService.sendAppointmentConfirmation({
         patientEmail: patient.userId
-          ? (await this.prisma.user.findUnique({ where: { id: patient.userId }, select: { email: true } }))?.email ?? ''
+          ? ((
+              await this.prisma.user.findUnique({
+                where: { id: patient.userId },
+                select: { email: true },
+              })
+            )?.email ?? '')
           : '',
         patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
         doctorName,
@@ -125,7 +140,9 @@ export class AppointmentsService {
 
   async findAll(userId: string, role: string) {
     if (role === 'PATIENT') {
-      const patient = await this.prisma.patient.findUnique({ where: { userId } });
+      const patient = await this.prisma.patient.findUnique({
+        where: { userId },
+      });
       if (!patient) throw new ForbiddenException('Patient profile not found');
 
       return this.prisma.appointment.findMany({
@@ -147,7 +164,9 @@ export class AppointmentsService {
     }
 
     if (role === 'HOSPITAL_ADMIN') {
-      const hospital = await this.prisma.hospital.findFirst({ where: { userId } });
+      const hospital = await this.prisma.hospital.findFirst({
+        where: { userId },
+      });
       if (!hospital) throw new ForbiddenException('Hospital not found');
 
       return this.prisma.appointment.findMany({
@@ -182,7 +201,9 @@ export class AppointmentsService {
     if (role === 'SUPER_ADMIN' || role === 'HOSPITAL_ADMIN') return appointment;
 
     if (role === 'PATIENT') {
-      const patient = await this.prisma.patient.findUnique({ where: { userId } });
+      const patient = await this.prisma.patient.findUnique({
+        where: { userId },
+      });
       if (appointment.patientId !== patient?.id) {
         throw new ForbiddenException('Access denied');
       }
@@ -203,10 +224,14 @@ export class AppointmentsService {
   // ========================================
 
   async cancel(id: string, patientUserId: string) {
-    const patient = await this.prisma.patient.findUnique({ where: { userId: patientUserId } });
+    const patient = await this.prisma.patient.findUnique({
+      where: { userId: patientUserId },
+    });
     if (!patient) throw new ForbiddenException('Patient profile not found');
 
-    const appointment = await this.prisma.appointment.findUnique({ where: { id } });
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+    });
     if (!appointment) throw new NotFoundException('Appointment not found');
 
     if (appointment.patientId !== patient.id) {
@@ -232,21 +257,34 @@ export class AppointmentsService {
   // UPDATE STATUS (doctor / hospital admin)
   // ========================================
 
-  async updateStatus(id: string, userId: string, role: string, dto: UpdateAppointmentStatusDto) {
-    const appointment = await this.prisma.appointment.findUnique({ where: { id } });
+  async updateStatus(
+    id: string,
+    userId: string,
+    role: string,
+    dto: UpdateAppointmentStatusDto,
+  ) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+    });
     if (!appointment) throw new NotFoundException('Appointment not found');
 
     if (role === 'DOCTOR') {
       const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
       if (appointment.doctorId !== doctor?.id) {
-        throw new ForbiddenException('You can only update your own appointments');
+        throw new ForbiddenException(
+          'You can only update your own appointments',
+        );
       }
     }
 
     if (role === 'HOSPITAL_ADMIN') {
-      const hospital = await this.prisma.hospital.findFirst({ where: { userId } });
+      const hospital = await this.prisma.hospital.findFirst({
+        where: { userId },
+      });
       if (appointment.hospitalId !== hospital?.id) {
-        throw new ForbiddenException('You can only update appointments in your hospital');
+        throw new ForbiddenException(
+          'You can only update appointments in your hospital',
+        );
       }
     }
 
@@ -263,7 +301,9 @@ const appointmentInclude = {
   doctor: {
     include: {
       user: {
-        include: { hospitalStaff: { select: { firstName: true, lastName: true } } },
+        include: {
+          hospitalStaff: { select: { firstName: true, lastName: true } },
+        },
       },
     },
   },

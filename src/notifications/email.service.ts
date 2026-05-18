@@ -599,7 +599,9 @@ export class EmailService {
       return;
     }
 
-    const baseUrl = (this.configService.get('FRONTEND_URL') || 'http://localhost:3001').replace(/\/$/, '');
+    const baseUrl = (
+      this.configService.get('FRONTEND_URL') || 'http://localhost:3001'
+    ).replace(/\/$/, '');
     const loginUrl = `${baseUrl}/login`;
     const changePasswordUrl = `${baseUrl}/hospital/activate`;
     const html = this.baseTemplate(`
@@ -652,7 +654,9 @@ export class EmailService {
     } catch (error) {
       console.error('❌ Resend error:', error.message);
       if (this.configService.get('NODE_ENV') === 'production') {
-        throw new InternalServerErrorException('Failed to send credentials email');
+        throw new InternalServerErrorException(
+          'Failed to send credentials email',
+        );
       }
     }
   }
@@ -670,10 +674,14 @@ export class EmailService {
     reason: string;
   }) {
     const dateStr = data.date.toLocaleDateString('en-GB', {
-      weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
     });
     const timeStr = data.date.toLocaleTimeString('en-GB', {
-      hour: '2-digit', minute: '2-digit',
+      hour: '2-digit',
+      minute: '2-digit',
     });
 
     console.log('==========================================');
@@ -686,7 +694,9 @@ export class EmailService {
     console.log('==========================================');
 
     if (!this.resend) {
-      console.warn('⚠️  Resend not configured - confirmation logged above only');
+      console.warn(
+        '⚠️  Resend not configured - confirmation logged above only',
+      );
       return;
     }
 
