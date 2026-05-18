@@ -666,13 +666,13 @@ export class EmailService {
     patientName: string;
     doctorName: string;
     hospitalName: string;
-    scheduledAt: Date;
+    date: Date;
     reason: string;
   }) {
-    const dateStr = data.scheduledAt.toLocaleDateString('en-GB', {
+    const dateStr = data.date.toLocaleDateString('en-GB', {
       weekday: 'long', year: 'numeric', month: 'long', day: 'numeric',
     });
-    const timeStr = data.scheduledAt.toLocaleTimeString('en-GB', {
+    const timeStr = data.date.toLocaleTimeString('en-GB', {
       hour: '2-digit', minute: '2-digit',
     });
 

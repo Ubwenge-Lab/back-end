@@ -25,9 +25,9 @@ export class AppointmentsService {
   // ========================================
 
   async book(patientUserId: string, dto: BookAppointmentDto) {
-    const scheduledAt = new Date(dto.scheduledAt);
+    const date = new Date(dto.date);
 
-    if (scheduledAt <= new Date()) {
+    if (date <= new Date()) {
       throw new BadRequestException('Appointment must be scheduled in the future');
     }
 
@@ -58,7 +58,7 @@ export class AppointmentsService {
       const conflicts = await tx.$queryRaw<{ id: string }[]>`
         SELECT id FROM appointments
         WHERE "doctorId" = ${dto.doctorId}
-        AND "scheduledAt" = ${scheduledAt}
+        AND "date" = ${date}
         AND status != 'CANCELLED'
         FOR UPDATE
       `;
@@ -74,9 +74,8 @@ export class AppointmentsService {
           patientId: patient.id,
           doctorId: dto.doctorId,
           hospitalId: doctor.hospitalId,
-          scheduledAt,
+          date,
           reason: dto.reason,
-          notes: dto.notes,
           status: AppointmentStatus.SCHEDULED,
         },
         include: {
@@ -107,7 +106,7 @@ export class AppointmentsService {
         patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
         doctorName,
         hospitalName: appointment.hospital.name,
-        scheduledAt,
+        date,
         reason: dto.reason,
       });
     } catch (error) {
@@ -132,7 +131,7 @@ export class AppointmentsService {
       return this.prisma.appointment.findMany({
         where: { patientId: patient.id },
         include: appointmentInclude,
-        orderBy: { scheduledAt: 'asc' },
+        orderBy: { date: 'asc' },
       });
     }
 
@@ -143,7 +142,7 @@ export class AppointmentsService {
       return this.prisma.appointment.findMany({
         where: { doctorId: doctor.id },
         include: appointmentInclude,
-        orderBy: { scheduledAt: 'asc' },
+        orderBy: { date: 'asc' },
       });
     }
 
@@ -154,14 +153,14 @@ export class AppointmentsService {
       return this.prisma.appointment.findMany({
         where: { hospitalId: hospital.id },
         include: appointmentInclude,
-        orderBy: { scheduledAt: 'asc' },
+        orderBy: { date: 'asc' },
       });
     }
 
     if (role === 'SUPER_ADMIN') {
       return this.prisma.appointment.findMany({
         include: appointmentInclude,
-        orderBy: { scheduledAt: 'asc' },
+        orderBy: { date: 'asc' },
       });
     }
 
@@ -253,7 +252,7 @@ export class AppointmentsService {
 
     return this.prisma.appointment.update({
       where: { id },
-      data: { status: dto.status, ...(dto.notes && { notes: dto.notes }) },
+      data: { status: dto.status },
       include: appointmentInclude,
     });
   }

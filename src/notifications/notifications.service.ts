@@ -176,7 +176,7 @@ export class NotificationsService {
     patientName: string;
     doctorName: string;
     hospitalName: string;
-    scheduledAt: Date;
+    date: Date;
     reason: string;
   }) {
     await this.emailService.sendAppointmentConfirmation(data);

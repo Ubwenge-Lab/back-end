@@ -8,7 +8,7 @@ export class BookAppointmentDto {
 
   @ApiProperty({ example: '2026-05-20T09:00:00.000Z', description: 'Slot datetime in ISO 8601' })
   @IsDateString()
-  scheduledAt: string;
+  date: string;
 
   @ApiProperty({ example: 'Chest pain and shortness of breath' })
   @IsString()
