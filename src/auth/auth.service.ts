@@ -646,6 +646,8 @@ export class AuthService {
             specialization: dto.specialization!,
             licenseNumber: dto.licenseNumber!,
             bio: dto.bio,
+            firstName: dto.firstName,
+            lastName: dto.lastName,
           },
         });
       }
