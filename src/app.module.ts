@@ -1,7 +1,8 @@
 // backend/src/app.module.ts
-// UPDATED VERSION - Added StaffModule
+// UPDATED VERSION - Added StaffModule + Logging Pipeline + Rate Limiting
 
-import { Module } from '@nestjs/common';
+import { Module, MiddlewareConsumer, NestModule } from '@nestjs/common';
+import { APP_INTERCEPTOR, APP_GUARD } from '@nestjs/core';
 import { AppController } from './app.controller';
 import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
@@ -30,10 +31,12 @@ import { HospitalsModule } from './hospitals/hospitals.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { AvailabilityModule } from './doctors/availability/availability.module';
-
-// Security imports
+import {
+  LoggerModule,
+  CorrelationIdMiddleware,
+  LoggingInterceptor,
+} from './logger';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
-import { APP_GUARD } from '@nestjs/core';
 
 
 @Module({
@@ -50,6 +53,7 @@ import { APP_GUARD } from '@nestjs/core';
       },
     ]),
 
+    LoggerModule,
     PrismaModule,
     AuthModule,
     UsersModule,
@@ -81,9 +85,18 @@ import { APP_GUARD } from '@nestjs/core';
     AppService,
     // Bind TrhrottlerGuard globally to apply rate limiting to all routes
     {
+      provide: APP_INTERCEPTOR,
+      useClass: LoggingInterceptor,
+    },
+    // Bind ThrottlerGuard globally to apply rate limiting to all routes
+    {
       provide: APP_GUARD,
       useClass: ThrottlerGuard,
     },
   ],
 })
-export class AppModule {}
+export class AppModule implements NestModule {
+  configure(consumer: MiddlewareConsumer) {
+    consumer.apply(CorrelationIdMiddleware).forRoutes('*');
+  }
+}

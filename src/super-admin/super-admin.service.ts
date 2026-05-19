@@ -1,7 +1,7 @@
 // backend/src/super-admin/super-admin.service.ts
 // FIXED VERSION - Added getAllPatients and document preview methods
 
-import { Injectable, NotFoundException } from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService } from '../notifications/email.service';
@@ -13,6 +13,8 @@ import {
 
 @Injectable()
 export class SuperAdminService {
+  private readonly logger = new Logger(SuperAdminService.name);
+
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
@@ -214,7 +216,10 @@ export class SuperAdminService {
         true,
       );
     } catch (error) {
-      console.error('Failed to send approval email:', error);
+      this.logger.error(
+        'Failed to send pharmacy approval email',
+        error?.message || error,
+      );
     }
 
     // Create notification
@@ -226,7 +231,10 @@ export class SuperAdminService {
         message: `Congratulations! Your pharmacy "${pharmacy.name}" has been approved and is now live on E-Vuze.`,
       });
     } catch (error) {
-      console.error('Failed to create notification:', error);
+      this.logger.error(
+        'Failed to create approval notification',
+        error?.message || error,
+      );
     }
 
     return updated;
@@ -267,7 +275,10 @@ export class SuperAdminService {
         dto.reason,
       );
     } catch (error) {
-      console.error('Failed to send rejection email:', error);
+      this.logger.error(
+        'Failed to send pharmacy rejection email',
+        error?.message || error,
+      );
     }
 
     // Create notification
@@ -279,7 +290,10 @@ export class SuperAdminService {
         message: `Your pharmacy application requires attention. Reason: ${dto.reason}. Please update your documents and resubmit.`,
       });
     } catch (error) {
-      console.error('Failed to create notification:', error);
+      this.logger.error(
+        'Failed to create rejection notification',
+        error?.message || error,
+      );
     }
 
     return updated;
