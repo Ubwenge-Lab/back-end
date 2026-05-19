@@ -1,5 +1,11 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import { IsEmail, IsNotEmpty, IsOptional, IsString, IsPhoneNumber } from 'class-validator';
+import {
+  IsEmail,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  IsPhoneNumber,
+} from 'class-validator';
 
 export class CreateDoctorDto {
   @ApiProperty({ example: 'dr.mutoni@cityhospital.com' })
@@ -31,7 +37,10 @@ export class CreateDoctorDto {
   @IsNotEmpty()
   licenseNumber: string;
 
-  @ApiPropertyOptional({ example: 'Specialist in interventional cardiology with 10 years of experience.' })
+  @ApiPropertyOptional({
+    example:
+      'Specialist in interventional cardiology with 10 years of experience.',
+  })
   @IsOptional()
   @IsString()
   bio?: string;

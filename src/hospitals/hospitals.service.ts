@@ -51,14 +51,15 @@ export class HospitalsService {
     if (!patient) throw new NotFoundException('Patient record not found');
 
     // Check if registration already exists in the join table
-    const existingRegistration = await this.prisma.hospitalPatientRegistration.findUnique({
-      where: {
-        patientId_hospitalId: {
-          patientId,
-          hospitalId,
+    const existingRegistration =
+      await this.prisma.hospitalPatientRegistration.findUnique({
+        where: {
+          patientId_hospitalId: {
+            patientId,
+            hospitalId,
+          },
         },
-      },
-    });
+      });
 
     if (existingRegistration) {
       throw new ConflictException(
@@ -76,12 +77,19 @@ export class HospitalsService {
     });
   }
 
-  async findDoctors(hospitalId: string, specialty?: string, available?: boolean) {
-    const hospital = await this.prisma.hospital.findUnique({ where: { id: hospitalId } });
+  async findDoctors(
+    hospitalId: string,
+    specialty?: string,
+    available?: boolean,
+  ) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
     if (!hospital) throw new NotFoundException('Hospital not found');
 
     const where: any = { hospitalId };
-    if (specialty) where.specialization = { contains: specialty, mode: 'insensitive' };
+    if (specialty)
+      where.specialization = { contains: specialty, mode: 'insensitive' };
     if (available !== undefined) where.isAvailable = available;
 
     return this.prisma.doctor.findMany({
@@ -89,7 +97,9 @@ export class HospitalsService {
       include: {
         user: {
           include: {
-            hospitalStaff: { select: { firstName: true, lastName: true, phone: true } },
+            hospitalStaff: {
+              select: { firstName: true, lastName: true, phone: true },
+            },
           },
         },
       },

@@ -66,7 +66,7 @@ export class RegisterHospitalDto {
   @ApiProperty()
   @IsString()
   @IsOptional()
-  pharmacyLicense?: string;
+  hospitalLicense?: string;
 
   @ApiProperty()
   @IsString()

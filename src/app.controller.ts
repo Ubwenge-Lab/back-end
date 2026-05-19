@@ -5,11 +5,16 @@ import { ApiExcludeController } from '@nestjs/swagger';
 @ApiExcludeController()
 @Controller()
 export class AppController {
-  constructor(private readonly appService: AppService) {}
+  constructor(private readonly appService: AppService) { }
 
   @Get()
   @Header('Content-Type', 'text/html')
   getHello(): string {
     return this.appService.getHello();
+  }
+  //temporary test route
+  @Get('test-error')
+  triggerError() {
+    throw new Error('Database connection timed out! (Simulated Crash)');
   }
 }

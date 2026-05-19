@@ -599,7 +599,9 @@ export class EmailService {
       return;
     }
 
-    const baseUrl = (this.configService.get('FRONTEND_URL') || 'http://localhost:3001').replace(/\/$/, '');
+    const baseUrl = (
+      this.configService.get('FRONTEND_URL') || 'http://localhost:3001'
+    ).replace(/\/$/, '');
     const loginUrl = `${baseUrl}/login`;
     const changePasswordUrl = `${baseUrl}/hospital/activate`;
     const html = this.baseTemplate(`
@@ -652,13 +654,105 @@ export class EmailService {
     } catch (error) {
       console.error('❌ Resend error:', error.message);
       if (this.configService.get('NODE_ENV') === 'production') {
-        throw new InternalServerErrorException('Failed to send credentials email');
+        throw new InternalServerErrorException(
+          'Failed to send credentials email',
+        );
       }
     }
   }
 
   // ========================================
-  // 9. SUPER ADMIN NOTIFICATIONS
+  // 9. APPOINTMENT CONFIRMATION
+  // ========================================
+
+  async sendAppointmentConfirmation(data: {
+    patientEmail: string;
+    patientName: string;
+    doctorName: string;
+    hospitalName: string;
+    date: Date;
+    reason: string;
+  }) {
+    const dateStr = data.date.toLocaleDateString('en-GB', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    const timeStr = data.date.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    console.log('==========================================');
+    console.log(`📅 APPOINTMENT CONFIRMED`);
+    console.log(`👤 Patient:  ${data.patientName} (${data.patientEmail})`);
+    console.log(`🩺 Doctor:   ${data.doctorName}`);
+    console.log(`🏥 Hospital: ${data.hospitalName}`);
+    console.log(`🕐 When:     ${dateStr} at ${timeStr}`);
+    console.log(`📋 Reason:   ${data.reason}`);
+    console.log('==========================================');
+
+    if (!this.resend) {
+      console.warn(
+        '⚠️  Resend not configured - confirmation logged above only',
+      );
+      return;
+    }
+
+    const html = this.baseTemplate(`
+      <h2 style="margin:0 0 12px;color:#1a1a2e;font-size:22px;">Appointment Confirmed ✅</h2>
+      <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.7;">
+        Hi <strong>${data.patientName}</strong>, your appointment has been booked. Here are the details:
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;margin:0 0 24px;border:1px solid #e8ecf4;">
+        <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Doctor</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${data.doctorName}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Hospital</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${data.hospitalName}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Date & Time</p>
+            <p style="margin:4px 0 0;color:#0d9488;font-size:16px;font-weight:700;">${dateStr} at ${timeStr}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Reason for Visit</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;">${data.reason}</p>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:0;color:#bbb;font-size:12px;text-align:center;line-height:1.6;">
+        Need to cancel? Log in to your Evuze account and manage your appointments there.
+      </p>
+    `);
+
+    try {
+      await this.resend.emails.send({
+        to: data.patientEmail,
+        from: this.getFrom(),
+        subject: `✅ Appointment confirmed — ${data.hospitalName}`,
+        html,
+      });
+      console.log(`✅ Appointment confirmation sent to ${data.patientEmail}`);
+    } catch (error) {
+      console.error('❌ Resend error:', error.message);
+    }
+  }
+
+  // ========================================
+  // 10. SUPER ADMIN NOTIFICATIONS
   // ========================================
 
   private getSuperAdminEmail(): string {
