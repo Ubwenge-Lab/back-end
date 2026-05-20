@@ -19,28 +19,19 @@ export class AppointmentsService {
 
   // ========================================
   // BOOK APPOINTMENT
-  // Pessimistic locking via SELECT FOR UPDATE prevents double-booking.
-  // Two concurrent requests for the same doctor + slot: the second one
-  // waits for the first transaction to commit, then sees the conflict.
   // ========================================
-
   async book(patientUserId: string, dto: BookAppointmentDto) {
     const date = new Date(dto.date);
 
     if (date <= new Date()) {
-      throw new BadRequestException(
-        'Appointment must be scheduled in the future',
-      );
+      throw new BadRequestException('Appointment must be scheduled in the future');
     }
 
-    // Resolve patient record from the logged-in user
     const patient = await this.prisma.patient.findUnique({
       where: { userId: patientUserId },
     });
-    if (!patient)
-      throw new ForbiddenException('Only patients can book appointments');
+    if (!patient) throw new ForbiddenException('Only patients can book appointments');
 
-    // Verify the doctor exists and is available
     const doctor = await this.prisma.doctor.findUnique({
       where: { id: dto.doctorId },
       include: {
@@ -54,23 +45,18 @@ export class AppointmentsService {
     });
     if (!doctor) throw new NotFoundException('Doctor not found');
 
-    // Transaction with pessimistic locking to prevent double-booking
     const appointment = await this.prisma.$transaction(
       async (tx) => {
-        // Lock any existing non-cancelled appointments for this doctor at this exact slot.
-        // FOR UPDATE causes concurrent transactions to wait here until the lock is released.
         const conflicts = await tx.$queryRaw<{ id: string }[]>`
-        SELECT id FROM appointments
-        WHERE "doctorId" = ${dto.doctorId}
-        AND "date" = ${date}
-        AND status != 'CANCELLED'
-        FOR UPDATE
-      `;
+          SELECT id FROM appointments
+          WHERE "doctorId" = ${dto.doctorId}
+          AND "date" = ${date}
+          AND status != 'CANCELLED'
+          FOR UPDATE
+        `;
 
         if (conflicts.length > 0) {
-          throw new ConflictException(
-            'This time slot is already booked. Please choose a different time.',
-          );
+          throw new ConflictException('This time slot is already booked. Please choose a different time.');
         }
 
         return tx.appointment.create({
@@ -87,9 +73,7 @@ export class AppointmentsService {
               include: {
                 user: {
                   include: {
-                    hospitalStaff: {
-                      select: { firstName: true, lastName: true },
-                    },
+                    hospitalStaff: { select: { firstName: true, lastName: true } },
                   },
                 },
               },
@@ -102,21 +86,16 @@ export class AppointmentsService {
       { timeout: 30000 },
     );
 
-    // Fire confirmation email — non-blocking, never fails the booking
     try {
       const staffName = appointment.doctor.user.hospitalStaff;
-      const doctorName = staffName
-        ? `Dr. ${staffName.firstName} ${staffName.lastName}`
-        : 'Your doctor';
+      const doctorName = staffName ? `Dr. ${staffName.firstName} ${staffName.lastName}` : 'Your doctor';
 
       await this.notificationsService.sendAppointmentConfirmation({
         patientEmail: patient.userId
-          ? ((
-              await this.prisma.user.findUnique({
-                where: { id: patient.userId },
-                select: { email: true },
-              })
-            )?.email ?? '')
+          ? ((await this.prisma.user.findUnique({
+              where: { id: patient.userId },
+              select: { email: true },
+            }))?.email ?? '')
           : '',
         patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
         doctorName,
@@ -125,7 +104,7 @@ export class AppointmentsService {
         reason: dto.reason,
       });
     } catch (error) {
-      console.error('❌ Failed to send appointment confirmation:', error);
+      console.error('Failed to send appointment confirmation:', error);
     }
 
     return {
@@ -137,12 +116,9 @@ export class AppointmentsService {
   // ========================================
   // LIST APPOINTMENTS (role-scoped)
   // ========================================
-
   async findAll(userId: string, role: string) {
     if (role === 'PATIENT') {
-      const patient = await this.prisma.patient.findUnique({
-        where: { userId },
-      });
+      const patient = await this.prisma.patient.findUnique({ where: { userId } });
       if (!patient) throw new ForbiddenException('Patient profile not found');
 
       return this.prisma.appointment.findMany({
@@ -164,9 +140,7 @@ export class AppointmentsService {
     }
 
     if (role === 'HOSPITAL_ADMIN') {
-      const hospital = await this.prisma.hospital.findFirst({
-        where: { userId },
-      });
+      const hospital = await this.prisma.hospital.findFirst({ where: { userId } });
       if (!hospital) throw new ForbiddenException('Hospital not found');
 
       return this.prisma.appointment.findMany({
@@ -189,7 +163,6 @@ export class AppointmentsService {
   // ========================================
   // GET SINGLE APPOINTMENT
   // ========================================
-
   async findOne(id: string, userId: string, role: string) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
@@ -197,32 +170,24 @@ export class AppointmentsService {
     });
 
     if (!appointment) throw new NotFoundException('Appointment not found');
-
     if (role === 'SUPER_ADMIN' || role === 'HOSPITAL_ADMIN') return appointment;
 
     if (role === 'PATIENT') {
-      const patient = await this.prisma.patient.findUnique({
-        where: { userId },
-      });
-      if (appointment.patientId !== patient?.id) {
-        throw new ForbiddenException('Access denied');
-      }
+      const patient = await this.prisma.patient.findUnique({ where: { userId } });
+      if (appointment.patientId !== patient?.id) throw new ForbiddenException('Access denied');
     }
 
     if (role === 'DOCTOR') {
       const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
-      if (appointment.doctorId !== doctor?.id) {
-        throw new ForbiddenException('Access denied');
-      }
+      if (appointment.doctorId !== doctor?.id) throw new ForbiddenException('Access denied');
     }
 
     return appointment;
   }
 
   // ========================================
-  // COMPLETE CONSULT — doctor marks done, invoice auto-generated
+  // COMPLETE CONSULT (Invoicing + Diagnosis logs)
   // ========================================
-
   async completeConsult(id: string, doctorUserId: string, dto: CompleteConsultDto) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
@@ -279,22 +244,23 @@ export class AppointmentsService {
     }
 
     if (!lineItems.length) {
-      throw new BadRequestException(
-        'No line items to invoice. Provide items in the request or configure hospital fees first.',
-      );
+      throw new BadRequestException('No line items to invoice.');
     }
 
     const totalAmount = lineItems.reduce((sum, item) => sum + item.subtotal, 0);
     const coveragePct = appointment.patient.insuranceCoverage ?? 0;
     const hasInsurance = coveragePct > 0 && !!appointment.patient.insuranceProvider;
-    const insuranceCoveredAmount = hasInsurance
-      ? Math.floor((totalAmount * coveragePct) / 100)
-      : 0;
+    const insuranceCoveredAmount = hasInsurance ? Math.floor((totalAmount * coveragePct) / 100) : 0;
 
     const invoice = await this.prisma.$transaction(async (tx) => {
       await tx.appointment.update({
         where: { id },
-        data: { status: AppointmentStatus.COMPLETED, ...(dto.notes && { notes: dto.notes }) },
+        data: {
+          status: AppointmentStatus.COMPLETED,
+          diagnosisSummary: dto.diagnosisSummary,
+          doctorRecommendations: dto.doctorRecommendations,
+          ...(dto.notes && { notes: dto.notes }),
+        },
       });
 
       return tx.hospitalInvoice.create({
@@ -323,28 +289,21 @@ export class AppointmentsService {
   }
 
   // ========================================
-  // CANCEL APPOINTMENT (patient cancels their own)
+  // CANCEL APPOINTMENT
   // ========================================
-
   async cancel(id: string, patientUserId: string) {
-    const patient = await this.prisma.patient.findUnique({
-      where: { userId: patientUserId },
-    });
+    const patient = await this.prisma.patient.findUnique({ where: { userId: patientUserId } });
     if (!patient) throw new ForbiddenException('Patient profile not found');
 
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { id },
-    });
+    const appointment = await this.prisma.appointment.findUnique({ where: { id } });
     if (!appointment) throw new NotFoundException('Appointment not found');
 
     if (appointment.patientId !== patient.id) {
       throw new ForbiddenException('You can only cancel your own appointments');
     }
-
     if (appointment.status === AppointmentStatus.CANCELLED) {
       throw new BadRequestException('Appointment is already cancelled');
     }
-
     if (appointment.status === AppointmentStatus.COMPLETED) {
       throw new BadRequestException('Cannot cancel a completed appointment');
     }
@@ -357,37 +316,23 @@ export class AppointmentsService {
   }
 
   // ========================================
-  // UPDATE STATUS (doctor / hospital admin)
+  // UPDATE STATUS
   // ========================================
-
-  async updateStatus(
-    id: string,
-    userId: string,
-    role: string,
-    dto: UpdateAppointmentStatusDto,
-  ) {
-    const appointment = await this.prisma.appointment.findUnique({
-      where: { id },
-    });
+  async updateStatus(id: string, userId: string, role: string, dto: UpdateAppointmentStatusDto) {
+    const appointment = await this.prisma.appointment.findUnique({ where: { id } });
     if (!appointment) throw new NotFoundException('Appointment not found');
 
     if (role === 'DOCTOR') {
       const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
       if (appointment.doctorId !== doctor?.id) {
-        throw new ForbiddenException(
-          'You can only update your own appointments',
-        );
+        throw new ForbiddenException('You can only update your own appointments');
       }
     }
 
     if (role === 'HOSPITAL_ADMIN') {
-      const hospital = await this.prisma.hospital.findFirst({
-        where: { userId },
-      });
+      const hospital = await this.prisma.hospital.findFirst({ where: { userId } });
       if (appointment.hospitalId !== hospital?.id) {
-        throw new ForbiddenException(
-          'You can only update appointments in your hospital',
-        );
+        throw new ForbiddenException('You can only update appointments in your hospital');
       }
     }
 

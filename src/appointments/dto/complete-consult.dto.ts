@@ -43,4 +43,6 @@ export class CompleteConsultDto {
   @IsOptional()
   @IsString()
   notes?: string;
+  diagnosisSummary: string;
+  doctorRecommendations?: string;
 }

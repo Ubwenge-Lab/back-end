@@ -1,5 +1,3 @@
-// backend/src/prescriptions/prescriptions.controller.ts
-
 import {
   Controller,
   Get,
@@ -10,6 +8,8 @@ import {
   UseGuards,
   Req,
   Query,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PrescriptionsService } from './prescriptions.service';
@@ -18,6 +18,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
 import { CreatePrescriptionDto, UpdatePrescriptionStatusDto } from './dto';
+import { HospitalIssuePrescriptionDto } from './dto/hospital-issue-prescription.dto';
 
 @ApiTags('Prescriptions')
 @Controller('prescriptions')
@@ -61,5 +62,16 @@ export class PrescriptionsController {
     @Body() dto: UpdatePrescriptionStatusDto,
   ) {
     return this.prescriptionsService.updateStatus(id, dto);
+  }
+
+  @Post('hospital-issue')
+  @Roles(Role.DOCTOR)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Emit standardized digital prescriptions from clinical encounter (Doctor only)' })
+  async issueHospitalPrescription(
+    @Req() req: any,
+    @Body() dto: HospitalIssuePrescriptionDto,
+  ) {
+    return this.prescriptionsService.emitHospitalDigitalPrescription(req.user.sub, dto);
   }
 }
