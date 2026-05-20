@@ -29,7 +29,9 @@ export class InvoicesController {
 
   @Get(':id')
   @Roles(Role.PATIENT, Role.HOSPITAL_ADMIN, Role.RECEPTIONIST, Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Get a single invoice (patient can view their own)' })
+  @ApiOperation({
+    summary: 'Get a single invoice (patient can view their own)',
+  })
   @ApiParam({ name: 'id', description: 'Invoice UUID' })
   findOne(@Req() req: any, @Param('id') id: string) {
     return this.invoicesService.findOne(id, req.user.sub, req.user.role);
@@ -38,7 +40,9 @@ export class InvoicesController {
   @Patch(':id/pay')
   @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Mark invoice as PAID (Receptionist / Hospital Admin only)' })
+  @ApiOperation({
+    summary: 'Mark invoice as PAID (Receptionist / Hospital Admin only)',
+  })
   @ApiParam({ name: 'id', description: 'Invoice UUID' })
   pay(@Req() req: any, @Param('id') id: string) {
     return this.invoicesService.pay(id, req.user.sub, req.user.role);

@@ -86,8 +86,8 @@ export class PharmaciesService {
       GROUP  BY DATE_TRUNC('month', "createdAt")
       ORDER  BY DATE_TRUNC('month', "createdAt") ASC
     `;
-    const revenueOverTime = monthRevRows.map(r => ({
-      month:   r.month_label,
+    const revenueOverTime = monthRevRows.map((r) => ({
+      month: r.month_label,
       revenue: Number(r.revenue),
     }));
 
@@ -109,8 +109,13 @@ export class PharmaciesService {
         AND  "createdAt" <= ${endOfMonth}
       GROUP  BY "branchId"
     `;
-    const branchRevMap = new Map(branchRevRows.map(r => [r.branchId, Number(r.revenue)]));
-    const revenueByBranch = branches.map(b => ({ name: b.name, revenue: branchRevMap.get(b.id) ?? 0 }));
+    const branchRevMap = new Map(
+      branchRevRows.map((r) => [r.branchId, Number(r.revenue)]),
+    );
+    const revenueByBranch = branches.map((b) => ({
+      name: b.name,
+      revenue: branchRevMap.get(b.id) ?? 0,
+    }));
 
     // ── Medication count per branch: 1 GROUP BY query ──
     type BranchMedRow = { branchId: string; value: string };
@@ -120,8 +125,13 @@ export class PharmaciesService {
       WHERE  "pharmacyId" = ${pharmacy.id}
       GROUP  BY "branchId"
     `;
-    const branchMedMap = new Map(branchMedRows.map(r => [r.branchId, Number(r.value)]));
-    const inventoryDistribution = branches.map(b => ({ name: b.name, value: branchMedMap.get(b.id) ?? 0 }));
+    const branchMedMap = new Map(
+      branchMedRows.map((r) => [r.branchId, Number(r.value)]),
+    );
+    const inventoryDistribution = branches.map((b) => ({
+      name: b.name,
+      value: branchMedMap.get(b.id) ?? 0,
+    }));
 
     // low stock alerts
     const lowStockMeds = await this.prisma.medication.findMany({
@@ -290,7 +300,10 @@ export class PharmaciesService {
       d.setDate(thirtyDaysAgo.getDate() + i);
       days.push({
         date: d.toISOString().split('T')[0],
-        label: d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
+        label: d.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+        }),
       });
     }
 
@@ -313,13 +326,15 @@ export class PharmaciesService {
     for (const r of rows) {
       const dateStr = new Date(r.day).toISOString().split('T')[0];
       if (!lookup.has(dateStr)) lookup.set(dateStr, new Map());
-      lookup.get(dateStr)!.set(r.branchId, Number(r.revenue));
+      lookup.get(dateStr).set(r.branchId, Number(r.revenue));
     }
 
     // Pharmacy-wide daily totals (sum across all branches for each day)
     const dailyTotal = days.map(({ date, label }) => {
       const branchMap = lookup.get(date);
-      const revenue = branchMap ? Array.from(branchMap.values()).reduce((s, v) => s + v, 0) : 0;
+      const revenue = branchMap
+        ? Array.from(branchMap.values()).reduce((s, v) => s + v, 0)
+        : 0;
       return { date, label, revenue };
     });
 
@@ -329,7 +344,7 @@ export class PharmaciesService {
       select: { id: true, name: true },
     });
 
-    const branchDaily = branches.map(branch => ({
+    const branchDaily = branches.map((branch) => ({
       branchId: branch.id,
       branchName: branch.name,
       data: days.map(({ date, label }) => ({
@@ -340,7 +355,7 @@ export class PharmaciesService {
     }));
 
     return {
-      days: days.map(d => d.label),
+      days: days.map((d) => d.label),
       dailyTotal,
       branchDaily,
     };
@@ -389,11 +404,11 @@ export class PharmaciesService {
     for (const r of rows) {
       const key = new Date(r.week_start).toISOString();
       if (!lookup.has(key)) lookup.set(key, new Map());
-      lookup.get(key)!.set(r.branchId, Number(r.revenue));
+      lookup.get(key).set(r.branchId, Number(r.revenue));
     }
 
     // Resolve each week to its lookup key (normalize to Monday 00:00:00 UTC)
-    const weekKeys = weeks.map(w => {
+    const weekKeys = weeks.map((w) => {
       const d = new Date(w.start);
       d.setUTCHours(0, 0, 0, 0);
       return d.toISOString();
@@ -401,7 +416,9 @@ export class PharmaciesService {
 
     const weeklyTotal = weeks.map(({ label }, i) => {
       const branchMap = lookup.get(weekKeys[i]);
-      const revenue = branchMap ? Array.from(branchMap.values()).reduce((s, v) => s + v, 0) : 0;
+      const revenue = branchMap
+        ? Array.from(branchMap.values()).reduce((s, v) => s + v, 0)
+        : 0;
       return { label, revenue };
     });
 
@@ -410,7 +427,7 @@ export class PharmaciesService {
       select: { id: true, name: true },
     });
 
-    const branchWeekly = branches.map(branch => ({
+    const branchWeekly = branches.map((branch) => ({
       branchId: branch.id,
       branchName: branch.name,
       data: weeks.map(({ label }, i) => ({
@@ -420,7 +437,7 @@ export class PharmaciesService {
     }));
 
     return {
-      weeks: weeks.map(w => w.label),
+      weeks: weeks.map((w) => w.label),
       weeklyTotal,
       branchWeekly,
     };
@@ -436,7 +453,15 @@ export class PharmaciesService {
     const now = new Date();
     const startOfThisMonth = new Date(now.getFullYear(), now.getMonth(), 1);
     const startOfLastMonth = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-    const endOfLastMonth   = new Date(now.getFullYear(), now.getMonth(), 0, 23, 59, 59, 999);
+    const endOfLastMonth = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      0,
+      23,
+      59,
+      59,
+      999,
+    );
 
     // ── Single GROUP BY query replaces unbounded findMany + in-memory filter ──
     type MonthRow = {
@@ -460,22 +485,24 @@ export class PharmaciesService {
       ORDER BY month ASC
     `;
 
-    const thisMonth = rows.find(
-      (r) => new Date(r.month) >= startOfThisMonth,
-    );
+    const thisMonth = rows.find((r) => new Date(r.month) >= startOfThisMonth);
     const lastMonth = rows.find(
-      (r) => new Date(r.month) >= startOfLastMonth && new Date(r.month) < startOfThisMonth,
+      (r) =>
+        new Date(r.month) >= startOfLastMonth &&
+        new Date(r.month) < startOfThisMonth,
     );
 
-    const totalRevenue    = Number(thisMonth?.total_revenue ?? 0);
-    const totalOrders     = Number(thisMonth?.total_orders  ?? 0);
-    const avgOrderValue   = totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
-    const itemsSold       = Number(thisMonth?.items_sold     ?? 0);
+    const totalRevenue = Number(thisMonth?.total_revenue ?? 0);
+    const totalOrders = Number(thisMonth?.total_orders ?? 0);
+    const avgOrderValue =
+      totalOrders > 0 ? Math.round(totalRevenue / totalOrders) : 0;
+    const itemsSold = Number(thisMonth?.items_sold ?? 0);
 
-    const prevRevenue     = Number(lastMonth?.total_revenue ?? 0);
-    const prevOrders      = Number(lastMonth?.total_orders  ?? 0);
-    const prevAvgOrder    = prevOrders > 0 ? Math.round(prevRevenue / prevOrders) : 0;
-    const prevItemsSold   = Number(lastMonth?.items_sold     ?? 0);
+    const prevRevenue = Number(lastMonth?.total_revenue ?? 0);
+    const prevOrders = Number(lastMonth?.total_orders ?? 0);
+    const prevAvgOrder =
+      prevOrders > 0 ? Math.round(prevRevenue / prevOrders) : 0;
+    const prevItemsSold = Number(lastMonth?.items_sold ?? 0);
 
     const pct = (cur: number, prev: number) =>
       prev > 0 ? Math.round(((cur - prev) / prev) * 100) : 0;
@@ -485,10 +512,10 @@ export class PharmaciesService {
       totalOrders,
       avgOrderValue,
       itemsSold,
-      revenueChange:  pct(totalRevenue,  prevRevenue),
-      ordersChange:   pct(totalOrders,   prevOrders),
+      revenueChange: pct(totalRevenue, prevRevenue),
+      ordersChange: pct(totalOrders, prevOrders),
       avgValueChange: pct(avgOrderValue, prevAvgOrder),
-      itemsChange:    pct(itemsSold,     prevItemsSold),
+      itemsChange: pct(itemsSold, prevItemsSold),
     };
   }
 
@@ -532,7 +559,7 @@ export class PharmaciesService {
       }),
     ]);
 
-    const patients = patientRows.map(p => ({
+    const patients = patientRows.map((p) => ({
       id: p.id,
       firstName: p.firstName,
       lastName: p.lastName,
@@ -541,7 +568,7 @@ export class PharmaciesService {
       totalOrders: p.orders.length,
       totalSpent: p.orders.reduce((s, o) => s + o.total, 0),
       lastOrderDate: p.orders[0]?.createdAt ?? null,
-      orders: p.orders.map(o => ({
+      orders: p.orders.map((o) => ({
         id: o.id,
         orderNumber: o.orderNumber,
         status: o.status,

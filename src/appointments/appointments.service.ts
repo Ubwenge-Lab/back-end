@@ -7,7 +7,11 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { BookAppointmentDto, UpdateAppointmentStatusDto, CompleteConsultDto } from './dto';
+import {
+  BookAppointmentDto,
+  UpdateAppointmentStatusDto,
+  CompleteConsultDto,
+} from './dto';
 import { AppointmentStatus } from '@prisma/client';
 
 @Injectable()
@@ -223,7 +227,11 @@ export class AppointmentsService {
   // COMPLETE CONSULT — doctor marks done, invoice auto-generated
   // ========================================
 
-  async completeConsult(id: string, doctorUserId: string, dto: CompleteConsultDto) {
+  async completeConsult(
+    id: string,
+    doctorUserId: string,
+    dto: CompleteConsultDto,
+  ) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
@@ -233,9 +241,13 @@ export class AppointmentsService {
     });
     if (!appointment) throw new NotFoundException('Appointment not found');
 
-    const doctor = await this.prisma.doctor.findUnique({ where: { userId: doctorUserId } });
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { userId: doctorUserId },
+    });
     if (!doctor || appointment.doctorId !== doctor.id) {
-      throw new ForbiddenException('You can only complete your own appointments');
+      throw new ForbiddenException(
+        'You can only complete your own appointments',
+      );
     }
 
     if (appointment.status === AppointmentStatus.COMPLETED) {
@@ -249,7 +261,12 @@ export class AppointmentsService {
       where: { hospitalId: appointment.hospitalId },
     });
 
-    type LineItem = { description: string; quantity: number; unitCost: number; subtotal: number };
+    type LineItem = {
+      description: string;
+      quantity: number;
+      unitCost: number;
+      subtotal: number;
+    };
     const lineItems: LineItem[] = [];
 
     if (config) {
@@ -286,37 +303,47 @@ export class AppointmentsService {
 
     const totalAmount = lineItems.reduce((sum, item) => sum + item.subtotal, 0);
     const coveragePct = appointment.patient.insuranceCoverage ?? 0;
-    const hasInsurance = coveragePct > 0 && !!appointment.patient.insuranceProvider;
+    const hasInsurance =
+      coveragePct > 0 && !!appointment.patient.insuranceProvider;
     const insuranceCoveredAmount = hasInsurance
       ? Math.floor((totalAmount * coveragePct) / 100)
       : 0;
 
-    const invoice = await this.prisma.$transaction(async (tx) => {
-      await tx.appointment.update({
-        where: { id },
-        data: { status: AppointmentStatus.COMPLETED, ...(dto.notes && { notes: dto.notes }) },
-      });
+    const invoice = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.appointment.update({
+          where: { id },
+          data: {
+            status: AppointmentStatus.COMPLETED,
+            ...(dto.notes && { notes: dto.notes }),
+          },
+        });
 
-      return tx.hospitalInvoice.create({
-        data: {
-          appointmentId: id,
-          hospitalId: appointment.hospitalId,
-          patientId: appointment.patientId,
-          totalAmount,
-          insuranceCovered: hasInsurance,
-          paymentStatus: hasInsurance ? 'INSURANCE_PENDING' : 'UNPAID',
-          items: { create: lineItems },
-        },
-        include: { items: true },
-      });
-    }, { timeout: 30000 });
+        return tx.hospitalInvoice.create({
+          data: {
+            appointmentId: id,
+            hospitalId: appointment.hospitalId,
+            patientId: appointment.patientId,
+            totalAmount,
+            insuranceCovered: hasInsurance,
+            paymentStatus: hasInsurance ? 'INSURANCE_PENDING' : 'UNPAID',
+            items: { create: lineItems },
+          },
+          include: { items: true },
+        });
+      },
+      { timeout: 30000 },
+    );
 
     return {
       message: 'Consultation completed and invoice generated.',
       invoice,
       billing: {
         totalAmount,
-        insuranceCoverage: { percentage: coveragePct, amount: insuranceCoveredAmount },
+        insuranceCoverage: {
+          percentage: coveragePct,
+          amount: insuranceCoveredAmount,
+        },
         patientOwes: totalAmount - insuranceCoveredAmount,
       },
     };

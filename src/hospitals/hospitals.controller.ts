@@ -55,7 +55,9 @@ export class HospitalsController {
 
   @Post(':id/patients/search')
   @Roles(Role.HOSPITAL_ADMIN, Role.RECEPTIONIST, Role.DOCTOR, Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'Search for a global patient by National ID or Phone' })
+  @ApiOperation({
+    summary: 'Search for a global patient by National ID or Phone',
+  })
   async searchPatient(
     @Param('id') hospitalId: string,
     @Body('identifier') identifier: string,
@@ -65,7 +67,9 @@ export class HospitalsController {
 
   @Post(':id/patients/register')
   @Roles(Role.HOSPITAL_ADMIN, Role.RECEPTIONIST)
-  @ApiOperation({ summary: 'Link a global patient to this hospital and generate MRN' })
+  @ApiOperation({
+    summary: 'Link a global patient to this hospital and generate MRN',
+  })
   async registerPatient(
     @Param('id') hospitalId: string,
     @Body('patientId') patientId: string,
@@ -75,9 +79,15 @@ export class HospitalsController {
 
   @Get(':id/invoices')
   @Roles(Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN)
-  @ApiOperation({ summary: 'List invoices for a hospital (paginated, filterable)' })
+  @ApiOperation({
+    summary: 'List invoices for a hospital (paginated, filterable)',
+  })
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
-  @ApiQuery({ name: 'status', required: false, enum: ['UNPAID', 'PAID', 'INSURANCE_PENDING'] })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['UNPAID', 'PAID', 'INSURANCE_PENDING'],
+  })
   @ApiQuery({ name: 'from', required: false, example: '2026-01-01' })
   @ApiQuery({ name: 'to', required: false, example: '2026-12-31' })
   @ApiQuery({ name: 'page', required: false, type: Number })
@@ -91,13 +101,18 @@ export class HospitalsController {
     @Query('page') page?: string,
     @Query('limit') limit?: string,
   ) {
-    return this.invoicesService.findByHospital(id, req.user.sub, req.user.role, {
-      status,
-      from,
-      to,
-      page: page ? parseInt(page, 10) : undefined,
-      limit: limit ? parseInt(limit, 10) : undefined,
-    });
+    return this.invoicesService.findByHospital(
+      id,
+      req.user.sub,
+      req.user.role,
+      {
+        status,
+        from,
+        to,
+        page: page ? parseInt(page, 10) : undefined,
+        limit: limit ? parseInt(limit, 10) : undefined,
+      },
+    );
   }
 
   @Get(':id/doctors')
@@ -109,7 +124,10 @@ export class HospitalsController {
     Role.NURSE,
     Role.RECEPTIONIST,
   )
-  @ApiOperation({ summary: 'List doctors at a specific hospital, optionally filtered by specialty' })
+  @ApiOperation({
+    summary:
+      'List doctors at a specific hospital, optionally filtered by specialty',
+  })
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
   @ApiQuery({ name: 'specialty', required: false, example: 'Cardiology' })
   @ApiQuery({ name: 'available', required: false, type: Boolean })
@@ -118,7 +136,34 @@ export class HospitalsController {
     @Query('specialty') specialty?: string,
     @Query('available') available?: string,
   ) {
-    const availableBool = available === undefined ? undefined : available === 'true';
+    const availableBool =
+      available === undefined ? undefined : available === 'true';
     return this.hospitalsService.findDoctors(id, specialty, availableBool);
+  }
+
+  @Get(':id/dashboard/stats')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Get hospital dashboard stats' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getStats(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getStats(id, req.user.sub);
+  }
+
+  @Get(':id/dashboard/daily-appointments')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @ApiOperation({
+    summary: 'Get hospital daily appointments throughput for the last 30 days',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getDailyAppointments(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getDailyAppointments(id, req.user.sub);
+  }
+
+  @Get(':id/dashboard/weekly-revenue')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Get hospital weekly revenue for the last 4 weeks' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getWeeklyRevenue(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getWeeklyRevenue(id, req.user.sub);
   }
 }

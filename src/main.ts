@@ -109,7 +109,7 @@ async function bootstrap() {
 
 bootstrap().catch((err) => {
   // Winston not available if bootstrap failed — fall back to stderr
-  // eslint-disable-next-line no-console
+
   console.error('❌ Failed to start application:', err);
   process.exit(1);
 });

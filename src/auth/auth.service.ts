@@ -641,13 +641,11 @@ export class AuthService {
       if (dto.role === 'DOCTOR') {
         await tx.doctor.create({
           data: {
-            userId: user.id,
-            hospitalId: hospital.id,
+            user: { connect: { id: user.id } },
+            hospital: { connect: { id: hospital.id } },
             specialization: dto.specialization!,
             licenseNumber: dto.licenseNumber!,
             bio: dto.bio,
-            firstName: dto.firstName,
-            lastName: dto.lastName,
           },
         });
       }

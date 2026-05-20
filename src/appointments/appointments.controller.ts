@@ -17,7 +17,11 @@ import {
   ApiParam,
 } from '@nestjs/swagger';
 import { AppointmentsService } from './appointments.service';
-import { BookAppointmentDto, UpdateAppointmentStatusDto, CompleteConsultDto } from './dto';
+import {
+  BookAppointmentDto,
+  UpdateAppointmentStatusDto,
+  CompleteConsultDto,
+} from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -71,7 +75,9 @@ export class AppointmentsController {
   @Post(':id/consult')
   @Roles(Role.DOCTOR)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Complete consultation and generate invoice (Doctor only)' })
+  @ApiOperation({
+    summary: 'Complete consultation and generate invoice (Doctor only)',
+  })
   @ApiParam({ name: 'id', description: 'Appointment UUID' })
   completeConsult(
     @Req() req: any,
