@@ -406,6 +406,8 @@ model Appointment {
   patient         Patient           @relation(fields: [patientId], references: [id])
   prescriptions   Prescription[]
   hospitalInvoice HospitalInvoice?
+  diagnosis       String?       // To formally track the diagnosis without a prescription
+  vitals          TriageVitals? // One-to-one relationship with vitals
 
   @@index([patientId])
   @@index([hospitalId])
@@ -697,6 +699,31 @@ model SupportTicket {
 
   @@map("support_tickets")
 }
+
+
+model TriageVitals {
+  id            String      @id @default(uuid())
+  appointmentId String      @unique
+  patientId     String
+  weight        Float?      // in kg
+  height        Float?      // in cm
+  bloodPressure String?     // e.g., "120/80"
+  temperature   Float?      // in Celsius
+  heartRate     Int?        // bpm
+  respiratory   Int?        // breaths per min
+  oxygenLevel   Int?        // SpO2 %
+  notes         String?
+  recordedAt    DateTime    @default(now())
+
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  patient       Patient     @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@map("triage_vitals")
+}
+
+
+
 
 enum UserRole {
   SUPER_ADMIN
