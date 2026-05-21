@@ -139,4 +139,69 @@ export class PatientsService {
 
     return patient;
   }
+
+// ========================================
+  // GET CLINICAL MEDICAL HISTORY (Vitals & Diagnoses)
+  // ========================================
+  async getMedicalHistorySummary(patientId: string) {
+    // 1. Fetch last 5 appointments that contain triage vitals
+    const recentAppointmentsWithVitals = await this.prisma.appointment.findMany({
+      where: {
+        patientId,
+        triageVitals: { isNot: null },
+      },
+      orderBy: { date: 'desc' },
+      take: 5,
+      include: {
+        triageVitals: true,
+        doctor: {
+          select: { firstName: true, lastName: true },
+        },
+        hospital: { select: { name: true } },
+      },
+    });
+
+    // 2. Fetch last 3 records with formal diagnoses from prescriptions
+    const recentPrescriptionsWithDiagnosis = await this.prisma.prescription.findMany({
+      where: {
+        patientId,
+        AND: [
+          { diagnosis: { not: null } },
+          { diagnosis: { not: '' } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+      include: {
+        doctor: {
+          select: { firstName: true, lastName: true },
+        },
+      },
+    });
+
+    // 3. Format into a clean response structure
+    return {
+      last5Vitals: recentAppointmentsWithVitals.map((app) => ({
+        appointmentId: app.id,
+        date: app.date,
+        hospitalName: app.hospital.name,
+        doctorName: `Dr. ${app.doctor.firstName} ${app.doctor.lastName}`,
+        vitals: app.triageVitals,
+      })),
+      last3Diagnoses: recentPrescriptionsWithDiagnosis.map((pres) => ({
+        prescriptionId: pres.id,
+        date: pres.createdAt,
+        diagnosis: pres.diagnosis,
+        notes: pres.notes,
+        doctorName: pres.doctor 
+          ? `Dr. ${pres.doctor.firstName} ${pres.doctor.lastName}` 
+          : 'Unknown Doctor',
+      })),
+    };
+  }
+
+  async getPatientMedicalHistorySelf(userId: string) {
+    const patient = await this.findByUserId(userId);
+    return this.getMedicalHistorySummary(patient.id);
+  }
 }
