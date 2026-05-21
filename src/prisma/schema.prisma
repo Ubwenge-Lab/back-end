@@ -67,43 +67,42 @@ model Hospital {
 }
 
 model Doctor {
-  id             String         @id @default(uuid())
-  userId         String         @unique
+  id             String           @id @default(uuid())
+  userId         String           @unique
   hospitalId     String
   specialization String
-  licenseNumber  String         @unique
+  licenseNumber  String           @unique
   bio            String?
-  rating         Float          @default(0)
-  isAvailable    Boolean        @default(true)
+  firstName      String
+  lastName       String
+  rating         Float            @default(0)
+  isAvailable    Boolean          @default(true)
   schedules      DoctorSchedule[]
-  createdAt      DateTime       @default(now())
-  updatedAt      DateTime       @updatedAt
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
   appointments   Appointment[]
-  hospital       Hospital       @relation(fields: [hospitalId], references: [id])
-  user           User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  prescriptions  Prescription[] @relation("DoctorToPrescription")
+  hospital       Hospital         @relation(fields: [hospitalId], references: [id])
+  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prescriptions  Prescription[]   @relation("DoctorToPrescription")
 
   @@index([hospitalId])
   @@index([specialization])
   @@map("doctors")
 }
 
-
 // --- Doctor Schedule ---
 model DoctorSchedule {
-  id        String   @id @default(uuid())
+  id        String @id @default(uuid())
   doctorId  String
-  dayOfWeek Int      // 0 (Sunday) to 6 (Saturday)
-  startTime String   // e.g., "08:00"
-  endTime   String   // e.g., "17:00"
+  dayOfWeek Int // 0 (Sunday) to 6 (Saturday)
+  startTime String // e.g., "08:00"
+  endTime   String // e.g., "17:00"
 
-  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
 
   @@unique([doctorId, dayOfWeek, startTime])
   @@map("doctor_schedules")
 }
-
-
 
 model HospitalStaff {
   id                 String      @id @default(uuid())
@@ -118,13 +117,12 @@ model HospitalStaff {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
   hospital           Hospital    @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  user               User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user               User        @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([hospitalId])
   @@index([userId])
   @@map("hospital_staff")
 }
-
 
 model Patient {
   id                    String                        @id @default(uuid())
@@ -286,8 +284,8 @@ model StaffPermissions {
 }
 
 model MedicationRegistry {
-  id                  String       @id @default(uuid())
-  registrationNumber  String       @unique
+  id                  String              @id @default(uuid())
+  registrationNumber  String              @unique
   brandName           String
   genericName         String
   dosageStrength      String
@@ -303,6 +301,7 @@ model MedicationRegistry {
   registrationDate    DateTime
   expiryDate          DateTime?
   medications         Medication[]
+  hospitalDrugStock   HospitalDrugStock[]
 
   @@index([brandName])
   @@index([genericName])
@@ -345,38 +344,33 @@ model Medication {
 }
 
 model HospitalDrugStock {
-  id                   String    @id @default(uuid())
-  hospitalId           String
-  name                 String
-  description          String?
-  category             String?
-  unitPrice            Float
-  quantity             Int       @default(0)
-  requiresPrescription Boolean   @default(false)
-  expiryDate           DateTime?
-  manufacturer         String?
-  batchNumber          String?
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
-  hospital             Hospital  @relation(fields: [hospitalId], references: [id])
+  hospitalId  String
+  drugId      String
+  quantity    Int                @default(0)
+  unitPrice   Decimal            @db.Decimal(12, 2)
+  expiryDate  DateTime
+  lastUpdated DateTime           @default(now()) @updatedAt
+  hospital    Hospital           @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  drug        MedicationRegistry @relation(fields: [drugId], references: [id], onDelete: Cascade)
 
+  @@id([drugId, hospitalId])
   @@map("hospital_drug_stock")
 }
 
 model Invoice {
-  id               String            @id @default(uuid())
-  hospitalId       String
-  patientId        String
-  totalAmount      Decimal           @db.Decimal(12, 2)
-  status           InvoiceStatus     @default(UNPAID)
-  dueDate          DateTime
-  createdAt        DateTime          @default(now())
-  paymentId        String?
-  hospitalPayments HospitalPayment[]
-  items            InvoiceItem[]
-  hospital         Hospital          @relation(fields: [hospitalId], references: [id])
-  patient          Patient           @relation(fields: [patientId], references: [id])
-  payment          Payment?          @relation(fields: [paymentId], references: [id])
+  id            String            @id @default(uuid())
+  hospitalId    String
+  patientId     String
+  totalAmount   Decimal           @db.Decimal(12, 2)
+  status        InvoiceStatus     @default(UNPAID)
+  appointmentId String?           @unique
+  dueDate       DateTime
+  createdAt     DateTime          @default(now())
+  hospital      Hospital          @relation(fields: [hospitalId], references: [id])
+  patient       Patient           @relation(fields: [patientId], references: [id])
+  appointment   Appointment?      @relation(fields: [appointmentId], references: [id])
+  items         InvoiceItem[]
+  payments      HospitalPayment[]
 
   @@map("invoices")
 }
@@ -409,11 +403,30 @@ model Appointment {
   patient         Patient           @relation(fields: [patientId], references: [id])
   prescriptions   Prescription[]
   hospitalInvoice HospitalInvoice?
+  triageVitals    TriageVitals?
+  invoice         Invoice?
 
   @@index([patientId])
   @@index([hospitalId])
   @@index([doctorId])
   @@map("appointments")
+}
+
+model TriageVitals {
+  id               String   @id @default(uuid())
+  appointmentId    String   @unique
+  bloodPressure    String
+  temperature      Float
+  weight           Float
+  heartRate        Int
+  oxygenSaturation Int
+  nurseNotes       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("triagevitals")
 }
 
 model Prescription {
@@ -574,7 +587,6 @@ model Payment {
   paymentResponse       Json?
   createdAt             DateTime      @default(now())
   updatedAt             DateTime      @updatedAt
-  invoices              Invoice[]
   order                 Order         @relation(fields: [orderId], references: [id], onDelete: Cascade)
 
   @@index([orderId])
@@ -822,6 +834,9 @@ enum AppointmentStatus {
   COMPLETED
   CANCELLED
   NO_SHOW
+  ARRIVED
+  IN_TRIAGE
+  READY_FOR_DOCTOR
 }
 
 enum InvoiceStatus {
@@ -866,9 +881,9 @@ model HospitalInvoice {
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
 
-  appointment Appointment          @relation(fields: [appointmentId], references: [id])
-  patient     Patient              @relation(fields: [patientId], references: [id])
-  hospital    Hospital             @relation(fields: [hospitalId], references: [id])
+  appointment Appointment           @relation(fields: [appointmentId], references: [id])
+  patient     Patient               @relation(fields: [patientId], references: [id])
+  hospital    Hospital              @relation(fields: [hospitalId], references: [id])
   items       HospitalInvoiceItem[]
 
   @@index([patientId])
@@ -881,12 +896,12 @@ model HospitalInvoice {
 }
 
 model HospitalInvoiceItem {
-  id          String          @id @default(uuid())
+  id          String  @id @default(uuid())
   invoiceId   String
   description String
   quantity    Int
-  unitCost    Decimal         @db.Decimal(12, 2)
-  subtotal    Decimal         @db.Decimal(12, 2)
+  unitCost    Decimal @db.Decimal(12, 2)
+  subtotal    Decimal @db.Decimal(12, 2)
 
   invoice HospitalInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
