@@ -418,6 +418,16 @@ export class OrdersService {
       },
     });
 
+    // Restore stock if transitioning to CANCELLED
+    if (dto.status === 'CANCELLED') {
+      for (const item of order.orderItems) {
+        await this.medicationsService.restoreStock(
+          item.medicationId,
+          item.quantity,
+        );
+      }
+    }
+
     // Send notifications based on status
     await this.sendStatusNotification(updated);
 
@@ -510,11 +520,12 @@ export class OrdersService {
 
   private validateStatusTransition(currentStatus: string, newStatus: string) {
     const validTransitions: Record<string, string[]> = {
-      PENDING: ['PREPARING', 'CANCELLED'],
-      PREPARING: ['READY', 'READY_FOR_PICKUP'],
+      PENDING: ['ACCEPTED', 'PREPARING', 'CANCELLED'],
+      ACCEPTED: ['PREPARING', 'CANCELLED'],
+      PREPARING: ['READY', 'READY_FOR_PICKUP', 'OUT_FOR_DELIVERY', 'CANCELLED'],
       READY: ['OUT_FOR_DELIVERY'],
-      OUT_FOR_DELIVERY: ['DELIVERED'],
-      READY_FOR_PICKUP: ['COMPLETED'],
+      OUT_FOR_DELIVERY: ['DELIVERED', 'CANCELLED'],
+      READY_FOR_PICKUP: ['COMPLETED', 'CANCELLED'],
       DELIVERED: ['COMPLETED'],
     };
 
