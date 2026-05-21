@@ -18,7 +18,7 @@ describe('Hospital Dashboard Stats (e2e)', () => {
   let emptyHospitalAdminUser: any;
   let testHospital: any;
   let emptyHospital: any;
-  
+
   let adminToken: string;
   let otherAdminToken: string;
   let emptyAdminToken: string;
@@ -39,64 +39,64 @@ describe('Hospital Dashboard Stats (e2e)', () => {
       where: {
         invoice: {
           hospital: {
-            name: { startsWith: 'TEST_STATS_' }
-          }
-        }
-      }
+            name: { startsWith: 'TEST_STATS_' },
+          },
+        },
+      },
     });
 
     await prisma.hospitalInvoice.deleteMany({
       where: {
         hospital: {
-          name: { startsWith: 'TEST_STATS_' }
-        }
-      }
+          name: { startsWith: 'TEST_STATS_' },
+        },
+      },
     });
 
     await prisma.appointment.deleteMany({
       where: {
         hospital: {
-          name: { startsWith: 'TEST_STATS_' }
-        }
-      }
+          name: { startsWith: 'TEST_STATS_' },
+        },
+      },
     });
 
     await prisma.hospitalPatientRegistration.deleteMany({
       where: {
         hospital: {
-          name: { startsWith: 'TEST_STATS_' }
-        }
-      }
+          name: { startsWith: 'TEST_STATS_' },
+        },
+      },
     });
 
     await prisma.doctorSchedule.deleteMany({
       where: {
         doctor: {
           hospital: {
-            name: { startsWith: 'TEST_STATS_' }
-          }
-        }
-      }
+            name: { startsWith: 'TEST_STATS_' },
+          },
+        },
+      },
     });
 
     await prisma.doctor.deleteMany({
       where: {
         hospital: {
-          name: { startsWith: 'TEST_STATS_' }
-        }
-      }
+          name: { startsWith: 'TEST_STATS_' },
+        },
+      },
     });
 
     await prisma.hospital.deleteMany({
       where: {
-        name: { startsWith: 'TEST_STATS_' }
-      }
+        name: { startsWith: 'TEST_STATS_' },
+      },
     });
 
     await prisma.user.deleteMany({
       where: {
-        email: { startsWith: 'test_stats_' }
-      }
+        email: { startsWith: 'test_stats_' },
+      },
     });
 
     // Create 1st hospital admin user
@@ -150,9 +150,18 @@ describe('Hospital Dashboard Stats (e2e)', () => {
     });
 
     // Generate tokens
-    adminToken = jwtService.sign({ sub: hospitalAdminUser.id, role: hospitalAdminUser.role });
-    otherAdminToken = jwtService.sign({ sub: otherAdminUser.id, role: otherAdminUser.role });
-    emptyAdminToken = jwtService.sign({ sub: emptyHospitalAdminUser.id, role: emptyHospitalAdminUser.role });
+    adminToken = jwtService.sign({
+      sub: hospitalAdminUser.id,
+      role: hospitalAdminUser.role,
+    });
+    otherAdminToken = jwtService.sign({
+      sub: otherAdminUser.id,
+      role: otherAdminUser.role,
+    });
+    emptyAdminToken = jwtService.sign({
+      sub: emptyHospitalAdminUser.id,
+      role: emptyHospitalAdminUser.role,
+    });
 
     // Seed data for testHospital:
     // 1. Doctors (1 active/available, 1 inactive/unavailable)
@@ -168,6 +177,8 @@ describe('Hospital Dashboard Stats (e2e)', () => {
       data: {
         user: { connect: { id: docUser1.id } },
         hospital: { connect: { id: testHospital.id } },
+        firstName: 'StatsDocOne',
+        lastName: 'Test',
         specialization: 'Cardiology',
         licenseNumber: 'TEST-LIC-1',
         isAvailable: true,
@@ -186,6 +197,8 @@ describe('Hospital Dashboard Stats (e2e)', () => {
       data: {
         user: { connect: { id: docUser2.id } },
         hospital: { connect: { id: testHospital.id } },
+        firstName: 'StatsDocTwo',
+        lastName: 'Test',
         specialization: 'Pediatrics',
         licenseNumber: 'TEST-LIC-2',
         isAvailable: false,
@@ -221,8 +234,16 @@ describe('Hospital Dashboard Stats (e2e)', () => {
 
     // 3. Appointments (past and future)
     const now = new Date();
-    const pastDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() - 5);
-    const futureDate = new Date(now.getFullYear(), now.getMonth(), now.getDate() + 5);
+    const pastDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() - 5,
+    );
+    const futureDate = new Date(
+      now.getFullYear(),
+      now.getMonth(),
+      now.getDate() + 5,
+    );
 
     const apptCompleted = await prisma.appointment.create({
       data: {
@@ -273,64 +294,64 @@ describe('Hospital Dashboard Stats (e2e)', () => {
       where: {
         invoice: {
           hospital: {
-            name: { startsWith: 'TEST_STATS_' }
-          }
-        }
-      }
+            name: { startsWith: 'TEST_STATS_' },
+          },
+        },
+      },
     });
 
     await prisma.hospitalInvoice.deleteMany({
       where: {
         hospital: {
-          name: { startsWith: 'TEST_STATS_' }
-        }
-      }
+          name: { startsWith: 'TEST_STATS_' },
+        },
+      },
     });
 
     await prisma.appointment.deleteMany({
       where: {
         hospital: {
-          name: { startsWith: 'TEST_STATS_' }
-        }
-      }
+          name: { startsWith: 'TEST_STATS_' },
+        },
+      },
     });
 
     await prisma.hospitalPatientRegistration.deleteMany({
       where: {
         hospital: {
-          name: { startsWith: 'TEST_STATS_' }
-        }
-      }
+          name: { startsWith: 'TEST_STATS_' },
+        },
+      },
     });
 
     await prisma.doctorSchedule.deleteMany({
       where: {
         doctor: {
           hospital: {
-            name: { startsWith: 'TEST_STATS_' }
-          }
-        }
-      }
+            name: { startsWith: 'TEST_STATS_' },
+          },
+        },
+      },
     });
 
     await prisma.doctor.deleteMany({
       where: {
         hospital: {
-          name: { startsWith: 'TEST_STATS_' }
-        }
-      }
+          name: { startsWith: 'TEST_STATS_' },
+        },
+      },
     });
 
     await prisma.hospital.deleteMany({
       where: {
-        name: { startsWith: 'TEST_STATS_' }
-      }
+        name: { startsWith: 'TEST_STATS_' },
+      },
     });
 
     await prisma.user.deleteMany({
       where: {
-        email: { startsWith: 'test_stats_' }
-      }
+        email: { startsWith: 'test_stats_' },
+      },
     });
 
     await app.close();

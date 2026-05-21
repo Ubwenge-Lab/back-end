@@ -458,7 +458,9 @@ async function main() {
       skipDuplicates: true,
     });
   } else {
-    console.warn(`⚠️  CSV not found at ${csvFilePath} — skipping registry import`);
+    console.warn(
+      `⚠️  CSV not found at ${csvFilePath} — skipping registry import`,
+    );
   }
 
   // Fetch registry items (may be empty if CSV was skipped)
@@ -506,7 +508,9 @@ async function main() {
   // The actual DB table uses a composite key (drugId, hospitalId) with no id/name columns,
   // which is out of sync with the current Prisma schema. This table is not required
   // for the dashboard stats engine (stats are derived from appointments & hospital_invoices).
-  console.log('⚠️  Skipping HospitalDrugStock seeding (schema/DB mismatch — not needed for stats engine)');
+  console.log(
+    '⚠️  Skipping HospitalDrugStock seeding (schema/DB mismatch — not needed for stats engine)',
+  );
 
   // --- 6. Appointments & Prescriptions ---
   console.log('📅 Seeding Appointments & Prescriptions...');

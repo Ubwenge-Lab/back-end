@@ -45,7 +45,7 @@ export class AuthService {
     private patientsService: PatientsService,
     private pharmaciesService: PharmaciesService,
     private notificationsService: NotificationsService,
-  ) { }
+  ) {}
 
   // ========================================
   // LOGIN (For ALL users including SUPER_ADMIN)
