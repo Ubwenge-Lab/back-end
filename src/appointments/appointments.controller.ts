@@ -3,6 +3,7 @@ import {
   Post,
   Get,
   Patch,
+  Put,
   Param,
   Body,
   Req,
@@ -15,13 +16,19 @@ import {
   ApiOperation,
   ApiBearerAuth,
   ApiParam,
+  ApiResponse,
 } from '@nestjs/swagger';
 import { AppointmentsService } from './appointments.service';
-import { BookAppointmentDto, UpdateAppointmentStatusDto, CompleteConsultDto } from './dto';
+import {
+  BookAppointmentDto,
+  UpdateAppointmentStatusDto,
+  CompleteConsultDto,
+} from './dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
+import { TriageVitalsDto } from './dto/triage-vitals.dto';
 
 @ApiTags('Appointments')
 @Controller('appointments')
@@ -118,4 +125,71 @@ export class AppointmentsController {
       dto,
     );
   }
+
+  // ========================================
+  // PUT /appointments/:id/check-in — receptionist checks in patient
+  // ========================================
+
+  @Put(':id/check-in')
+  // @Roles(Role.RECEPTIONIST)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Check in an arrived patient',
+    description: 'Receptionist marks the patient as physically present. Status changes from SCHEDULED → ARRIVED.',
+  })
+  @ApiParam({ name: 'id', description: 'Appointment UUID' })
+  @ApiResponse({ status: 200, description: 'Status updated to ARRIVED.' })
+  @ApiResponse({ status: 404, description: 'Appointment not found.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Appointment is not in SCHEDULED status.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Not a staff member at this hospital.',
+  })
+  checkIn(
+    @Req() req: any,
+    @Param('id') appointmentId: string,
+  ) {
+    return this.appointmentsService.checkIn(appointmentId, req.user.sub);
+  }
+
+  // ========================================
+  // POST /appointments/:id/triage — nurse records vitals
+  // ========================================
+
+  @Post(':id/triage')
+  @Roles(Role.NURSE)
+  @ApiOperation({
+    summary: 'Record triage vitals',
+    description:
+      'Nurse captures clinical vitals. Creates TriageVitals record and advances status to READY_FOR_DOCTOR.',
+  })
+  @ApiParam({ name: 'id', description: 'Appointment UUID' })
+  @ApiResponse({
+    status: 201,
+    description: 'Vitals saved, status READY_FOR_DOCTOR.',
+  })
+  @ApiResponse({ status: 404, description: 'Appointment not found.' })
+  @ApiResponse({
+    status: 409,
+    description: 'Not in ARRIVED status, or vitals already exist.',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Not a staff member at this hospital.',
+  })
+  recordTriage(
+    @Req() req: any,
+    @Param('id') appointmentId: string,
+    @Body() dto: TriageVitalsDto,
+  ) {
+    return this.appointmentsService.recordTriage(
+      appointmentId,
+      req.user.sub,
+      dto,
+    );
+  }
+
 }

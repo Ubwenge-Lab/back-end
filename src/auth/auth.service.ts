@@ -643,8 +643,10 @@ export class AuthService {
           data: {
             userId: user.id,
             hospitalId: hospital.id,
-            specialization: dto.specialization!,
-            licenseNumber: dto.licenseNumber!,
+            firstName: dto.firstName,
+            lastName: dto.lastName,
+            specialization: dto.specialization,
+            licenseNumber: dto.licenseNumber,
             bio: dto.bio,
           },
         });
