@@ -45,7 +45,7 @@ export class AuthService {
     private patientsService: PatientsService,
     private pharmaciesService: PharmaciesService,
     private notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   // ========================================
   // LOGIN (For ALL users including SUPER_ADMIN)
@@ -641,10 +641,12 @@ export class AuthService {
       if (dto.role === 'DOCTOR') {
         await tx.doctor.create({
           data: {
-            user: { connect: { id: user.id } },
-            hospital: { connect: { id: hospital.id } },
-            specialization: dto.specialization!,
-            licenseNumber: dto.licenseNumber!,
+            userId: user.id,
+            hospitalId: hospital.id,
+            firstName: dto.firstName,
+            lastName: dto.lastName,
+            specialization: dto.specialization,
+            licenseNumber: dto.licenseNumber,
             bio: dto.bio,
           },
         });

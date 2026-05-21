@@ -13,6 +13,7 @@ import {
   CompleteConsultDto,
 } from './dto';
 import { AppointmentStatus } from '@prisma/client';
+import { TriageVitalsDto } from './dto/triage-vitals.dto';
 
 @Injectable()
 export class AppointmentsService {
@@ -423,6 +424,115 @@ export class AppointmentsService {
       data: { status: dto.status },
       include: appointmentInclude,
     });
+  }
+
+  // ========================================
+  // CHECK IN — receptionist marks patient as arrived
+  // ========================================
+
+  async checkIn(appointmentId: string, userId: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    await this.assertHospitalStaff(userId, appointment.hospitalId);
+
+    if (appointment.status !== AppointmentStatus.SCHEDULED) {
+      throw new ConflictException(
+        `Cannot check in appointment with status "${appointment.status}". ` +
+          `Appointment must be SCHEDULED.`,
+      );
+    }
+
+    return this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { status: AppointmentStatus.ARRIVED },
+      include: { patient: true, doctor: true, hospital: true },
+    });
+  }
+
+  // ========================================
+  // RECORD TRIAGE — nurse captures vitals
+  // ========================================
+
+  async recordTriage(
+    appointmentId: string,
+    userId: string,
+    dto: TriageVitalsDto,
+  ) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { triageVitals: true },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    await this.assertHospitalStaff(userId, appointment.hospitalId);
+
+    if (appointment.status !== AppointmentStatus.ARRIVED) {
+      throw new ConflictException(
+        `Cannot triage appointment with status "${appointment.status}". ` +
+          `Patient must be checked in (ARRIVED) first.`,
+      );
+    }
+
+    if (appointment.triageVitals) {
+      throw new ConflictException(
+        'Triage vitals already recorded for this appointment.',
+      );
+    }
+
+    return this.prisma.$transaction(async (tx) => {
+      await tx.appointment.update({
+        where: { id: appointmentId },
+        data: { status: AppointmentStatus.IN_TRIAGE },
+      });
+
+      await tx.triageVitals.create({
+        data: {
+          appointmentId,
+          bloodPressure: dto.bloodPressure,
+          temperature: dto.temperature,
+          weight: dto.weight,
+          heartRate: dto.heartRate,
+          oxygenSaturation: dto.oxygenSaturation,
+          nurseNotes: dto.notes,
+        },
+      });
+
+      return tx.appointment.update({
+        where: { id: appointmentId },
+        data: { status: AppointmentStatus.READY_FOR_DOCTOR },
+        include: {
+          patient: true,
+          doctor: true,
+          hospital: true,
+          triageVitals: true,
+        },
+      });
+    });
+  }
+
+  // ========================================
+  // ASSERT HOSPITAL STAFF — shared guard
+  // ========================================
+
+  private async assertHospitalStaff(userId: string, hospitalId: string) {
+    const staff = await this.prisma.hospitalStaff.findFirst({
+      where: { userId, hospitalId },
+    });
+
+    if (!staff) {
+      throw new ForbiddenException(
+        'You are not authorised to act on appointments at this hospital.',
+      );
+    }
   }
 }
 
