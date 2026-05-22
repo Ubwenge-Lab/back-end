@@ -519,6 +519,74 @@ export class AppointmentsService {
     });
   }
 
+
+  async getDoctorPatientChart(appointmentId: string, doctorUserId: string) {
+  // 1. Extract context of the target appointment session
+  const appointment = await this.prisma.appointment.findUnique({
+    where: { id: appointmentId },
+  });
+
+  if (!appointment) {
+    throw new NotFoundException('Appointment session record not found');
+  }
+
+  // 2. Verify Doctor profile and multi-tenant hospital alignment
+  const doctor = await this.prisma.doctor.findUnique({
+    where: { userId: doctorUserId },
+  });
+
+  if (!doctor || appointment.hospitalId !== doctor.hospitalId) {
+    throw new ForbiddenException('Access Denied: You can only view clinical charts within your assigned hospital');
+  }
+
+  // 3. Extract the last 5 triage vitals from structured historical appointments
+  const pastAppointmentsWithVitals = await this.prisma.appointment.findMany({
+    where: {
+      patientId: appointment.patientId,
+      triageVitals: { isNot: null },
+    },
+    orderBy: { date: 'desc' },
+    take: 5,
+    include: { triageVitals: true },
+  });
+
+  // 4. Extract the last 3 clean historical diagnoses text definitions
+  const pastPrescriptionsWithDiagnoses = await this.prisma.prescription.findMany({
+    where: {
+      patientId: appointment.patientId,
+      AND: [
+        { diagnosis: { not: null } },
+        { diagnosis: { not: '' } },
+      ],
+    },
+    orderBy: { createdAt: 'desc' },
+    take: 3,
+  });
+
+  // 5. Query active, non-fulfilled pending treatment orders
+  const activePrescriptions = await this.prisma.prescription.findMany({
+    where: {
+      patientId: appointment.patientId,
+      status: 'PENDING', // Pulls active, non-fulfilled records awaiting medication dispatch
+    },
+    include: { prescriptionMedications: true },
+    orderBy: { createdAt: 'desc' },
+  });
+
+  return {
+    last5Vitals: pastAppointmentsWithVitals.map(app => app.triageVitals),
+    recentDiagnoses: pastPrescriptionsWithDiagnoses.map(pres => ({
+      date: pres.createdAt,
+      diagnosis: pres.diagnosis,
+      notes: pres.notes,
+    })),
+    activePrescriptions,
+  };
+}
+
+
+
+
   // ========================================
   // ASSERT HOSPITAL STAFF — shared guard
   // ========================================
