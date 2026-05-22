@@ -11,6 +11,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from './notifications/email.service';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { QueryLoggerInterceptor } from './common/interceptors/query-logger.interceptor';
 
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
@@ -74,10 +75,14 @@ async function bootstrap() {
       transform: true,
     }),
   );
+
   // Global Exception Handling
   const configService = app.get(ConfigService);
   const emailService = app.get(EmailService);
   app.useGlobalFilters(new GlobalExceptionFilter(configService, emailService));
+
+  // Request timing & slow-query monitoring (DB Optimization — Sprint 2 Task 3)
+  app.useGlobalInterceptors(new QueryLoggerInterceptor());
 
   // Swagger API Documentation
   const config = new DocumentBuilder()
@@ -104,7 +109,7 @@ async function bootstrap() {
 
 bootstrap().catch((err) => {
   // Winston not available if bootstrap failed — fall back to stderr
-  // eslint-disable-next-line no-console
+
   console.error('❌ Failed to start application:', err);
   process.exit(1);
 });

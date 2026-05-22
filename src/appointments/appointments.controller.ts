@@ -78,7 +78,9 @@ export class AppointmentsController {
   @Post(':id/consult')
   @Roles(Role.DOCTOR)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Complete consultation and generate invoice (Doctor only)' })
+  @ApiOperation({
+    summary: 'Complete consultation and generate invoice (Doctor only)',
+  })
   @ApiParam({ name: 'id', description: 'Appointment UUID' })
   completeConsult(
     @Req() req: any,
@@ -135,7 +137,8 @@ export class AppointmentsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Check in an arrived patient',
-    description: 'Receptionist marks the patient as physically present. Status changes from SCHEDULED → ARRIVED.',
+    description:
+      'Receptionist marks the patient as physically present. Status changes from SCHEDULED → ARRIVED.',
   })
   @ApiParam({ name: 'id', description: 'Appointment UUID' })
   @ApiResponse({ status: 200, description: 'Status updated to ARRIVED.' })
@@ -148,10 +151,7 @@ export class AppointmentsController {
     status: 403,
     description: 'Not a staff member at this hospital.',
   })
-  checkIn(
-    @Req() req: any,
-    @Param('id') appointmentId: string,
-  ) {
+  checkIn(@Req() req: any, @Param('id') appointmentId: string) {
     return this.appointmentsService.checkIn(appointmentId, req.user.sub);
   }
 
@@ -191,5 +191,4 @@ export class AppointmentsController {
       dto,
     );
   }
-
 }

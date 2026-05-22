@@ -31,7 +31,7 @@ import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
 
 // IMPORTS FOR SECURITY THROTTLING
-  import { Throttle, SkipThrottle } from '@nestjs/throttler';
+import { Throttle, SkipThrottle } from '@nestjs/throttler';
 
 @ApiTags('Authentication')
 @Controller('auth')

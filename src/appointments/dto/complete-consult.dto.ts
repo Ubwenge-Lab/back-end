@@ -31,7 +31,8 @@ export class ConsultItemDto {
 export class CompleteConsultDto {
   @ApiPropertyOptional({
     type: [ConsultItemDto],
-    description: 'Additional line items beyond consultation/triage fees seeded from hospital config',
+    description:
+      'Additional line items beyond consultation/triage fees seeded from hospital config',
   })
   @IsOptional()
   @IsArray()
