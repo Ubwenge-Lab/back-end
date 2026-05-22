@@ -337,6 +337,9 @@ model Medication {
   transferItems           StockTransferItem[]
 
   @@index([branchId])
+  // Composite indexes for low-stock alert queries (pharmacyId + quantity, branchId + quantity)
+  @@index([pharmacyId, quantity])
+  @@index([branchId, quantity])
   @@map("medications")
 }
 
@@ -546,6 +549,11 @@ model Order {
   @@index([patientId])
   @@index([pharmacyId])
   @@index([status])
+  // Composite indexes for multi-column dashboard revenue queries
+  @@index([pharmacyId, status, createdAt])
+  @@index([branchId, status, createdAt])
+  @@index([pharmacyId, createdAt])
+  @@index([branchId, createdAt])
   @@map("orders")
 }
 
@@ -625,6 +633,9 @@ model Notification {
   @@index([pharmacyId])
   @@index([orderId])
   @@index([isRead])
+  // Composite indexes for unread notification badge queries
+  @@index([pharmacyId, isRead])
+  @@index([patientId, isRead])
   @@map("notifications")
 }
 
@@ -657,6 +668,8 @@ model Attendance {
   @@index([branchId])
   @@index([clockInTime])
   @@index([status])
+  // Composite index for attendance summary queries (branch + status + date)
+  @@index([branchId, status, clockInTime])
   @@map("attendance")
 }
 
@@ -875,6 +888,10 @@ model HospitalInvoice {
 
   @@index([patientId])
   @@index([hospitalId])
+  // Composite indexes for hospital billing dashboard queries
+  @@index([hospitalId, paymentStatus])
+  @@index([hospitalId, issuedAt])
+  @@index([patientId, paymentStatus])
   @@map("hospital_invoices")
 }
 

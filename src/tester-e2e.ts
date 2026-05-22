@@ -26,7 +26,7 @@ async function fetchWithTimeout(resource: string, options: any = {}) {
 function resolveSchema(ref: string, doc: any) {
   if (!ref) return null;
   const schemaName = ref.split('/').pop();
-  return doc.components.schemas[schemaName!];
+  return doc.components.schemas[schemaName];
 }
 
 function generateDummyPayload(schema: any, doc: any, dbRefs: any) {
@@ -36,8 +36,8 @@ function generateDummyPayload(schema: any, doc: any, dbRefs: any) {
 
   const payload: any = {};
   for (const [key, prop] of Object.entries<any>(schema.properties)) {
-    let type = prop.type;
-    let format = prop.format;
+    const type = prop.type;
+    const format = prop.format;
 
     if (prop.$ref) {
       const subSchema = resolveSchema(prop.$ref, doc);
@@ -458,7 +458,7 @@ async function run() {
       statusIcon = '🔒 ' + res.status;
     if (res.status === 404) statusIcon = '❓ ' + res.status;
 
-    let errorStr = res.error
+    const errorStr = res.error
       ? String(res.error).replace(/\|/g, '-').slice(0, 100).replace(/\n/g, ' ')
       : '-';
     markdown += `| ${res.method} | \`${res.path}\` | ${statusIcon} | ${res.tokenUsed} | ${errorStr} |\n`;
