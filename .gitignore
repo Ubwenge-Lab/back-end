@@ -32,6 +32,7 @@ e2e_output.txt
 *.launch
 .settings/
 *.sublime-workspace
+.swp
 
 # IDE - VSCode
 .vscode/*
@@ -67,28 +68,14 @@ scratch/
 src/prisma/backup-data.ts
 src/prisma/data-backup.json
 src/prisma/test-conn.ts
+src/prisma/check-columns.ts
+src/prisma/check-enum.ts
+src/prisma/check-hospitals-columns.ts
+src/prisma/check-tables.ts
+src/prisma/data-state-backup.json
+src/prisma/patch-enum.ts
+src/prisma/restore-data.ts
 get_exact_ids.ts
 get_ids.ts
 test_checkout.ts
-
-# Testing directories
-tests/
-/tests/
-
-# Beads issue tracker & Dolt (local dev tools — keep off GitHub)
-.beads/
-.dolt/
-*.db
-.beads-credential-key
-
-# AI assistant memory files (local only — keep off GitHub)
-.claude/
-CLAUDE.md
-
-# Security audit reports (sensitive, not project source)
-SECURITY_AUDIT.md
-/reports/
-reports/
-
-# Seed data (large local data files - place manually before seeding)
-medication_registry.csv
+.env.backup

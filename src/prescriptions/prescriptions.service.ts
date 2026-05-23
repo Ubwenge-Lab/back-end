@@ -12,6 +12,7 @@ import { PatientsService } from '../patients/patients.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MedicationsService } from '../medications/medications.service';
 import { CreatePrescriptionDto, UpdatePrescriptionStatusDto } from './dto';
+import { HospitalIssuePrescriptionDto } from './dto/hospital-issue-prescription.dto';
 import { StaffService } from '../staff/staff.service';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
@@ -570,5 +571,46 @@ Do not include any explanation, only the JSON array.`,
       default:
         return 'image/jpeg';
     }
+  }
+  async emitHospitalDigitalPrescription(doctorUserId: string, dto: HospitalIssuePrescriptionDto) {
+    return this.prisma.$transaction(async (tx) => {
+      // this resolves internal doctor profile from user context token
+      const doctor = await tx.doctor.findUnique({ where: { userId: doctorUserId } });
+      if (!doctor) {
+        throw new ForbiddenException('Profile validation failed: active doctor account not found');
+      }
+
+      // Assert tracking encounter exists
+      const appointment = await tx.appointment.findUnique({
+        where: { id: dto.appointmentId },
+      });
+      if (!appointment) {
+        throw new NotFoundException('Target tracking encounter record not found');
+      }
+
+      // Write parent prescription container alongside child array elements atomically
+      return tx.prescription.create({
+        data: {
+          patientId: dto.patientId,
+          doctorId: doctor.id,
+          hospitalId: dto.hospitalId,
+          appointmentId: dto.appointmentId,
+          diagnosis: appointment.diagnosisSummary || 'Clinical Consultation',
+          status: 'PENDING',
+          prescriptionMedications: {
+            create: dto.medications.map((med) => ({
+              medicationName: med.name,
+              dosage: med.dosage,
+              frequency: med.frequency,
+              duration: med.duration,
+              quantity: med.quantity ?? 1,
+            })),
+          },
+        },
+        include: {
+          prescriptionMedications: true,
+        },
+      });
+    });
   }
 }

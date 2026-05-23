@@ -6,7 +6,7 @@ import * as readline from 'readline';
 const prisma = new PrismaClient();
 
 async function main() {
-  const csvFilePath = path.join(__dirname, '../../medication_registry.csv');
+  const csvFilePath = path.join(__dirname, '../../medication-registry.csv');
 
   if (!fs.existsSync(csvFilePath)) {
     console.error(`❌ CSV file not found at: ${csvFilePath}`);
@@ -28,6 +28,8 @@ async function main() {
   let rowCount = 0;
   let successCount = 0;
   let errorCount = 0;
+  const records: any[] = [];
+  const seenRegNos = new Set<string>();
 
   let lineBuffer = '';
   const insideQuotes = false;
@@ -60,7 +62,6 @@ async function main() {
 
     if (rowCount === 0) {
       headers = columns.map((h) => h.toLowerCase().trim());
-      console.log('📝 Headers found:', headers);
       rowCount++;
       continue;
     }
@@ -94,11 +95,6 @@ async function main() {
       const regDateStr = cleanDate(getVal(14, 'registration date'));
       const expDateStr = cleanDate(getVal(15, 'expiry date'));
 
-      // Skip invalid dates - use current date as fallback or handle error?
-      // Schema likely requires valid dates.
-      // If date is invalid, we'll try to parse it, if fail, use default (or maybe skip record?)
-      // Let's use a safe default but log it.
-
       const regDate = parseDate(regDateStr);
       const expDate = parseDate(expDateStr);
 
@@ -120,15 +116,10 @@ async function main() {
         expiryDate: expDate,
       };
 
-      await prisma.medicationRegistry.upsert({
-        where: { registrationNumber: record.registrationNumber },
-        update: record,
-        create: record,
-      });
-
-      successCount++;
-      if (successCount % 100 === 0) {
-        process.stdout.write(`\r✅ Processed ${successCount} records...`);
+      if (!seenRegNos.has(record.registrationNumber)) {
+        seenRegNos.add(record.registrationNumber);
+        records.push(record);
+        successCount++;
       }
     } catch (error) {
       console.error(
@@ -140,6 +131,12 @@ async function main() {
 
     rowCount++;
   }
+
+  console.log(`\n📥 Inserting ${records.length} records into the database...`);
+  await prisma.medicationRegistry.createMany({
+    data: records,
+    skipDuplicates: true,
+  });
 
   console.log(`\n\n✨ Import Completed!`);
   console.log(`✅ Successfully imported: ${successCount}`);

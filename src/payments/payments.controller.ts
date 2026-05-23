@@ -22,6 +22,7 @@ import {
   VerifyPaymentDto,
   MobileMoneyPaymentDto,
   CheckoutDto,
+  RecordPaymentDto,
 } from './dto';
 
 @ApiTags('Payments')
@@ -71,6 +72,14 @@ export class PaymentsController {
     return this.paymentsService.processMtnPayment(data);
   }
 
+  @Get(':paymentId/receipt')
+  @Roles(Role.CASHIER, Role.PHARMACIST, Role.BRANCH_MANAGER)
+  @ApiOperation({ summary: 'Get payment receipt' })
+  getReceipt(@Param('paymentId') paymentId: string, @Req() req: any) {
+    // req.user.sub contains the authenticated User ID
+    return this.paymentsService.getReceipt(paymentId, req.user.sub);
+  }
+
   @Post('checkout')
   @Roles(Role.PATIENT)
   @ApiOperation({
@@ -78,5 +87,14 @@ export class PaymentsController {
   })
   checkout(@Req() req: any, @Body() dto: CheckoutDto) {
     return this.paymentsService.checkout(req.user.sub, dto);
+  }
+
+  @Post('record')
+  @Roles(Role.CASHIER, Role.PHARMACIST, Role.BRANCH_MANAGER)
+  @ApiOperation({
+    summary: 'Record an in-person payment at the branch counter',
+  })
+  recordPayment(@Req() req: any, @Body() dto: RecordPaymentDto) {
+    return this.paymentsService.recordPayment(req.user.sub, dto);
   }
 }

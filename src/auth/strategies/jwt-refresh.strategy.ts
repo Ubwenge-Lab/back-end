@@ -45,6 +45,7 @@ export class JwtRefreshStrategy extends PassportStrategy(
       email: user.email,
       role: user.role,
       refreshToken,
+      ...(payload.hospitalId != null && { hospitalId: payload.hospitalId }),
     };
   }
 }

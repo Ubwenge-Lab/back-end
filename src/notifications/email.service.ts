@@ -564,11 +564,202 @@ export class EmailService {
   }
 
   // ========================================
-  // 8. SUPER ADMIN NOTIFICATIONS
+  // 8. HOSPITAL STAFF CREDENTIALS
+  // ========================================
+
+  async sendHospitalStaffCredentials(
+    email: string,
+    tempPassword: string,
+    hospitalName: string,
+    role: string,
+  ) {
+    const roleLabels: Record<string, string> = {
+      DOCTOR: 'Doctor',
+      NURSE: 'Nurse',
+      RECEPTIONIST: 'Receptionist',
+    };
+    const roleEmojis: Record<string, string> = {
+      DOCTOR: '🩺',
+      NURSE: '💉',
+      RECEPTIONIST: '🗂️',
+    };
+    const label = roleLabels[role.toUpperCase()] ?? role;
+    const emoji = roleEmojis[role.toUpperCase()] ?? '🏥';
+
+    console.log('==========================================');
+    console.log(`📧 HOSPITAL STAFF CREDENTIALS`);
+    console.log(`👤 Email:    ${email}`);
+    console.log(`🏥 Hospital: ${hospitalName}`);
+    console.log(`💼 Role:     ${label}`);
+    console.log(`🔑 Password: ${tempPassword}`);
+    console.log('==========================================');
+
+    if (!this.resend) {
+      console.warn('⚠️  Resend not configured - credentials logged above only');
+      return;
+    }
+
+    const baseUrl = (
+      this.configService.get('FRONTEND_URL') || 'http://localhost:3001'
+    ).replace(/\/$/, '');
+    const loginUrl = `${baseUrl}/login`;
+    const changePasswordUrl = `${baseUrl}/hospital/activate`;
+    const html = this.baseTemplate(`
+      <h2 style="margin:0 0 12px;color:#1a1a2e;font-size:22px;">Hey, welcome aboard! ${emoji}</h2>
+      <p style="margin:0 0 28px;color:#555;font-size:15px;line-height:1.7;">
+        You've been added to <strong>${hospitalName}</strong> as a <strong>${label}</strong> on Evuze Healthcare. We're excited to have you! Here are your login details to get started.
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;margin:0 0 24px;border:1px solid #e8ecf4;">
+        <tr>
+          <td style="padding:16px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Your Email</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${email}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:16px 24px;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Temporary Password</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:20px;font-weight:700;font-family:monospace;letter-spacing:2px;">${tempPassword}</p>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:0 0 20px;color:#555;font-size:14px;line-height:1.7;text-align:center;">
+        This password is valid for <strong>7 days</strong>. You can either set a permanent one right now, or just log in and do it later from your account settings — totally up to you.
+      </p>
+
+      <a href="${changePasswordUrl}"
+         style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#0a1628 0%,#0d9488 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 12px;">
+        Set My Permanent Password
+      </a>
+      <a href="${loginUrl}"
+         style="display:block;text-align:center;padding:12px 24px;background:#ffffff;color:#0d9488;text-decoration:none;border-radius:8px;font-size:14px;font-weight:600;margin:0 0 28px;border:2px solid #0d9488;">
+        I'll Do It Later, Log Me In
+      </a>
+
+      <p style="margin:0;color:#bbb;font-size:12px;text-align:center;line-height:1.6;">
+        Didn't expect this email? Reach out to your hospital admin and they'll sort it out.
+      </p>
+    `);
+
+    try {
+      await this.resend.emails.send({
+        to: email,
+        from: this.getFrom(),
+        subject: `${emoji} Your ${label} Account — ${hospitalName}`,
+        html,
+      });
+      console.log(`✅ Hospital staff credentials email sent to ${email}`);
+    } catch (error) {
+      console.error('❌ Resend error:', error.message);
+      if (this.configService.get('NODE_ENV') === 'production') {
+        throw new InternalServerErrorException(
+          'Failed to send credentials email',
+        );
+      }
+    }
+  }
+
+  // ========================================
+  // 9. APPOINTMENT CONFIRMATION
+  // ========================================
+
+  async sendAppointmentConfirmation(data: {
+    patientEmail: string;
+    patientName: string;
+    doctorName: string;
+    hospitalName: string;
+    date: Date;
+    reason: string;
+  }) {
+    const dateStr = data.date.toLocaleDateString('en-GB', {
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+    const timeStr = data.date.toLocaleTimeString('en-GB', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+
+    console.log('==========================================');
+    console.log(`📅 APPOINTMENT CONFIRMED`);
+    console.log(`👤 Patient:  ${data.patientName} (${data.patientEmail})`);
+    console.log(`🩺 Doctor:   ${data.doctorName}`);
+    console.log(`🏥 Hospital: ${data.hospitalName}`);
+    console.log(`🕐 When:     ${dateStr} at ${timeStr}`);
+    console.log(`📋 Reason:   ${data.reason}`);
+    console.log('==========================================');
+
+    if (!this.resend) {
+      console.warn(
+        '⚠️  Resend not configured - confirmation logged above only',
+      );
+      return;
+    }
+
+    const html = this.baseTemplate(`
+      <h2 style="margin:0 0 12px;color:#1a1a2e;font-size:22px;">Appointment Confirmed ✅</h2>
+      <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.7;">
+        Hi <strong>${data.patientName}</strong>, your appointment has been booked. Here are the details:
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;margin:0 0 24px;border:1px solid #e8ecf4;">
+        <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Doctor</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${data.doctorName}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Hospital</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${data.hospitalName}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Date & Time</p>
+            <p style="margin:4px 0 0;color:#0d9488;font-size:16px;font-weight:700;">${dateStr} at ${timeStr}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Reason for Visit</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;">${data.reason}</p>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:0;color:#bbb;font-size:12px;text-align:center;line-height:1.6;">
+        Need to cancel? Log in to your Evuze account and manage your appointments there.
+      </p>
+    `);
+
+    try {
+      await this.resend.emails.send({
+        to: data.patientEmail,
+        from: this.getFrom(),
+        subject: `✅ Appointment confirmed — ${data.hospitalName}`,
+        html,
+      });
+      console.log(`✅ Appointment confirmation sent to ${data.patientEmail}`);
+    } catch (error) {
+      console.error('❌ Resend error:', error.message);
+    }
+  }
+
+  // ========================================
+  // 10. SUPER ADMIN NOTIFICATIONS
   // ========================================
 
   private getSuperAdminEmail(): string {
-    return this.configService.get<string>('SUPER_ADMIN_EMAIL') || 'd.ntwali@ubwengelab.rw';
+    return (
+      this.configService.get<string>('SUPER_ADMIN_EMAIL') ||
+      'd.ntwali@ubwengelab.rw'
+    );
   }
 
   async sendSuperAdminAlert(
