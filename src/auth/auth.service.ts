@@ -1,4 +1,3 @@
-// backend/src/auth/auth.service.ts
 import { generateMRN } from '../utils/hospital';
 import {
   Injectable,
@@ -68,7 +67,6 @@ export class AuthService {
       throw new UnauthorizedException('Invalid credentials');
     }
 
-    // Check email verification for PATIENT PHARMACY and HOSPITAL_ADMIN
     if (
       !user.isVerified &&
       (user.role === 'PATIENT' ||
@@ -80,7 +78,6 @@ export class AuthService {
       );
     }
 
-    // For SUPER_ADMIN: Check if this is first login (default password)
     if (user.role === 'SUPER_ADMIN') {
       const isDefaultPassword = await bcrypt.compare(
         process.env.SUPER_ADMIN_PASSWORD || 'SuperAdminPower@2025',
@@ -105,7 +102,6 @@ export class AuthService {
       };
     }
 
-    // Check pharmacy approval status
     if (user.role === 'PHARMACY') {
       const pharmacy = await this.pharmaciesService.findByUserId(user.id);
 
@@ -179,7 +175,6 @@ export class AuthService {
       };
     }
 
-    // BRANCH_MANAGER login
     if (user.role === 'BRANCH_MANAGER') {
       const branch = await this.prisma.branch.findFirst({
         where: { managerId: user.id },
@@ -226,15 +221,11 @@ export class AuthService {
       };
     }
 
-    // ========================================
-    // STAFF LOGIN (PHARMACIST, CASHIER, NURSE, DOCTOR, RECEPTIONIST)
-    // ========================================
     if (
       ['PHARMACIST', 'CASHIER', 'NURSE', 'DOCTOR', 'RECEPTIONIST'].includes(
         user.role,
       )
     ) {
-      // Check for regular staff (Pharmacy Branch)
       const staff = await this.prisma.staff.findFirst({
         where: { userId: user.id },
         include: {
@@ -301,7 +292,6 @@ export class AuthService {
         };
       }
 
-      // Check for hospital staff
       const hospitalStaff = await this.prisma.hospitalStaff.findFirst({
         where: { userId: user.id },
         include: { hospital: true },
@@ -351,7 +341,6 @@ export class AuthService {
       throw new UnauthorizedException('Staff profile not found');
     }
 
-    // Generate tokens for PATIENT
     const tokens = await this.generateTokens(user.id, user.email, user.role);
     await this.updateRefreshToken(user.id, tokens.refreshToken);
 
@@ -387,7 +376,6 @@ export class AuthService {
     }
 
     const hashedPassword = await bcrypt.hash(dto.password, 10);
-
     const verificationCode = this.generateVerificationCode();
     const verificationCodeExpiry = new Date(Date.now() + 24 * 60 * 60 * 1000);
 
@@ -641,13 +629,13 @@ export class AuthService {
       if (dto.role === 'DOCTOR') {
         await tx.doctor.create({
           data: {
-            userId: user.id,
-            hospitalId: hospital.id,
+            user: { connect: { id: user.id } },
+            hospital: { connect: { id: hospital.id } },
             firstName: dto.firstName,
             lastName: dto.lastName,
             specialization: dto.specialization,
             licenseNumber: dto.licenseNumber,
-            bio: dto.bio,
+            bio: dto.bio || '',
           },
         });
       }
@@ -676,7 +664,7 @@ export class AuthService {
   }
 
   // ========================================
-  // ACTIVATE HOSPITAL STAFF (no token required — called from email link)
+  // ACTIVATE HOSPITAL STAFF
   // ========================================
 
   async activateHospitalStaff(dto: ActivateHospitalStaffDto) {
@@ -953,7 +941,6 @@ export class AuthService {
       data: { password: hashedPassword, refreshToken: null },
     });
 
-    // Clear temp password if this user is hospital staff
     const hospitalStaff = await this.prisma.hospitalStaff.findFirst({
       where: { userId },
       select: { id: true, tempPasswordHash: true },
@@ -1100,8 +1087,6 @@ export class AuthService {
     return randomInt(100000, 999999).toString();
   }
 
-  // Produces a 12-char password: Ev + 8 base64url chars + 1!
-  // Always contains uppercase, lowercase, digit, and special character.
   private generateTempPassword(): string {
     return `Ev${randomBytes(6).toString('base64url')}1!`;
   }
