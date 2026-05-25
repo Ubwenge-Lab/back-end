@@ -285,6 +285,8 @@ async function main() {
         data: {
           user: { connect: { id: docUser.id } },
           hospital: { connect: { id: hospital.id } },
+          firstName: docUser.firstName || faker.person.firstName(),
+          lastName: docUser.lastName || faker.person.lastName(),
           specialization: faker.helpers.arrayElement([
             'Cardiology',
             'Pediatrics',

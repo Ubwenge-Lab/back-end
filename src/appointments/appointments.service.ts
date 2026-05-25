@@ -20,7 +20,7 @@ export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   // ========================================
   // BOOK APPOINTMENT
@@ -98,9 +98,9 @@ export class AppointmentsService {
       await this.notificationsService.sendAppointmentConfirmation({
         patientEmail: patient.userId
           ? ((await this.prisma.user.findUnique({
-              where: { id: patient.userId },
-              select: { email: true },
-            }))?.email ?? '')
+            where: { id: patient.userId },
+            select: { email: true },
+          }))?.email ?? '')
           : '',
         patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
         doctorName,
@@ -108,6 +108,15 @@ export class AppointmentsService {
         date,
         reason: dto.reason,
       });
+
+      // Send real-time notification
+      await this.notificationsService.create({
+        userId: patientUserId,
+        type: 'APPOINTMENT_BOOKED',
+        title: 'Appointment Confirmed',
+        message: `Your appointment with ${doctorName} is confirmed for ${date.toDateString()}.`,
+      });
+
     } catch (error) {
       console.error('Failed to send appointment confirmation:', error);
     }
@@ -294,6 +303,24 @@ export class AppointmentsService {
       { timeout: 30000 },
     );
 
+    try {
+      await this.notificationsService.create({
+        userId: appointment.patient.userId,
+        type: 'CONSULTATION_COMPLETED',
+        title: 'Consultation Completed',
+        message: 'Your consultation is complete. Your prescription and invoice are ready.',
+      });
+
+      await this.notificationsService.create({
+        userId: appointment.patient.userId,
+        type: 'INVOICE_GENERATED',
+        title: 'Invoice Ready',
+        message: `Invoice #${invoice.id} of RWF ${totalAmount} is ready for payment.`,
+      });
+    } catch (error) {
+      console.error('Failed to send COMPLETED/INVOICE notifications:', error);
+    }
+
     return {
       message: 'Consultation completed and invoice generated.',
       invoice,
@@ -381,15 +408,29 @@ export class AppointmentsService {
     if (appointment.status !== AppointmentStatus.SCHEDULED) {
       throw new ConflictException(
         `Cannot check in appointment with status "${appointment.status}". ` +
-          `Appointment must be SCHEDULED.`,
+        `Appointment must be SCHEDULED.`,
       );
     }
 
-    return this.prisma.appointment.update({
+    const updatedAppointment = await this.prisma.appointment.update({
       where: { id: appointmentId },
       data: { status: AppointmentStatus.ARRIVED },
       include: { patient: true, doctor: true, hospital: true },
     });
+
+    try {
+      await this.notificationsService.create({
+        userId: updatedAppointment.doctor.userId,
+        type: 'PATIENT_ARRIVED',
+        title: 'Patient Arrived',
+        message: `Your next patient, ${updatedAppointment.patient.firstName} ${updatedAppointment.patient.lastName}, has arrived and is being triaged.`,
+      });
+    } catch (error) {
+      console.error('Failed to send PATIENT_ARRIVED notification:', error);
+    }
+
+    return updatedAppointment;
+
   }
 
   // ========================================
@@ -415,7 +456,7 @@ export class AppointmentsService {
     if (appointment.status !== AppointmentStatus.ARRIVED) {
       throw new ConflictException(
         `Cannot triage appointment with status "${appointment.status}". ` +
-          `Patient must be checked in (ARRIVED) first.`,
+        `Patient must be checked in (ARRIVED) first.`,
       );
     }
 
@@ -425,7 +466,7 @@ export class AppointmentsService {
       );
     }
 
-    return this.prisma.$transaction(async (tx) => {
+    const updatedAppointment = await this.prisma.$transaction(async (tx) => {
       await tx.appointment.update({
         where: { id: appointmentId },
         data: { status: AppointmentStatus.IN_TRIAGE },
@@ -454,6 +495,21 @@ export class AppointmentsService {
         },
       });
     });
+
+    // Send real-time notification to the doctor
+    try {
+      await this.notificationsService.create({
+        userId: updatedAppointment.doctor.userId,
+        type: 'READY_FOR_DOCTOR',
+        title: 'Patient Ready',
+        message: `Patient ${updatedAppointment.patient.firstName} ${updatedAppointment.patient.lastName} is ready for consultation.`,
+      });
+    } catch (error) {
+      console.error('Failed to send READY_FOR_DOCTOR notification:', error);
+    }
+
+    return updatedAppointment;
+
   }
 
 

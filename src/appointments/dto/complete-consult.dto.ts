@@ -44,6 +44,14 @@ export class CompleteConsultDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiProperty({ example: 'Acute pharyngitis' })
+  @IsString()
+  @IsNotEmpty()
   diagnosisSummary: string;
+
+  @ApiPropertyOptional({ example: 'Rest and drink warm fluids.' })
+  @IsOptional()
+  @IsString()
   doctorRecommendations?: string;
 }
