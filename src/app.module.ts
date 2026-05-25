@@ -38,7 +38,6 @@ import {
 } from './logger';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
-
 @Module({
   imports: [
     ConfigModule.forRoot({

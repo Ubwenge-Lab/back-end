@@ -22,4 +22,3 @@ import { HospitalsModule } from '../hospitals/hospitals.module';
   exports: [PrescriptionsService],
 })
 export class PrescriptionsModule {}
-

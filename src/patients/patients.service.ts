@@ -1,6 +1,10 @@
 // backend/src/patients/patients.service.ts
 
-import { Injectable, NotFoundException, ForbiddenException } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ForbiddenException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdatePatientDto } from './dto/update-patient.dto';
 
@@ -140,17 +144,19 @@ export class PatientsService {
     return patient;
   }
 
-// ========================================================
+  // ========================================================
   // NEW MASTER MEDICAL HISTORY VIA MRN (Task Requirements)
   // ========================================================
-  async getMasterMedicalHistory(mrn: string, userPayload: any, page: string, limit: string) {
+  async getMasterMedicalHistory(
+    mrn: string,
+    userPayload: any,
+    page: string,
+    limit: string,
+  ) {
     // 1. Resolve patient using either global MRN or a hospital-registered scoped MRN
     const patient = await this.prisma.patient.findFirst({
       where: {
-        OR: [
-          { mrn: mrn },
-          { hospitalRegistrations: { some: { mrn: mrn } } },
-        ],
+        OR: [{ mrn: mrn }, { hospitalRegistrations: { some: { mrn: mrn } } }],
       },
     });
 
@@ -161,7 +167,9 @@ export class PatientsService {
     // 2. Multi-Tenant Role-Based Privacy Guard
     if (userPayload.role === 'PATIENT') {
       if (patient.userId !== userPayload.sub) {
-        throw new ForbiddenException('You can only access your own medical records');
+        throw new ForbiddenException(
+          'You can only access your own medical records',
+        );
       }
     } else if (userPayload.role === 'DOCTOR') {
       const doctor = await this.prisma.doctor.findUnique({
@@ -170,16 +178,19 @@ export class PatientsService {
       if (!doctor) {
         throw new ForbiddenException('Doctor clinical profile not found');
       }
-      
+
       // Enforce boundary: Doctor can only see patients registered in their specific hospital
-      const isRegisteredAtHospital = await this.prisma.hospitalPatientRegistration.findFirst({
-        where: {
-          patientId: patient.id,
-          hospitalId: doctor.hospitalId,
-        },
-      });
+      const isRegisteredAtHospital =
+        await this.prisma.hospitalPatientRegistration.findFirst({
+          where: {
+            patientId: patient.id,
+            hospitalId: doctor.hospitalId,
+          },
+        });
       if (!isRegisteredAtHospital) {
-        throw new ForbiddenException('Access Denied: Patient is not registered at your hospital');
+        throw new ForbiddenException(
+          'Access Denied: Patient is not registered at your hospital',
+        );
       }
     }
 

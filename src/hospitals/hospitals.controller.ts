@@ -176,7 +176,8 @@ export class HospitalsController {
   @Get(':id/drug-stock')
   @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.PHARMACIST)
   @ApiOperation({
-    summary: 'List all drugs in hospital inventory with stock levels and alerts',
+    summary:
+      'List all drugs in hospital inventory with stock levels and alerts',
   })
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
   getDrugStock(@Param('id') id: string) {

@@ -361,9 +361,7 @@ export class HospitalsService {
       },
     });
     if (!existing) {
-      throw new NotFoundException(
-        'Drug not found in hospital stock inventory',
-      );
+      throw new NotFoundException('Drug not found in hospital stock inventory');
     }
 
     const data: Record<string, unknown> = {};

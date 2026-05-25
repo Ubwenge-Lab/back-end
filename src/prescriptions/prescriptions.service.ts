@@ -19,6 +19,7 @@ import { StaffService } from '../staff/staff.service';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { PrescriptionMedication } from '@prisma/client';
 
 interface ExtractedMedication {
   name: string;
@@ -532,7 +533,10 @@ Do not include any explanation, only the JSON array.`,
           message: 'Your prescription has been approved and is ready.',
         });
       } catch (error) {
-        console.error('Failed to send PRESCRIPTION_DISPATCHED notification:', error);
+        console.error(
+          'Failed to send PRESCRIPTION_DISPATCHED notification:',
+          error,
+        );
       }
     }
 
@@ -631,8 +635,7 @@ Do not include any explanation, only the JSON array.`,
             doctorId: doctor.id,
             hospitalId: dto.hospitalId,
             appointmentId: dto.appointmentId,
-            diagnosis:
-              appointment.diagnosisSummary || 'Clinical Consultation',
+            diagnosis: appointment.diagnosisSummary || 'Clinical Consultation',
             status: 'APPROVED',
           },
         });
@@ -652,7 +655,7 @@ Do not include any explanation, only the JSON array.`,
           });
         }
 
-        const prescriptionMeds: any[] = [];
+        const prescriptionMeds: PrescriptionMedication[] = [];
         let invoiceAddedTotal = 0;
 
         for (const med of dto.medications) {
@@ -664,12 +667,8 @@ Do not include any explanation, only the JSON array.`,
 
           const matchedStock = stockItems.find(
             (s) =>
-              s.drug.brandName
-                .toLowerCase()
-                .includes(med.name.toLowerCase()) ||
-              s.drug.genericName
-                .toLowerCase()
-                .includes(med.name.toLowerCase()),
+              s.drug.brandName.toLowerCase().includes(med.name.toLowerCase()) ||
+              s.drug.genericName.toLowerCase().includes(med.name.toLowerCase()),
           );
 
           const qty = med.quantity ?? 1;
@@ -783,12 +782,10 @@ Do not include any explanation, only the JSON array.`,
           },
           summary: {
             totalDrugs: dto.medications.length,
-            hospitalDispensed: prescriptionMeds.filter(
-              (m) => m.isHospitalMed,
-            ).length,
-            routedToPharmacy: prescriptionMeds.filter(
-              (m) => !m.isHospitalMed,
-            ).length,
+            hospitalDispensed: prescriptionMeds.filter((m) => m.isHospitalMed)
+              .length,
+            routedToPharmacy: prescriptionMeds.filter((m) => !m.isHospitalMed)
+              .length,
           },
         };
       },
@@ -829,16 +826,16 @@ Do not include any explanation, only the JSON array.`,
     // Group by pharmacy
     const byPharmacy = new Map<string, typeof externalItems>();
     for (const item of externalItems) {
-      const pid = item.pharmacyId!;
+      const pid = item.pharmacyId;
       if (!byPharmacy.has(pid)) byPharmacy.set(pid, []);
-      byPharmacy.get(pid)!.push(item);
+      byPharmacy.get(pid).push(item);
     }
 
     const createdOrders: any[] = [];
 
     await this.prisma.$transaction(
       async (tx) => {
-        for (const [pharmacyId, items] of byPharmacy.entries()) {
+        for (const pharmacyId of byPharmacy.keys()) {
           const total = 0; // Price TBD by pharmacy
           const order = await tx.order.create({
             data: {
