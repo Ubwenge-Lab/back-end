@@ -312,4 +312,139 @@ export class HospitalsService {
     }
     return hospital;
   }
+
+  // ========================================
+  // DRUG STOCK MANAGEMENT
+  // ========================================
+
+  async getDrugStock(hospitalId: string) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+    if (!hospital) throw new NotFoundException('Hospital not found');
+
+    const stock = await this.prisma.hospitalDrugStock.findMany({
+      where: { hospitalId },
+      include: {
+        drug: {
+          select: {
+            brandName: true,
+            genericName: true,
+            dosageStrength: true,
+            dosageForm: true,
+          },
+        },
+      },
+      orderBy: { lastUpdated: 'desc' },
+    });
+
+    return stock.map((item) => ({
+      ...item,
+      lowStockAlert: item.quantity <= item.reorderLevel,
+    }));
+  }
+
+  async updateDrugStock(
+    hospitalId: string,
+    drugId: string,
+    dto: { qtyOnHand?: number; reorderLevel?: number },
+  ) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+    if (!hospital) throw new NotFoundException('Hospital not found');
+
+    // Verify the drug stock entry exists
+    const existing = await this.prisma.hospitalDrugStock.findUnique({
+      where: {
+        drugId_hospitalId: { drugId, hospitalId },
+      },
+    });
+    if (!existing) {
+      throw new NotFoundException(
+        'Drug not found in hospital stock inventory',
+      );
+    }
+
+    const data: Record<string, unknown> = {};
+    if (dto.qtyOnHand !== undefined) data.quantity = dto.qtyOnHand;
+    if (dto.reorderLevel !== undefined) data.reorderLevel = dto.reorderLevel;
+
+    const updated = await this.prisma.hospitalDrugStock.update({
+      where: {
+        drugId_hospitalId: { drugId, hospitalId },
+      },
+      data,
+      include: {
+        drug: {
+          select: {
+            brandName: true,
+            genericName: true,
+            dosageStrength: true,
+            dosageForm: true,
+          },
+        },
+      },
+    });
+
+    return {
+      ...updated,
+      lowStockAlert: updated.quantity <= updated.reorderLevel,
+    };
+  }
+
+  // ========================================
+  // NEAREST PARTNER PHARMACY (haversine)
+  // ========================================
+
+  async findNearestPartnerPharmacy(
+    hospitalLat: number,
+    hospitalLng: number,
+  ): Promise<{ id: string; name: string; distance: number } | null> {
+    const pharmacies = await this.prisma.pharmacy.findMany({
+      where: { status: 'APPROVED', isActive: true },
+      select: {
+        id: true,
+        name: true,
+        latitude: true,
+        longitude: true,
+      },
+    });
+
+    let nearest: { id: string; name: string; distance: number } | null = null;
+
+    for (const p of pharmacies) {
+      if (!p.latitude || !p.longitude) continue;
+      const dist = this.calculateHaversine(
+        hospitalLat,
+        hospitalLng,
+        p.latitude,
+        p.longitude,
+      );
+      if (!nearest || dist < nearest.distance) {
+        nearest = { id: p.id, name: p.name, distance: dist };
+      }
+    }
+
+    return nearest;
+  }
+
+  private calculateHaversine(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
+    const R = 6371; // km
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLon = ((lon2 - lon1) * Math.PI) / 180;
+    const a =
+      Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+      Math.cos((lat1 * Math.PI) / 180) *
+        Math.cos((lat2 * Math.PI) / 180) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+    return R * c;
+  }
 }

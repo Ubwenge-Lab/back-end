@@ -48,6 +48,18 @@ export class PrescriptionsController {
     return this.prescriptionsService.findByBranch(req.user.sub, status);
   }
 
+  @Get('patient/:mrn')
+  @Roles(Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.NURSE, Role.PATIENT)
+  @ApiOperation({
+    summary: 'Get prescriptions for a patient by MRN (scoped to hospital)',
+  })
+  findByPatientMrn(
+    @Param('mrn') mrn: string,
+    @Query('hospitalId') hospitalId: string,
+  ) {
+    return this.prescriptionsService.findByPatientMrn(mrn, hospitalId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get prescription by ID' })
   getPrescriptionById(@Param('id') id: string) {
@@ -67,11 +79,22 @@ export class PrescriptionsController {
   @Post('hospital-issue')
   @Roles(Role.DOCTOR)
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Emit standardized digital prescriptions from clinical encounter (Doctor only)' })
+  @ApiOperation({ summary: 'Issue hospital prescription with stock check + pharmacy fallback (Doctor only)' })
   async issueHospitalPrescription(
     @Req() req: any,
     @Body() dto: HospitalIssuePrescriptionDto,
   ) {
     return this.prescriptionsService.emitHospitalDigitalPrescription(req.user.sub, dto);
   }
+
+  @Post(':id/dispatch-external')
+  @Roles(Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.NURSE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Dispatch out-of-stock items to external E-Vuze pharmacies (409 if already dispatched)',
+  })
+  dispatchExternal(@Param('id') id: string) {
+    return this.prescriptionsService.dispatchExternal(id);
+  }
+
 }

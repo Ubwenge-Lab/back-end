@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -20,6 +21,7 @@ import {
 import { HospitalsService } from './hospitals.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { HospitalDto } from './dto/hospital.dto';
+import { UpdateDrugStockDto } from './dto/update-drug-stock.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -165,5 +167,34 @@ export class HospitalsController {
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
   getWeeklyRevenue(@Param('id') id: string, @Req() req: any) {
     return this.hospitalsService.getWeeklyRevenue(id, req.user.sub);
+  }
+
+  // ========================================
+  // DRUG STOCK MANAGEMENT
+  // ========================================
+
+  @Get(':id/drug-stock')
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.PHARMACIST)
+  @ApiOperation({
+    summary: 'List all drugs in hospital inventory with stock levels and alerts',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getDrugStock(@Param('id') id: string) {
+    return this.hospitalsService.getDrugStock(id);
+  }
+
+  @Patch(':id/drug-stock/:drugId')
+  @Roles(Role.HOSPITAL_ADMIN, Role.PHARMACIST)
+  @ApiOperation({
+    summary: 'Update drug stock quantity or reorder level',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiParam({ name: 'drugId', description: 'MedicationRegistry drug UUID' })
+  updateDrugStock(
+    @Param('id') id: string,
+    @Param('drugId') drugId: string,
+    @Body() dto: UpdateDrugStockDto,
+  ) {
+    return this.hospitalsService.updateDrugStock(id, drugId, dto);
   }
 }
