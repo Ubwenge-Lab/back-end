@@ -20,6 +20,12 @@ import { Role } from '../common/constants/role.enum';
 import { CreatePrescriptionDto, UpdatePrescriptionStatusDto } from './dto';
 import { HospitalIssuePrescriptionDto } from './dto/hospital-issue-prescription.dto';
 
+interface RequestWithUser {
+  user: {
+    sub: string;
+  };
+}
+
 @ApiTags('Prescriptions')
 @Controller('prescriptions')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -30,22 +36,37 @@ export class PrescriptionsController {
   @Post()
   @Roles(Role.PATIENT)
   @ApiOperation({ summary: 'Upload prescription' })
-  create(@Req() req: any, @Body() dto: CreatePrescriptionDto) {
+  create(@Req() req: RequestWithUser, @Body() dto: CreatePrescriptionDto) {
     return this.prescriptionsService.create(req.user.sub, dto);
   }
 
   @Get('my-prescriptions')
   @Roles(Role.PATIENT)
   @ApiOperation({ summary: 'Get patient prescriptions' })
-  getMyPrescriptions(@Req() req: any) {
+  getMyPrescriptions(@Req() req: RequestWithUser) {
     return this.prescriptionsService.findByPatient(req.user.sub);
   }
 
   @Get('branch')
   @Roles(Role.PHARMACIST, Role.BRANCH_MANAGER, Role.CASHIER, Role.NURSE)
   @ApiOperation({ summary: 'Get prescriptions linked to branch (Pharmacist)' })
-  getBranchPrescriptions(@Req() req: any, @Query('status') status?: string) {
+  getBranchPrescriptions(
+    @Req() req: RequestWithUser,
+    @Query('status') status?: string,
+  ) {
     return this.prescriptionsService.findByBranch(req.user.sub, status);
+  }
+
+  @Get('patient/:mrn')
+  @Roles(Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.NURSE, Role.PATIENT)
+  @ApiOperation({
+    summary: 'Get prescriptions for a patient by MRN (scoped to hospital)',
+  })
+  findByPatientMrn(
+    @Param('mrn') mrn: string,
+    @Query('hospitalId') hospitalId: string,
+  ) {
+    return this.prescriptionsService.findByPatientMrn(mrn, hospitalId);
   }
 
   @Get(':id')
@@ -67,11 +88,28 @@ export class PrescriptionsController {
   @Post('hospital-issue')
   @Roles(Role.DOCTOR)
   @HttpCode(HttpStatus.CREATED)
-  @ApiOperation({ summary: 'Emit standardized digital prescriptions from clinical encounter (Doctor only)' })
+  @ApiOperation({
+    summary:
+      'Issue hospital prescription with stock check + pharmacy fallback (Doctor only)',
+  })
   async issueHospitalPrescription(
-    @Req() req: any,
+    @Req() req: RequestWithUser,
     @Body() dto: HospitalIssuePrescriptionDto,
   ) {
-    return this.prescriptionsService.emitHospitalDigitalPrescription(req.user.sub, dto);
+    return this.prescriptionsService.emitHospitalDigitalPrescription(
+      req.user.sub,
+      dto,
+    );
+  }
+
+  @Post(':id/dispatch-external')
+  @Roles(Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.NURSE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Dispatch out-of-stock items to external E-Vuze pharmacies (409 if already dispatched)',
+  })
+  dispatchExternal(@Param('id') id: string) {
+    return this.prescriptionsService.dispatchExternal(id);
   }
 }
