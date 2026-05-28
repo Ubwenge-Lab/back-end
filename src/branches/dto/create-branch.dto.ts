@@ -26,10 +26,10 @@ export class CreateBranchDto {
   @Transform(({ value }: { value: string }) => value?.trim())
   address: string;
 
-  @IsOptional()
+  @IsNotEmpty()
   @IsString()
   @MaxLength(20)
-  phone?: string;
+  phone: string;
 
   @IsNotEmpty()
   @IsEmail()
