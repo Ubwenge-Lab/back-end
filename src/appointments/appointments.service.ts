@@ -7,15 +7,20 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { BookAppointmentDto, UpdateAppointmentStatusDto, CompleteConsultDto } from './dto';
+import {
+  BookAppointmentDto,
+  UpdateAppointmentStatusDto,
+  CompleteConsultDto,
+} from './dto';
 import { AppointmentStatus } from '@prisma/client';
+import { TriageVitalsDto } from './dto/triage-vitals.dto';
 
 @Injectable()
 export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   // ========================================
   // BOOK APPOINTMENT
@@ -90,19 +95,27 @@ export class AppointmentsService {
       const staffName = appointment.doctor.user.hospitalStaff;
       const doctorName = staffName ? `Dr. ${staffName.firstName} ${staffName.lastName}` : 'Your doctor';
 
+      const userRecord = patient.userId 
+        ? await this.prisma.user.findUnique({ where: { id: patient.userId }, select: { email: true } })
+        : null;
+
       await this.notificationsService.sendAppointmentConfirmation({
-        patientEmail: patient.userId
-          ? ((await this.prisma.user.findUnique({
-              where: { id: patient.userId },
-              select: { email: true },
-            }))?.email ?? '')
-          : '',
+        patientEmail: userRecord?.email ?? '',
         patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
         doctorName,
         hospitalName: appointment.hospital.name,
         date,
         reason: dto.reason,
       });
+
+      // Send real-time notification
+      await this.notificationsService.create({
+        userId: patientUserId,
+        type: 'APPOINTMENT_BOOKED',
+        title: 'Appointment Confirmed',
+        message: `Your appointment with ${doctorName} is confirmed for ${date.toDateString()}.`,
+      });
+
     } catch (error) {
       console.error('Failed to send appointment confirmation:', error);
     }
@@ -198,7 +211,9 @@ export class AppointmentsService {
     });
     if (!appointment) throw new NotFoundException('Appointment not found');
 
-    const doctor = await this.prisma.doctor.findUnique({ where: { userId: doctorUserId } });
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { userId: doctorUserId },
+    });
     if (!doctor || appointment.doctorId !== doctor.id) {
       throw new ForbiddenException('You can only complete your own appointments');
     }
@@ -214,7 +229,12 @@ export class AppointmentsService {
       where: { hospitalId: appointment.hospitalId },
     });
 
-    type LineItem = { description: string; quantity: number; unitCost: number; subtotal: number };
+    type LineItem = {
+      description: string;
+      quantity: number;
+      unitCost: number;
+      subtotal: number;
+    };
     const lineItems: LineItem[] = [];
 
     if (config) {
@@ -252,37 +272,61 @@ export class AppointmentsService {
     const hasInsurance = coveragePct > 0 && !!appointment.patient.insuranceProvider;
     const insuranceCoveredAmount = hasInsurance ? Math.floor((totalAmount * coveragePct) / 100) : 0;
 
-    const invoice = await this.prisma.$transaction(async (tx) => {
-      await tx.appointment.update({
-        where: { id },
-        data: {
-          status: AppointmentStatus.COMPLETED,
-          diagnosisSummary: dto.diagnosisSummary,
-          doctorRecommendations: dto.doctorRecommendations,
-          ...(dto.notes && { notes: dto.notes }),
-        },
+    const invoice = await this.prisma.$transaction(
+      async (tx) => {
+        await tx.appointment.update({
+          where: { id },
+          data: {
+            status: AppointmentStatus.COMPLETED,
+            diagnosisSummary: dto.diagnosisSummary,
+            doctorRecommendations: dto.doctorRecommendations,
+            ...(dto.notes && { notes: dto.notes }),
+          },
+        });
+
+        return tx.hospitalInvoice.create({
+          data: {
+            appointmentId: id,
+            hospitalId: appointment.hospitalId,
+            patientId: appointment.patientId,
+            totalAmount,
+            insuranceCovered: hasInsurance,
+            paymentStatus: hasInsurance ? 'INSURANCE_PENDING' : 'UNPAID',
+            items: { create: lineItems },
+          },
+          include: { items: true },
+        });
+      },
+      { timeout: 30000 },
+    );
+
+    try {
+      await this.notificationsService.create({
+        userId: appointment.patient.userId,
+        type: 'CONSULTATION_COMPLETED',
+        title: 'Consultation Completed',
+        message: 'Your consultation is complete. Your prescription and invoice are ready.',
       });
 
-      return tx.hospitalInvoice.create({
-        data: {
-          appointmentId: id,
-          hospitalId: appointment.hospitalId,
-          patientId: appointment.patientId,
-          totalAmount,
-          insuranceCovered: hasInsurance,
-          paymentStatus: hasInsurance ? 'INSURANCE_PENDING' : 'UNPAID',
-          items: { create: lineItems },
-        },
-        include: { items: true },
+      await this.notificationsService.create({
+        userId: appointment.patient.userId,
+        type: 'INVOICE_GENERATED',
+        title: 'Invoice Ready',
+        message: `Invoice #${invoice.id} of RWF ${totalAmount} is ready for payment.`,
       });
-    }, { timeout: 30000 });
+    } catch (error) {
+      console.error('Failed to send COMPLETED/INVOICE notifications:', error);
+    }
 
     return {
       message: 'Consultation completed and invoice generated.',
       invoice,
       billing: {
         totalAmount,
-        insuranceCoverage: { percentage: coveragePct, amount: insuranceCoveredAmount },
+        insuranceCoverage: {
+          percentage: coveragePct,
+          amount: insuranceCoveredAmount,
+        },
         patientOwes: totalAmount - insuranceCoveredAmount,
       },
     };
@@ -342,18 +386,211 @@ export class AppointmentsService {
       include: appointmentInclude,
     });
   }
+
+  // ========================================
+  // CHECK IN — receptionist marks patient as arrived
+  // ========================================
+  async checkIn(appointmentId: string, userId: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    await this.assertHospitalStaff(userId, appointment.hospitalId);
+
+    if (appointment.status !== AppointmentStatus.SCHEDULED) {
+      throw new ConflictException(
+        `Cannot check in appointment with status "${appointment.status}". ` +
+        `Appointment must be SCHEDULED.`,
+      );
+    }
+
+    const updatedAppointment = await this.prisma.appointment.update({
+      where: { id: appointmentId },
+      data: { status: AppointmentStatus.ARRIVED },
+      include: { patient: true, doctor: true, hospital: true },
+    });
+
+    try {
+      await this.notificationsService.create({
+        userId: updatedAppointment.doctor.userId,
+        type: 'PATIENT_ARRIVED',
+        title: 'Patient Arrived',
+        message: `Your next patient, ${updatedAppointment.patient.firstName} ${updatedAppointment.patient.lastName}, has arrived and is being triaged.`,
+      });
+    } catch (error) {
+      console.error('Failed to send PATIENT_ARRIVED notification:', error);
+    }
+
+    return updatedAppointment;
+  }
+
+  // ========================================
+  // RECORD TRIAGE — nurse captures vitals
+  // ========================================
+  async recordTriage(
+    appointmentId: string,
+    userId: string,
+    dto: TriageVitalsDto,
+  ) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+      include: { triagevitals: true },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment not found');
+    }
+
+    await this.assertHospitalStaff(userId, appointment.hospitalId);
+
+    if (appointment.status !== AppointmentStatus.ARRIVED) {
+      throw new ConflictException(
+        `Cannot triage appointment with status "${appointment.status}". ` +
+        `Patient must be checked in (ARRIVED) first.`,
+      );
+    }
+
+    if (appointment.triagevitals) {
+      throw new ConflictException(
+        'Triage vitals already recorded for this appointment.',
+      );
+    }
+
+    const updatedAppointment = await this.prisma.$transaction(async (tx) => {
+      await tx.appointment.update({
+        where: { id: appointmentId },
+        data: { status: AppointmentStatus.IN_TRIAGE },
+      });
+
+      await tx.triageVitals.create({
+        data: {
+          appointmentId,
+          bloodPressure: dto.bloodPressure,
+          temperature: dto.temperature,
+          weight: dto.weight,
+          heartRate: dto.heartRate,
+          oxygenSaturation: dto.oxygenSaturation,
+          nurseNotes: dto.notes,
+        },
+      });
+
+      return tx.appointment.update({
+        where: { id: appointmentId },
+        data: { status: AppointmentStatus.READY_FOR_DOCTOR },
+        include: {
+          patient: true,
+          doctor: true,
+          hospital: true,
+          triagevitals: true,
+	},
+      });
+    });
+
+    // Send real-time notification to the doctor
+    try {
+      await this.notificationsService.create({
+        userId: updatedAppointment.doctor.userId,
+        type: 'READY_FOR_DOCTOR',
+        title: 'Patient Ready',
+        message: `Patient ${updatedAppointment.patient.firstName} ${updatedAppointment.patient.lastName} is ready for consultation.`,
+      });
+    } catch (error) {
+      console.error('Failed to send READY_FOR_DOCTOR notification:', error);
+    }
+
+    return updatedAppointment;
+  }
+
+  async getDoctorPatientChart(appointmentId: string, doctorUserId: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+    });
+
+    if (!appointment) {
+      throw new NotFoundException('Appointment session record not found');
+    }
+
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { userId: doctorUserId },
+    });
+
+    if (!doctor || appointment.hospitalId !== doctor.hospitalId) {
+      throw new ForbiddenException('Access Denied: You can only view clinical charts within your assigned hospital');
+    }
+
+    const pastAppointmentsWithVitals = await this.prisma.appointment.findMany({
+      where: {
+        patientId: appointment.patientId,
+        triagevitals: { isNot: null },
+      },
+      orderBy: { date: 'desc' },
+      take: 5,
+      include: { triagevitals: true },
+    });
+
+    const pastPrescriptionsWithDiagnoses = await this.prisma.prescription.findMany({
+      where: {
+        patientId: appointment.patientId,
+        AND: [
+          { diagnosis: { not: null } },
+          { diagnosis: { not: '' } },
+        ],
+      },
+      orderBy: { createdAt: 'desc' },
+      take: 3,
+    });
+
+    const activePrescriptions = await this.prisma.prescription.findMany({
+      where: {
+        patientId: appointment.patientId,
+        status: 'PENDING',
+      },
+      include: { prescriptionMedications: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      last5Vitals: pastAppointmentsWithVitals.map(app => app.triagevitals),
+      recentDiagnoses: pastPrescriptionsWithDiagnoses.map(pres => ({
+        date: pres.createdAt,
+        diagnosis: pres.diagnosis,
+        notes: pres.notes,
+      })),
+      activePrescriptions,
+    };
+  }
+
+  // ========================================
+  // ASSERT HOSPITAL STAFF — shared guard
+  // ========================================
+  private async assertHospitalStaff(userId: string, hospitalId: string) {
+    const staff = await this.prisma.hospitalStaff.findFirst({
+      where: { userId, hospitalId },
+    });
+
+    if (!staff) {
+      throw new ForbiddenException(
+        'You are not authorised to act on appointments at this hospital.',
+      );
+    }
+  }
 }
 
 const appointmentInclude = {
   patient: { select: { firstName: true, lastName: true, phone: true } },
   doctor: {
-    include: {
-      user: {
-        include: {
-          hospitalStaff: { select: { firstName: true, lastName: true } },
-        },
-      },
-    },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      specialization: true,
+      userId: true,
+    }
   },
   hospital: { select: { id: true, name: true, address: true } },
+  triagevitals: true,
 };

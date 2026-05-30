@@ -29,6 +29,21 @@ export class ConsultItemDto {
 }
 
 export class CompleteConsultDto {
+  @ApiProperty({ example: 'Acute pharyngitis' })
+  @IsString()
+  @IsNotEmpty()
+  diagnosisSummary: string;
+
+  @ApiProperty({ example: 'Rest and drink warm fluids.' })
+  @IsString()
+  @IsNotEmpty()
+  doctorRecommendations: string;
+
+  @ApiPropertyOptional({ example: 'Patient responded well to treatment' })
+  @IsOptional()
+  @IsString()
+  notes?: string;
+
   @ApiPropertyOptional({
     type: [ConsultItemDto],
     description: 'Additional line items beyond consultation/triage fees seeded from hospital config',
@@ -38,11 +53,4 @@ export class CompleteConsultDto {
   @ValidateNested({ each: true })
   @Type(() => ConsultItemDto)
   items?: ConsultItemDto[];
-
-  @ApiPropertyOptional({ example: 'Patient responded well to treatment' })
-  @IsOptional()
-  @IsString()
-  notes?: string;
-  diagnosisSummary: string;
-  doctorRecommendations?: string;
 }

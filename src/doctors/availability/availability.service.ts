@@ -1,6 +1,14 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../../prisma/prisma.service';
-import { format, parse, addMinutes, isBefore, isEqual, startOfDay, endOfDay } from 'date-fns';
+import {
+  format,
+  parse,
+  addMinutes,
+  isBefore,
+  isEqual,
+  startOfDay,
+  endOfDay,
+} from 'date-fns';
 
 @Injectable()
 export class AvailabilityService {
@@ -37,9 +45,7 @@ export class AvailabilityService {
     });
 
     // Map appointments to simple HH:mm strings for quick comparison
-    const bookedTimes = appointments.map((app) => 
-      format(app.date, 'HH:mm')
-    );
+    const bookedTimes = appointments.map((app) => format(app.date, 'HH:mm'));
 
     const availableSlots: string[] = [];
 

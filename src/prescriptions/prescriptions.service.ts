@@ -520,6 +520,19 @@ Do not include any explanation, only the JSON array.`,
       });
     }
 
+    if (dto.status === 'APPROVED') {
+      try {
+        await this.notificationsService.create({
+          userId: prescription.patient.userId,
+          type: 'PRESCRIPTION_DISPATCHED',
+          title: 'Prescription Ready',
+          message: 'Your prescription has been approved and is ready.',
+        });
+      } catch (error) {
+        console.error('Failed to send PRESCRIPTION_DISPATCHED notification:', error);
+      }
+    }
+
     return updated;
   }
 

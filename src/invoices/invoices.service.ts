@@ -19,10 +19,18 @@ export class InvoicesService {
     hospitalId: string,
     userId: string,
     role: string,
-    filters: { status?: string; from?: string; to?: string; page?: number; limit?: number },
+    filters: {
+      status?: string;
+      from?: string;
+      to?: string;
+      page?: number;
+      limit?: number;
+    },
   ) {
     if (role === 'HOSPITAL_ADMIN') {
-      const hospital = await this.prisma.hospital.findFirst({ where: { userId } });
+      const hospital = await this.prisma.hospital.findFirst({
+        where: { userId },
+      });
       if (!hospital || hospital.id !== hospitalId) {
         throw new ForbiddenException('Access denied to this hospital');
       }
@@ -74,13 +82,20 @@ export class InvoicesService {
     });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
-    if (role === 'SUPER_ADMIN' || role === 'HOSPITAL_ADMIN' || role === 'RECEPTIONIST') {
+    if (
+      role === 'SUPER_ADMIN' ||
+      role === 'HOSPITAL_ADMIN' ||
+      role === 'RECEPTIONIST'
+    ) {
       return invoice;
     }
 
     if (role === 'PATIENT') {
-      const patient = await this.prisma.patient.findUnique({ where: { userId } });
-      if (invoice.patientId !== patient?.id) throw new ForbiddenException('Access denied');
+      const patient = await this.prisma.patient.findUnique({
+        where: { userId },
+      });
+      if (invoice.patientId !== patient?.id)
+        throw new ForbiddenException('Access denied');
     }
 
     return invoice;
@@ -91,7 +106,9 @@ export class InvoicesService {
   // ========================================
 
   async pay(id: string, userId: string, role: string) {
-    const invoice = await this.prisma.hospitalInvoice.findUnique({ where: { id } });
+    const invoice = await this.prisma.hospitalInvoice.findUnique({
+      where: { id },
+    });
     if (!invoice) throw new NotFoundException('Invoice not found');
 
     if (invoice.paymentStatus === HospitalBillingStatus.PAID) {
@@ -99,7 +116,9 @@ export class InvoicesService {
     }
 
     if (role === 'HOSPITAL_ADMIN' || role === 'RECEPTIONIST') {
-      const hospital = await this.prisma.hospital.findFirst({ where: { userId } });
+      const hospital = await this.prisma.hospital.findFirst({
+        where: { userId },
+      });
       if (!hospital) throw new ForbiddenException('Hospital not found');
 
       if (role === 'HOSPITAL_ADMIN' && invoice.hospitalId !== hospital.id) {

@@ -38,6 +38,7 @@ import {
 } from './logger';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 
+
 @Module({
   imports: [
     ConfigModule.forRoot({
@@ -51,6 +52,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
         limit: 100, // max 100 requests per IP per ttl
       },
     ]),
+
     LoggerModule,
     PrismaModule,
     AuthModule,
@@ -81,6 +83,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
   controllers: [AppController],
   providers: [
     AppService,
+    // Bind TrhrottlerGuard globally to apply rate limiting to all routes
     {
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,

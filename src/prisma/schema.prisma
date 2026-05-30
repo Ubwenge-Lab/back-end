@@ -80,8 +80,8 @@ model Doctor {
   updatedAt      DateTime         @updatedAt
   firstName      String
   lastName       String
-  appointments   Appointment[]
   schedules      DoctorSchedule[]
+  appointments   Appointment[]
   hospital       Hospital         @relation(fields: [hospitalId], references: [id])
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   prescriptions  Prescription[]   @relation("DoctorToPrescription")
@@ -94,10 +94,11 @@ model Doctor {
 model DoctorSchedule {
   id        String @id @default(uuid())
   doctorId  String
-  dayOfWeek Int
-  startTime String
-  endTime   String
-  doctor    Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  dayOfWeek Int // 0 (Sunday) to 6 (Saturday)
+  startTime String // e.g., "08:00"
+  endTime   String // e.g., "17:00"
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
 
   @@unique([doctorId, dayOfWeek, startTime])
   @@map("doctor_schedules")
@@ -116,7 +117,7 @@ model HospitalStaff {
   createdAt          DateTime    @default(now())
   updatedAt          DateTime    @updatedAt
   hospital           Hospital    @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  user               User        @relation(fields: [userId], references: [id])
+  user               User        @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   @@index([hospitalId])
   @@index([userId])
@@ -150,7 +151,7 @@ model Patient {
   invoices              Invoice[]
   notifications         Notification[]
   orders                Order[]
-  user                  User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user                  User                          @relation(fields: [userId], references: [id], onDelete: Restrict)
   prescriptions         Prescription[]
 
   @@index([userId])
@@ -299,8 +300,8 @@ model MedicationRegistry {
   localTechRep        String?
   registrationDate    DateTime
   expiryDate          DateTime?
-  hospital_drug_stock HospitalDrugStock[]
   medications         Medication[]
+  hospitalDrugStock   HospitalDrugStock[]
 
   @@index([brandName])
   @@index([genericName])
@@ -336,21 +337,26 @@ model Medication {
   transferItems           StockTransferItem[]
 
   @@index([branchId])
+  
+  @@index([pharmacyId, quantity])
+  @@index([branchId, quantity])
   @@map("medications")
 }
 
 model HospitalDrugStock {
-  hospitalId          String
-  quantity            Int                @default(0)
-  unitPrice           Decimal            @db.Decimal(12, 2)
-  expiryDate          DateTime
-  drugId              String
-  lastUpdated         DateTime           @default(now())
-  medication_registry MedicationRegistry @relation(fields: [drugId], references: [id], onDelete: Cascade)
-  hospital            Hospital           @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  id          String             @id @default(uuid())
+  hospitalId  String
+  drugId      String
+  quantity    Int                @default(0)
+  unitPrice   Decimal            @db.Decimal(12, 2)
+  expiryDate  DateTime
+  lastUpdated DateTime           @default(now()) @updatedAt
 
-  @@id([drugId, hospitalId])
-  @@map("hospital_drug_stock")
+  hospital    Hospital           @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  drug        MedicationRegistry @relation(fields: [drugId], references: [id], onDelete: Cascade)
+
+  @@unique([hospitalId, drugId])
+  @@map("hospital_drug_stocks")
 }
 
 model Invoice {
@@ -400,14 +406,31 @@ model Appointment {
   hospital              Hospital          @relation(fields: [hospitalId], references: [id])
   patient               Patient           @relation(fields: [patientId], references: [id])
   hospitalInvoice       HospitalInvoice?
-  invoices              Invoice?
   prescriptions         Prescription[]
-  triagevitals          triagevitals?
+ triagevitals    TriageVitals?
+  invoice               Invoice?
 
   @@index([patientId])
   @@index([hospitalId])
   @@index([doctorId])
   @@map("appointments")
+}
+
+model TriageVitals {
+  id               String   @id @default(uuid())
+  appointmentId    String   @unique
+  bloodPressure    String
+  temperature      Float
+  weight           Float
+  heartRate        Int
+  oxygenSaturation Int
+  nurseNotes       String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("triagevitals")
 }
 
 model Prescription {
@@ -533,6 +556,11 @@ model Order {
   @@index([patientId])
   @@index([pharmacyId])
   @@index([status])
+  
+  @@index([pharmacyId, status, createdAt])
+  @@index([branchId, status, createdAt])
+  @@index([pharmacyId, createdAt])
+  @@index([branchId, createdAt])
   @@map("orders")
 }
 
@@ -612,6 +640,9 @@ model Notification {
   @@index([pharmacyId])
   @@index([orderId])
   @@index([isRead])
+  
+  @@index([pharmacyId, isRead])
+  @@index([patientId, isRead])
   @@map("notifications")
 }
 
@@ -644,6 +675,8 @@ model Attendance {
   @@index([branchId])
   @@index([clockInTime])
   @@index([status])
+  
+  @@index([branchId, status, clockInTime])
   @@map("attendance")
 }
 
@@ -715,6 +748,11 @@ model HospitalInvoice {
 
   @@index([patientId])
   @@index([hospitalId])
+  // Composite indexes for hospital billing dashboard queries
+  @@index([hospitalId, paymentStatus])
+  @@index([hospitalId, issuedAt])
+  @@index([patientId, paymentStatus])
+
   @@map("hospital_invoices")
 }
 
@@ -743,19 +781,6 @@ model HospitalConfig {
   @@map("hospital_configs")
 }
 
-model triagevitals {
-  id               String      @id
-  appointmentId    String      @unique
-  bloodPressure    String
-  temperature      Float
-  weight           Float
-  heartRate        Int
-  oxygenSaturation Int
-  nurseNotes       String?
-  createdAt        DateTime    @default(now())
-  updatedAt        DateTime
-  appointments     Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-}
 
 enum UserRole {
   SUPER_ADMIN
@@ -820,6 +845,12 @@ enum NotificationType {
   PHARMACY_APPROVED
   PHARMACY_REJECTED
   LOW_STOCK
+  APPOINTMENT_BOOKED
+  PATIENT_ARRIVED
+  READY_FOR_DOCTOR
+  CONSULTATION_COMPLETED
+  PRESCRIPTION_DISPATCHED
+  INVOICE_GENERATED
 }
 
 enum PrescriptionStatus {
