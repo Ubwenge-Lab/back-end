@@ -78,6 +78,7 @@ model Doctor {
   lastName       String
   rating         Float            @default(0)
   isAvailable    Boolean          @default(true)
+  signatureUrl   String?
   schedules      DoctorSchedule[]
   createdAt      DateTime         @default(now())
   updatedAt      DateTime         @updatedAt

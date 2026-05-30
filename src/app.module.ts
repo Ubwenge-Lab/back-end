@@ -31,12 +31,14 @@ import { HospitalsModule } from './hospitals/hospitals.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { AvailabilityModule } from './doctors/availability/availability.module';
+import { DocumentsModule } from './documents/documents.module';
 import {
   LoggerModule,
   CorrelationIdMiddleware,
   LoggingInterceptor,
 } from './logger';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 
 @Module({
   imports: [
@@ -52,6 +54,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
       },
     ]),
 
+    EventEmitterModule.forRoot(),
     LoggerModule,
     PrismaModule,
     AuthModule,
@@ -78,6 +81,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
     AppointmentsModule,
     DoctorsModule,
     AvailabilityModule, // NEW
+    DocumentsModule,
   ],
   controllers: [AppController],
   providers: [

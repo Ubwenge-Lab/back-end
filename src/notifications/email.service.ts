@@ -752,7 +752,114 @@ export class EmailService {
   }
 
   // ========================================
-  // 10. SUPER ADMIN NOTIFICATIONS
+  // 10. INVOICE PDF DELIVERY
+  // ========================================
+
+  async sendInvoicePdf(data: {
+    to: string;
+    patientName: string;
+    hospitalName: string;
+    invoiceId: string;
+    totalAmount: number;
+    issuedAt: Date;
+    invoicePdfBuffer: Buffer;
+    receiptPdfBuffer: Buffer;
+    prescriptionPdfBuffer: Buffer | null;
+  }) {
+    if (!this.resend) {
+      console.warn('⚠️  Resend not configured - skipping invoice PDF email');
+      return;
+    }
+
+    const dateStr = data.issuedAt.toLocaleDateString('en-GB', {
+      year: 'numeric',
+      month: 'long',
+      day: 'numeric',
+    });
+
+    const formattedTotal = `RWF ${data.totalAmount.toLocaleString('en-RW')}`;
+
+    const html = this.baseTemplate(`
+      <h2 style="margin:0 0 12px;color:#1a1a2e;font-size:22px;">Payment Receipt 🧾</h2>
+      <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.7;">
+        Hi <strong>${data.patientName}</strong>, your payment has been confirmed. Please find your receipt${data.prescriptionPdfBuffer ? ' and prescription sheet' : ''} attached to this email.
+      </p>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;margin:0 0 24px;border:1px solid #e8ecf4;">
+        <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Hospital</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${data.hospitalName}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Invoice Reference</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;font-family:monospace;">${data.invoiceId.slice(0, 8).toUpperCase()}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Date</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;">${dateStr}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Total Paid</p>
+            <p style="margin:4px 0 0;color:#0d9488;font-size:20px;font-weight:700;">${formattedTotal}</p>
+          </td>
+        </tr>
+      </table>
+
+      <table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+        <tr>
+          <td style="background:#f0fdf4;border-left:4px solid #10b981;border-radius:0 8px 8px 0;padding:16px 20px;">
+            <p style="margin:0;color:#065f46;font-size:13px;">✅ <strong>Payment confirmed.</strong> Your documents are attached as PDF files.</p>
+          </td>
+        </tr>
+      </table>
+
+      <p style="margin:0;color:#bbb;font-size:12px;text-align:center;line-height:1.6;">
+        Keep this receipt for your records. For any queries, contact ${data.hospitalName} directly.
+      </p>
+    `);
+
+    const ref = data.invoiceId.slice(0, 8).toUpperCase();
+    const attachments: { filename: string; content: string }[] = [
+      {
+        filename: `invoice-${ref}.pdf`,
+        content: data.invoicePdfBuffer.toString('base64'),
+      },
+      {
+        filename: `receipt-${ref}.pdf`,
+        content: data.receiptPdfBuffer.toString('base64'),
+      },
+    ];
+
+    if (data.prescriptionPdfBuffer) {
+      attachments.push({
+        filename: `prescription-${ref}.pdf`,
+        content: data.prescriptionPdfBuffer.toString('base64'),
+      });
+    }
+
+    try {
+      await this.resend.emails.send({
+        to: data.to,
+        from: this.getFrom(),
+        subject: `🧾 Payment Receipt — ${data.hospitalName}`,
+        html,
+        attachments,
+      });
+      console.log(`✅ Invoice PDF email sent to ${data.to}`);
+    } catch (error) {
+      console.error('❌ Resend error sending invoice PDF:', error.message);
+    }
+  }
+
+  // ========================================
+  // 11. SUPER ADMIN NOTIFICATIONS
   // ========================================
 
   private getSuperAdminEmail(): string {
