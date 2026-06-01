@@ -40,6 +40,7 @@ import {
 } from './logger';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -82,6 +83,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     AppointmentsModule,
     DoctorsModule,
     AvailabilityModule, // NEW
+    ReportsModule,
     DocumentsModule,
     ClaimsModule,
   ],
