@@ -37,6 +37,7 @@ import {
   LoggingInterceptor,
 } from './logger';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { ReportsModule } from './reports/reports.module';
 
 @Module({
   imports: [
@@ -78,6 +79,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
     AppointmentsModule,
     DoctorsModule,
     AvailabilityModule, // NEW
+    ReportsModule,
   ],
   controllers: [AppController],
   providers: [
