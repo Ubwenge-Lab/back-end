@@ -32,6 +32,7 @@ import { AppointmentsModule } from './appointments/appointments.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { AvailabilityModule } from './doctors/availability/availability.module';
 import { DocumentsModule } from './documents/documents.module';
+import { ClaimsModule } from './claims/claims.module';
 import {
   LoggerModule,
   CorrelationIdMiddleware,
@@ -82,6 +83,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
     DoctorsModule,
     AvailabilityModule, // NEW
     DocumentsModule,
+    ClaimsModule,
   ],
   controllers: [AppController],
   providers: [
