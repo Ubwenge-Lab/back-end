@@ -31,6 +31,7 @@ import { HospitalsModule } from './hospitals/hospitals.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { AvailabilityModule } from './doctors/availability/availability.module';
+import { ClaimsModule } from './claims/claims.module';
 import {
   LoggerModule,
   CorrelationIdMiddleware,
@@ -78,6 +79,7 @@ import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
     AppointmentsModule,
     DoctorsModule,
     AvailabilityModule, // NEW
+    ClaimsModule,
   ],
   controllers: [AppController],
   providers: [
