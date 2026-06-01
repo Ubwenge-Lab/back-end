@@ -74,8 +74,8 @@ model Doctor {
   specialization String
   licenseNumber  String           @unique
   bio            String?
-  firstName      String
-  lastName       String
+  firstName      String?
+  lastName       String?
   rating         Float            @default(0)
   isAvailable    Boolean          @default(true)
   signatureUrl   String?
