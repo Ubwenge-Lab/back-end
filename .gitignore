@@ -3,6 +3,9 @@
 /node_modules
 /build
 
+# Generated PDF documents
+/generated-docs
+
 # TypeScript build artifacts
 tsconfig.build.tsbuildinfo
 

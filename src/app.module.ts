@@ -31,6 +31,7 @@ import { HospitalsModule } from './hospitals/hospitals.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { AvailabilityModule } from './doctors/availability/availability.module';
+import { DocumentsModule } from './documents/documents.module';
 import { ClaimsModule } from './claims/claims.module';
 import {
   LoggerModule,
@@ -38,6 +39,7 @@ import {
   LoggingInterceptor,
 } from './logger';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ReportsModule } from './reports/reports.module';
 
 @Module({
@@ -54,6 +56,7 @@ import { ReportsModule } from './reports/reports.module';
       },
     ]),
 
+    EventEmitterModule.forRoot(),
     LoggerModule,
     PrismaModule,
     AuthModule,
@@ -81,6 +84,7 @@ import { ReportsModule } from './reports/reports.module';
     DoctorsModule,
     AvailabilityModule, // NEW
     ReportsModule,
+    DocumentsModule,
     ClaimsModule,
   ],
   controllers: [AppController],
