@@ -31,6 +31,7 @@ import { HospitalsModule } from './hospitals/hospitals.module';
 import { AppointmentsModule } from './appointments/appointments.module';
 import { DoctorsModule } from './doctors/doctors.module';
 import { AvailabilityModule } from './doctors/availability/availability.module';
+import { ClaimsModule } from './claims/claims.module';
 import {
   LoggerModule,
   CorrelationIdMiddleware,
@@ -80,6 +81,7 @@ import { ReportsModule } from './reports/reports.module';
     DoctorsModule,
     AvailabilityModule, // NEW
     ReportsModule,
+    ClaimsModule,
   ],
   controllers: [AppController],
   providers: [
