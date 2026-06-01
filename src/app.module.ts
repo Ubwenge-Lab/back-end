@@ -43,6 +43,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ReportsModule } from './reports/reports.module';
 
 @Module({
+  // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
