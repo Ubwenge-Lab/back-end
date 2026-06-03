@@ -28,4 +28,9 @@ export class BookAppointmentDto {
   @IsOptional()
   @IsString()
   notes?: string;
+
+  @ApiPropertyOptional({ example: 'ONLINE', enum: ['ONLINE', 'IN_PERSON'] })
+  @IsOptional()
+  @IsString()
+  type?: 'ONLINE' | 'IN_PERSON';
 }
