@@ -8,6 +8,8 @@ import {
   Get,
   Param,
   Req,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
@@ -25,6 +27,7 @@ import {
   CheckoutDto,
   RecordPaymentDto,
 } from './dto';
+import { CreateCheckoutSessionDto, MockWebhookDto } from './dto/payments.dto';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -95,6 +98,19 @@ export class PaymentsController {
   })
   checkout(@Req() req: any, @Body() dto: CheckoutDto) {
     return this.paymentsService.checkout(req.user.sub, dto);
+  }
+
+
+  @Post('checkout-session')
+  @HttpCode(HttpStatus.CREATED)
+  createSession(@Body() dto: CreateCheckoutSessionDto) {
+    return this.paymentsService.createCheckoutSession(dto);
+  }
+
+  @Post('webhook/mock-callback')
+  @HttpCode(HttpStatus.OK)
+  handleCallback(@Body() dto: MockWebhookDto) {
+    return this.paymentsService.handleMockWebhookCallback(dto);
   }
 
   @Post('record')
