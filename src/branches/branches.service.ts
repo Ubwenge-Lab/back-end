@@ -43,7 +43,7 @@ export class BranchesService {
         pharmacyId: pharmacy.id,
         name: dto.name,
         address: dto.address,
-        phone: dto.phone,
+        phone: dto.phone || '-',
         latitude: dto.latitude,
         longitude: dto.longitude,
         branchManagerEmail: dto.branchManagerEmail,

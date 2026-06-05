@@ -132,17 +132,15 @@ export class AppointmentsController {
   // PUT /appointments/:id/check-in — receptionist checks in patient
   // ========================================
 
-
   @Get(':id/patient-chart')
   @Roles(Role.DOCTOR)
-  @ApiOperation({ summary: 'Get summarized pre-consultation patient chart (Doctors only)' })
+  @ApiOperation({
+    summary: 'Get summarized pre-consultation patient chart (Doctors only)',
+  })
   @ApiParam({ name: 'id', description: 'Target Appointment UUID' })
   getPatientChart(@Req() req: any, @Param('id') id: string) {
     return this.appointmentsService.getDoctorPatientChart(id, req.user.sub);
   }
-
-
-
 
   @Put(':id/check-in')
   // @Roles(Role.RECEPTIONIST)
