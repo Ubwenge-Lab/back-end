@@ -184,6 +184,7 @@ model Pharmacy {
   address              String
   latitude             Float?
   longitude            Float?
+  logoUrl              String?
   dateOfIncorporation  DateTime?
   rdbCertificate       String?
   pharmacyLicense      String?

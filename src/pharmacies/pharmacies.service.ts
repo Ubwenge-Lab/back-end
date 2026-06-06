@@ -663,15 +663,23 @@ export class PharmaciesService {
   async findByUserId(userId: string) {
     const pharmacy = await this.prisma.pharmacy.findUnique({
       where: { userId },
-      // NOTE: no _count include here — avoids expensive LEFT JOIN aggregations
-      // on every dashboard call. Use targeted queries where counts are needed.
+      include: {
+        // Include the owning user so callers (e.g. getProfile) can access email.
+        // Email lives on User, not Pharmacy — without this join it is always undefined.
+        user: { select: { email: true } },
+      },
     });
 
     if (!pharmacy) {
       throw new NotFoundException('Pharmacy not found');
     }
 
-    return pharmacy;
+    // Flatten email onto the pharmacy object so every consumer can read
+    // `pharmacy.email` without knowing about the nested user relation.
+    return {
+      ...pharmacy,
+      email: pharmacy.user?.email ?? null,
+    };
   }
 
   // ========================================
