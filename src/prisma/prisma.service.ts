@@ -10,7 +10,13 @@ export class PrismaService
 {
   constructor() {
     super({
-      log: ['query', 'error', 'warn'],
+      // Under concurrent load, logging every query floods stdout and adds
+      // measurable latency. Log only errors and warnings in production;
+      // keep query logging for development environments.
+      log:
+        process.env.NODE_ENV === 'production'
+          ? ['error', 'warn']
+          : ['query', 'error', 'warn'],
     });
   }
 

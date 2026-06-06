@@ -4,6 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, LoggerService } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
+import * as compression from 'compression';
 import { json, urlencoded } from 'express';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
@@ -46,6 +47,10 @@ async function bootstrap() {
       crossOriginResourcePolicy: { policy: 'cross-origin' },
     }),
   );
+
+  // Compress all responses — significantly reduces bandwidth under concurrent load
+  // (JSON payloads like medication lists and order histories can be 60-80% smaller)
+  app.use(compression());
 
   // CORS - Allow frontend on port 3000
   const allowedOrigins = process.env.FRONTEND_URL

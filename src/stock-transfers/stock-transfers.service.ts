@@ -67,40 +67,46 @@ export class StockTransfersService {
       throw new BadRequestException('Invalid destination branch');
     }
 
-    for (const item of dto.items) {
-      const medication = await this.prisma.medication.findUnique({
-        where: { id: item.medicationId },
-      });
+    // Wrap stock validation + transfer creation in a transaction so that the
+    // quantity check and the record creation are atomic. Without this, two
+    // concurrent transfer requests could both pass the stock check and both
+    // be created even when only one had enough stock.
+    return this.prisma.$transaction(async (tx) => {
+      for (const item of dto.items) {
+        const medication = await tx.medication.findUnique({
+          where: { id: item.medicationId },
+        });
 
-      if (!medication || medication.branchId !== fromBranch.id) {
-        throw new BadRequestException(
-          `Medication ${item.medicationId} not found in your branch inventory`,
-        );
+        if (!medication || medication.branchId !== fromBranch.id) {
+          throw new BadRequestException(
+            `Medication ${item.medicationId} not found in your branch inventory`,
+          );
+        }
+
+        if (medication.quantity < item.quantity) {
+          throw new BadRequestException(
+            `Insufficient stock for medication: ${medication.name}. Available: ${medication.quantity}, Requested: ${item.quantity}`,
+          );
+        }
       }
 
-      if (medication.quantity < item.quantity) {
-        throw new BadRequestException(
-          `Insufficient stock for medication: ${medication.name}. Available: ${medication.quantity}, Requested: ${item.quantity}`,
-        );
-      }
-    }
-
-    return this.prisma.stockTransfer.create({
-      data: {
-        fromBranchId: fromBranch.id,
-        toBranchId: dto.toBranchId,
-        notes: dto.notes,
-        status: 'PENDING',
-        items: {
-          create: dto.items.map((item) => ({
-            medicationId: item.medicationId,
-            quantity: item.quantity,
-          })),
+      return tx.stockTransfer.create({
+        data: {
+          fromBranchId: fromBranch.id,
+          toBranchId: dto.toBranchId,
+          notes: dto.notes,
+          status: 'PENDING',
+          items: {
+            create: dto.items.map((item) => ({
+              medicationId: item.medicationId,
+              quantity: item.quantity,
+            })),
+          },
         },
-      },
-      include: {
-        items: true,
-      },
+        include: {
+          items: true,
+        },
+      });
     });
   }
 
