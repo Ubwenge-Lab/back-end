@@ -4,7 +4,7 @@ import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, LoggerService } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
-import * as compression from 'compression';
+import compression from 'compression';
 import { json, urlencoded } from 'express';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
