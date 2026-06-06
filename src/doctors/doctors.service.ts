@@ -3,9 +3,11 @@ import {
   NotFoundException,
   ConflictException,
   ForbiddenException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { UpdateDoctorDto, DoctorFilterDto } from './dto';
+import { RequestLeaveDto } from './dto/request-leave.dto';
 
 const doctorInclude = {
   user: {
@@ -157,5 +159,70 @@ export class DoctorsService {
     await this.prisma.user.delete({ where: { id: doctor.userId } });
 
     return { message: 'Doctor removed successfully.' };
+  }
+
+  async requestLeave(doctorUserId: string, dto: RequestLeaveDto) {
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { userId: doctorUserId },
+    });
+    if (!doctor) throw new ForbiddenException('Doctor profile not found');
+
+    const startDate = new Date(dto.startDate);
+    const endDate = new Date(dto.endDate);
+
+    const endOfLastDay = new Date(endDate);
+    endOfLastDay.setHours(23, 59, 59, 999);
+
+    if (startDate >= endOfLastDay) {
+      throw new BadRequestException('startDate must be before endDate');
+    }
+
+    if (startDate <= new Date()) {
+      throw new BadRequestException('Leave must start in the future');
+    }
+
+    const existingLeave = await this.prisma.doctorLeave.findFirst({
+      where: {
+        doctorId: doctor.id,
+        status: { in: ['PENDING', 'APPROVED'] },
+        startDate: { lte: endOfLastDay },
+        endDate: { gte: startDate },
+      },
+    });
+
+    if (existingLeave) {
+      throw new ConflictException(
+        'A leave request already exists that overlaps with these dates',
+      );
+    }
+
+    const affectedCount = await this.prisma.appointment.count({
+      where: {
+        doctorId: doctor.id,
+        date: { gte: startDate, lte: endOfLastDay },
+        status: { notIn: ['CANCELLED', 'COMPLETED'] },
+      },
+    });
+
+    const leave = await this.prisma.doctorLeave.create({
+      data: {
+        doctorId: doctor.id,
+        startDate,
+        endDate: endOfLastDay,
+        reason: dto.reason,
+        status: 'PENDING',
+        affectedPatients: affectedCount,
+      },
+    });
+
+    return {
+      message: 'Leave request submitted successfully.',
+      leave,
+      affectedPatients: affectedCount,
+      notice:
+        affectedCount > 0
+          ? `${affectedCount} appointment(s) will be cancelled if this leave is approved.`
+          : 'No scheduled appointments are affected by this leave window.',
+    };
   }
 }
