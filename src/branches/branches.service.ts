@@ -38,6 +38,12 @@ export class BranchesService {
     if (existingEmail)
       throw new ConflictException('Email already assigned to another branch');
 
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.branchManagerEmail },
+    });
+    if (existingUser)
+      throw new ConflictException('Email already in use by an existing user');
+
     const branch = await this.prisma.branch.create({
       data: {
         pharmacyId: pharmacy.id,

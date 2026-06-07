@@ -371,6 +371,13 @@ export class AuthService {
       throw new ConflictException('Email already registered');
     }
 
+    const existingBranchManager = await this.prisma.branch.findFirst({
+      where: { branchManagerEmail: dto.email },
+    });
+    if (existingBranchManager) {
+      throw new ConflictException('Email is already registered as a branch manager');
+    }
+
     if (dto.password !== dto.confirmPassword) {
       throw new BadRequestException('Passwords do not match');
     }
@@ -434,6 +441,13 @@ export class AuthService {
     const existingUser = await this.usersService.findByEmail(dto.email);
     if (existingUser) {
       throw new ConflictException('Email already registered');
+    }
+
+    const existingBranchManager = await this.prisma.branch.findFirst({
+      where: { branchManagerEmail: dto.email },
+    });
+    if (existingBranchManager) {
+      throw new ConflictException('Email is already registered as a branch manager');
     }
 
     if (dto.password !== dto.confirmPassword) {

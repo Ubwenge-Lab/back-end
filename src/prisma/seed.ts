@@ -1341,22 +1341,36 @@ async function main() {
       await prisma.staffPermissions.upsert({
         where: { staffId: pharmacist.id },
         update: {
-          permissions: ['MANAGE_INVENTORY', 'DISPENSE_MEDS'],
+          permissions: [
+            'VIEW_INVENTORY',
+            'ADD_MEDICATION',
+            'EDIT_MEDICATION',
+            'VIEW_PRESCRIPTIONS',
+            'APPROVE_PRESCRIPTIONS',
+            'REJECT_PRESCRIPTIONS',
+          ],
         },
         create: {
           staffId: pharmacist.id,
-          permissions: ['MANAGE_INVENTORY', 'DISPENSE_MEDS'],
+          permissions: [
+            'VIEW_INVENTORY',
+            'ADD_MEDICATION',
+            'EDIT_MEDICATION',
+            'VIEW_PRESCRIPTIONS',
+            'APPROVE_PRESCRIPTIONS',
+            'REJECT_PRESCRIPTIONS',
+          ],
         },
       });
 
       await prisma.staffPermissions.upsert({
         where: { staffId: cashier.id },
         update: {
-          permissions: ['PROCESS_PAYMENTS'],
+          permissions: ['VIEW_INVENTORY', 'VIEW_PAYMENTS', 'PROCESS_PAYMENTS'],
         },
         create: {
           staffId: cashier.id,
-          permissions: ['PROCESS_PAYMENTS'],
+          permissions: ['VIEW_INVENTORY', 'VIEW_PAYMENTS', 'PROCESS_PAYMENTS'],
         },
       });
     }
