@@ -82,3 +82,4 @@ get_exact_ids.ts
 get_ids.ts
 test_checkout.ts
 .env.backup
+/test/manual/
