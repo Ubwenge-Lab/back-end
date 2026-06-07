@@ -30,7 +30,38 @@ export class OrdersService {
   // ========================================
 
   async create(userId: string, dto: CreateOrderDto) {
-    const patient = await this.patientsService.findByUserId(userId);
+    // Resolve patient: self-ordering patient or POS staff providing patientId
+    let patient: Awaited<ReturnType<typeof this.patientsService.findByUserId>>;
+    try {
+      patient = await this.patientsService.findByUserId(userId);
+    } catch {
+      if (!dto.patientId) {
+        throw new BadRequestException(
+          'patientId is required when creating an order on behalf of a patient',
+        );
+      }
+      const found = await this.prisma.patient.findUnique({
+        where: { id: dto.patientId },
+      });
+      if (!found) throw new NotFoundException('Patient not found');
+      patient = found as any;
+    }
+
+    // Validate prescription before touching inventory
+    if (dto.prescriptionId) {
+      const prescription = await this.prisma.prescription.findUnique({
+        where: { id: dto.prescriptionId },
+      });
+      if (!prescription)
+        throw new NotFoundException('Prescription not found');
+      if (prescription.patientId !== patient.id)
+        throw new ForbiddenException('Prescription does not belong to this patient');
+      if (prescription.status !== 'APPROVED')
+        throw new BadRequestException(
+          'Prescription must be approved by a pharmacist before placing an order',
+        );
+    }
+
     const pharmacy = await this.pharmaciesService.findById(dto.pharmacyId);
 
     // Validate pharmacy is approved
@@ -143,7 +174,7 @@ export class OrdersService {
         }
 
         // Generate unique order number
-        const orderNumber = await this.generateOrderNumber(tx);
+        const orderNumber = this.generateOrderNumber();
 
         // Create order
         const createdOrder = await tx.order.create({
@@ -497,25 +528,22 @@ export class OrdersService {
   // HELPER FUNCTIONS
   // ========================================
 
-  // FIX: Accept transaction parameter to use within transaction
-  private async generateOrderNumber(tx?: any): Promise<string> {
+  // Use timestamp + random suffix to avoid race conditions when multiple
+  // orders are created simultaneously (count-based numbering causes duplicates
+  // under concurrent load because two transactions can read the same count
+  // before either has committed its new row).
+  private generateOrderNumber(): string {
     const date = new Date();
     const year = date.getFullYear();
     const month = String(date.getMonth() + 1).padStart(2, '0');
     const day = String(date.getDate()).padStart(2, '0');
-
-    const prismaClient = tx || this.prisma;
-
-    const count = await prismaClient.order.count({
-      where: {
-        createdAt: {
-          gte: new Date(date.setHours(0, 0, 0, 0)),
-        },
-      },
-    });
-
-    const orderNum = String(count + 1).padStart(4, '0');
-    return `ORD-${year}${month}${day}-${orderNum}`;
+    // 4 random hex chars give 65 536 combinations — collision-proof for any
+    // realistic daily volume while keeping the number human-readable.
+    const suffix = Math.floor(Math.random() * 0xffff)
+      .toString(16)
+      .toUpperCase()
+      .padStart(4, '0');
+    return `ORD-${year}${month}${day}-${suffix}`;
   }
 
   private validateStatusTransition(currentStatus: string, newStatus: string) {

@@ -3,6 +3,9 @@
 /node_modules
 /build
 
+# Generated PDF documents
+/generated-docs
+
 # TypeScript build artifacts
 tsconfig.build.tsbuildinfo
 
@@ -79,3 +82,4 @@ get_exact_ids.ts
 get_ids.ts
 test_checkout.ts
 .env.backup
+/test/manual/

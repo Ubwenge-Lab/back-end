@@ -8,6 +8,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { Prisma } from '@prisma/client';
 import { PharmaciesService } from '../pharmacies/pharmacies.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { StaffService } from '../staff/staff.service';
@@ -15,6 +16,7 @@ import {
   CreateMedicationDto,
   UpdateMedicationDto,
   SearchMedicationsDto,
+  BulkCreateMedicationDto,
 } from './dto';
 
 @Injectable()
@@ -479,7 +481,8 @@ export class MedicationsService {
 
   // Reduce stock with atomic operation + low-stock alerts
   async reduceStock(medicationId: string, quantity: number) {
-    // Check stock BEFORE decrementing
+    // First fetch medication details needed for notifications (read is safe here;
+    // the actual stock deduction uses an atomic conditional update below).
     const medication = await this.prisma.medication.findUnique({
       where: { id: medicationId },
       include: {
@@ -492,18 +495,28 @@ export class MedicationsService {
       throw new NotFoundException('Medication not found');
     }
 
-    if (medication.quantity < quantity) {
-      throw new ForbiddenException('Insufficient stock');
+    // Atomic conditional decrement: only succeeds if quantity is still sufficient.
+    // This eliminates the read-then-write race condition where two concurrent
+    // callers both pass the findUnique check but one then pushes quantity negative.
+    const updateResult = await this.prisma.medication.updateMany({
+      where: {
+        id: medicationId,
+        quantity: { gte: quantity },
+      },
+      data: {
+        quantity: { decrement: quantity },
+      },
+    });
+
+    if (updateResult.count === 0) {
+      throw new ForbiddenException(
+        `Insufficient stock for ${medication.name}. Stock may have been depleted by a concurrent request.`,
+      );
     }
 
-    // Atomically decrement stock
-    const updated = await this.prisma.medication.update({
+    // Re-fetch to get accurate post-update quantity for notification thresholds.
+    const updated = await this.prisma.medication.findUnique({
       where: { id: medicationId },
-      data: {
-        quantity: {
-          decrement: quantity,
-        },
-      },
     });
 
     // Send low-stock notification to pharmacy owner
@@ -568,5 +581,94 @@ export class MedicationsService {
         },
       },
     });
+  }
+
+  // Bulk create/upsert medications from CSV upload
+  async bulkCreate(userId: string, dto: BulkCreateMedicationDto) {
+    const {
+      pharmacyId,
+      branchId: staffBranchId,
+      isStaffOrManager,
+    } = await this.resolvePharmacyAndBranch(userId);
+
+    const branch = await this.prisma.branch.findFirst({
+      where: { id: dto.branchId, pharmacyId, isActive: true },
+    });
+    if (!branch) {
+      throw new BadRequestException(
+        'Invalid branch or branch does not belong to your pharmacy',
+      );
+    }
+    if (isStaffOrManager && staffBranchId !== branch.id) {
+      throw new ForbiddenException(
+        'You can only create medications for your own branch',
+      );
+    }
+
+    const created: string[] = [];
+    const updated: string[] = [];
+    const errors: { row: number; name: string; error: string }[] = [];
+
+    for (let i = 0; i < dto.medications.length; i++) {
+      const item = dto.medications[i];
+      try {
+        const existing = await this.prisma.medication.findFirst({
+          where: {
+            branchId: dto.branchId,
+            OR: [
+              { name: { equals: item.name, mode: 'insensitive' } },
+              ...(item.chemicalName
+                ? [{ chemicalName: { equals: item.chemicalName, mode: Prisma.QueryMode.insensitive } }]
+                : []),
+            ],
+          },
+        });
+
+        if (existing) {
+          await this.prisma.medication.update({
+            where: { id: existing.id },
+            data: {
+              quantity: { increment: item.quantity },
+              price: item.price ?? existing.price,
+              category: item.category ?? existing.category,
+              chemicalName: item.chemicalName ?? existing.chemicalName,
+              description: item.description ?? existing.description,
+              lowStockThreshold: item.lowStockThreshold ?? existing.lowStockThreshold,
+              manufacturer: item.manufacturer ?? existing.manufacturer,
+              batchNumber: item.batchNumber ?? existing.batchNumber,
+              expiryDate: item.expiryDate ? new Date(item.expiryDate) : existing.expiryDate,
+            },
+          });
+          updated.push(item.name);
+        } else {
+          await this.prisma.medication.create({
+            data: {
+              name: item.name,
+              chemicalName: item.chemicalName,
+              description: item.description,
+              category: item.category,
+              price: item.price,
+              quantity: item.quantity,
+              lowStockThreshold: item.lowStockThreshold ?? 10,
+              requiresPrescription: item.requiresPrescription ?? false,
+              pharmacyId,
+              branchId: dto.branchId,
+              manufacturer: item.manufacturer,
+              batchNumber: item.batchNumber,
+              expiryDate: item.expiryDate ? new Date(item.expiryDate) : null,
+            },
+          });
+          created.push(item.name);
+        }
+      } catch (err) {
+        errors.push({ row: i + 1, name: item.name, error: String(err) });
+      }
+    }
+
+    return {
+      created: created.length,
+      updated: updated.length,
+      errors,
+    };
   }
 }

@@ -11,8 +11,9 @@ import {
   BookAppointmentDto,
   UpdateAppointmentStatusDto,
   CompleteConsultDto,
+  ConsultationSessionDto,
 } from './dto';
-import { AppointmentStatus } from '@prisma/client';
+import { AppointmentStatus, AppointmentType } from '@prisma/client';
 import { TriageVitalsDto } from './dto/triage-vitals.dto';
 
 @Injectable()
@@ -20,7 +21,7 @@ export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
-  ) { }
+  ) {}
 
   // ========================================
   // BOOK APPOINTMENT
@@ -29,13 +30,16 @@ export class AppointmentsService {
     const date = new Date(dto.date);
 
     if (date <= new Date()) {
-      throw new BadRequestException('Appointment must be scheduled in the future');
+      throw new BadRequestException(
+        'Appointment must be scheduled in the future',
+      );
     }
 
     const patient = await this.prisma.patient.findUnique({
       where: { userId: patientUserId },
     });
-    if (!patient) throw new ForbiddenException('Only patients can book appointments');
+    if (!patient)
+      throw new ForbiddenException('Only patients can book appointments');
 
     const doctor = await this.prisma.doctor.findUnique({
       where: { id: dto.doctorId },
@@ -61,7 +65,9 @@ export class AppointmentsService {
         `;
 
         if (conflicts.length > 0) {
-          throw new ConflictException('This time slot is already booked. Please choose a different time.');
+          throw new ConflictException(
+            'This time slot is already booked. Please choose a different time.',
+          );
         }
 
         return tx.appointment.create({
@@ -72,13 +78,19 @@ export class AppointmentsService {
             date,
             reason: dto.reason,
             status: AppointmentStatus.SCHEDULED,
+            type:
+              dto.type === 'ONLINE'
+                ? AppointmentType.ONLINE
+                : AppointmentType.IN_PERSON,
           },
           include: {
             doctor: {
               include: {
                 user: {
                   include: {
-                    hospitalStaff: { select: { firstName: true, lastName: true } },
+                    hospitalStaff: {
+                      select: { firstName: true, lastName: true },
+                    },
                   },
                 },
               },
@@ -93,21 +105,55 @@ export class AppointmentsService {
 
     try {
       const staffName = appointment.doctor.user.hospitalStaff;
-      const doctorName = staffName ? `Dr. ${staffName.firstName} ${staffName.lastName}` : 'Your doctor';
+      const doctorName = staffName
+        ? `Dr. ${staffName.firstName} ${staffName.lastName}`
+        : 'Your doctor';
 
-      await this.notificationsService.sendAppointmentConfirmation({
-        patientEmail: patient.userId
-          ? ((await this.prisma.user.findUnique({
-            where: { id: patient.userId },
-            select: { email: true },
-          }))?.email ?? '')
-          : '',
-        patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
-        doctorName,
-        hospitalName: appointment.hospital.name,
-        date,
-        reason: dto.reason,
+      const patientUser = await this.prisma.user.findUnique({
+        where: { id: patient.userId },
+        select: { email: true },
       });
+      const patientEmail = patientUser?.email ?? '';
+
+      const doctorUser = await this.prisma.user.findUnique({
+        where: { id: appointment.doctor.userId },
+        select: { email: true },
+      });
+      const doctorEmail = doctorUser?.email ?? '';
+
+      // Send Patient Confirmation
+      if (patientEmail) {
+        await this.notificationsService.sendAppointmentConfirmation({
+          email: patientEmail,
+          recipientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+          doctorName,
+          patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+          hospitalName: appointment.hospital.name,
+          date,
+          reason: dto.reason,
+          appointmentId: appointment.id,
+          role: 'PATIENT',
+          appointmentType: appointment.type,
+          hospitalAddress: appointment.hospital.address || undefined,
+        });
+      }
+
+      // Send Doctor Confirmation
+      if (doctorEmail) {
+        await this.notificationsService.sendAppointmentConfirmation({
+          email: doctorEmail,
+          recipientName: doctorName,
+          doctorName,
+          patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+          hospitalName: appointment.hospital.name,
+          date,
+          reason: dto.reason,
+          appointmentId: appointment.id,
+          role: 'DOCTOR',
+          appointmentType: appointment.type,
+          hospitalAddress: appointment.hospital.address || undefined,
+        });
+      }
 
       // Send real-time notification
       await this.notificationsService.create({
@@ -116,7 +162,6 @@ export class AppointmentsService {
         title: 'Appointment Confirmed',
         message: `Your appointment with ${doctorName} is confirmed for ${date.toDateString()}.`,
       });
-
     } catch (error) {
       console.error('Failed to send appointment confirmation:', error);
     }
@@ -132,7 +177,9 @@ export class AppointmentsService {
   // ========================================
   async findAll(userId: string, role: string) {
     if (role === 'PATIENT') {
-      const patient = await this.prisma.patient.findUnique({ where: { userId } });
+      const patient = await this.prisma.patient.findUnique({
+        where: { userId },
+      });
       if (!patient) throw new ForbiddenException('Patient profile not found');
 
       return this.prisma.appointment.findMany({
@@ -154,7 +201,9 @@ export class AppointmentsService {
     }
 
     if (role === 'HOSPITAL_ADMIN') {
-      const hospital = await this.prisma.hospital.findFirst({ where: { userId } });
+      const hospital = await this.prisma.hospital.findFirst({
+        where: { userId },
+      });
       if (!hospital) throw new ForbiddenException('Hospital not found');
 
       return this.prisma.appointment.findMany({
@@ -187,13 +236,17 @@ export class AppointmentsService {
     if (role === 'SUPER_ADMIN' || role === 'HOSPITAL_ADMIN') return appointment;
 
     if (role === 'PATIENT') {
-      const patient = await this.prisma.patient.findUnique({ where: { userId } });
-      if (appointment.patientId !== patient?.id) throw new ForbiddenException('Access denied');
+      const patient = await this.prisma.patient.findUnique({
+        where: { userId },
+      });
+      if (appointment.patientId !== patient?.id)
+        throw new ForbiddenException('Access denied');
     }
 
     if (role === 'DOCTOR') {
       const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
-      if (appointment.doctorId !== doctor?.id) throw new ForbiddenException('Access denied');
+      if (appointment.doctorId !== doctor?.id)
+        throw new ForbiddenException('Access denied');
     }
 
     return appointment;
@@ -202,7 +255,11 @@ export class AppointmentsService {
   // ========================================
   // COMPLETE CONSULT (Invoicing + Diagnosis logs)
   // ========================================
-  async completeConsult(id: string, doctorUserId: string, dto: CompleteConsultDto) {
+  async completeConsult(
+    id: string,
+    doctorUserId: string,
+    dto: CompleteConsultDto,
+  ) {
     const appointment = await this.prisma.appointment.findUnique({
       where: { id },
       include: {
@@ -272,8 +329,11 @@ export class AppointmentsService {
 
     const totalAmount = lineItems.reduce((sum, item) => sum + item.subtotal, 0);
     const coveragePct = appointment.patient.insuranceCoverage ?? 0;
-    const hasInsurance = coveragePct > 0 && !!appointment.patient.insuranceProvider;
-    const insuranceCoveredAmount = hasInsurance ? Math.floor((totalAmount * coveragePct) / 100) : 0;
+    const hasInsurance =
+      coveragePct > 0 && !!appointment.patient.insuranceProvider;
+    const insuranceCoveredAmount = hasInsurance
+      ? Math.floor((totalAmount * coveragePct) / 100)
+      : 0;
 
     const invoice = await this.prisma.$transaction(
       async (tx) => {
@@ -308,7 +368,8 @@ export class AppointmentsService {
         userId: appointment.patient.userId,
         type: 'CONSULTATION_COMPLETED',
         title: 'Consultation Completed',
-        message: 'Your consultation is complete. Your prescription and invoice are ready.',
+        message:
+          'Your consultation is complete. Your prescription and invoice are ready.',
       });
 
       await this.notificationsService.create({
@@ -339,10 +400,14 @@ export class AppointmentsService {
   // CANCEL APPOINTMENT
   // ========================================
   async cancel(id: string, patientUserId: string) {
-    const patient = await this.prisma.patient.findUnique({ where: { userId: patientUserId } });
+    const patient = await this.prisma.patient.findUnique({
+      where: { userId: patientUserId },
+    });
     if (!patient) throw new ForbiddenException('Patient profile not found');
 
-    const appointment = await this.prisma.appointment.findUnique({ where: { id } });
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+    });
     if (!appointment) throw new NotFoundException('Appointment not found');
 
     if (appointment.patientId !== patient.id) {
@@ -365,21 +430,34 @@ export class AppointmentsService {
   // ========================================
   // UPDATE STATUS
   // ========================================
-  async updateStatus(id: string, userId: string, role: string, dto: UpdateAppointmentStatusDto) {
-    const appointment = await this.prisma.appointment.findUnique({ where: { id } });
+  async updateStatus(
+    id: string,
+    userId: string,
+    role: string,
+    dto: UpdateAppointmentStatusDto,
+  ) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+    });
     if (!appointment) throw new NotFoundException('Appointment not found');
 
     if (role === 'DOCTOR') {
       const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
       if (appointment.doctorId !== doctor?.id) {
-        throw new ForbiddenException('You can only update your own appointments');
+        throw new ForbiddenException(
+          'You can only update your own appointments',
+        );
       }
     }
 
     if (role === 'HOSPITAL_ADMIN') {
-      const hospital = await this.prisma.hospital.findFirst({ where: { userId } });
+      const hospital = await this.prisma.hospital.findFirst({
+        where: { userId },
+      });
       if (appointment.hospitalId !== hospital?.id) {
-        throw new ForbiddenException('You can only update appointments in your hospital');
+        throw new ForbiddenException(
+          'You can only update appointments in your hospital',
+        );
       }
     }
 
@@ -408,7 +486,7 @@ export class AppointmentsService {
     if (appointment.status !== AppointmentStatus.SCHEDULED) {
       throw new ConflictException(
         `Cannot check in appointment with status "${appointment.status}". ` +
-        `Appointment must be SCHEDULED.`,
+          `Appointment must be SCHEDULED.`,
       );
     }
 
@@ -430,7 +508,6 @@ export class AppointmentsService {
     }
 
     return updatedAppointment;
-
   }
 
   // ========================================
@@ -456,7 +533,7 @@ export class AppointmentsService {
     if (appointment.status !== AppointmentStatus.ARRIVED) {
       throw new ConflictException(
         `Cannot triage appointment with status "${appointment.status}". ` +
-        `Patient must be checked in (ARRIVED) first.`,
+          `Patient must be checked in (ARRIVED) first.`,
       );
     }
 
@@ -509,76 +586,71 @@ export class AppointmentsService {
     }
 
     return updatedAppointment;
-
   }
-
 
   async getDoctorPatientChart(appointmentId: string, doctorUserId: string) {
-  // 1. Extract context of the target appointment session
-  const appointment = await this.prisma.appointment.findUnique({
-    where: { id: appointmentId },
-  });
+    // 1. Extract context of the target appointment session
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id: appointmentId },
+    });
 
-  if (!appointment) {
-    throw new NotFoundException('Appointment session record not found');
+    if (!appointment) {
+      throw new NotFoundException('Appointment session record not found');
+    }
+
+    // 2. Verify Doctor profile and multi-tenant hospital alignment
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { userId: doctorUserId },
+    });
+
+    if (!doctor || appointment.hospitalId !== doctor.hospitalId) {
+      throw new ForbiddenException(
+        'Access Denied: You can only view clinical charts within your assigned hospital',
+      );
+    }
+
+    // 3. Extract the last 5 triage vitals from structured historical appointments
+    const pastAppointmentsWithVitals = await this.prisma.appointment.findMany({
+      where: {
+        patientId: appointment.patientId,
+        triageVitals: { isNot: null },
+      },
+      orderBy: { date: 'desc' },
+      take: 5,
+      include: { triageVitals: true },
+    });
+
+    // 4. Extract the last 3 clean historical diagnoses text definitions
+    const pastPrescriptionsWithDiagnoses =
+      await this.prisma.prescription.findMany({
+        where: {
+          patientId: appointment.patientId,
+          AND: [{ diagnosis: { not: null } }, { diagnosis: { not: '' } }],
+        },
+        orderBy: { createdAt: 'desc' },
+        take: 3,
+      });
+
+    // 5. Query active, non-fulfilled pending treatment orders
+    const activePrescriptions = await this.prisma.prescription.findMany({
+      where: {
+        patientId: appointment.patientId,
+        status: 'PENDING', // Pulls active, non-fulfilled records awaiting medication dispatch
+      },
+      include: { prescriptionMedications: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return {
+      last5Vitals: pastAppointmentsWithVitals.map((app) => app.triageVitals),
+      recentDiagnoses: pastPrescriptionsWithDiagnoses.map((pres) => ({
+        date: pres.createdAt,
+        diagnosis: pres.diagnosis,
+        notes: pres.notes,
+      })),
+      activePrescriptions,
+    };
   }
-
-  // 2. Verify Doctor profile and multi-tenant hospital alignment
-  const doctor = await this.prisma.doctor.findUnique({
-    where: { userId: doctorUserId },
-  });
-
-  if (!doctor || appointment.hospitalId !== doctor.hospitalId) {
-    throw new ForbiddenException('Access Denied: You can only view clinical charts within your assigned hospital');
-  }
-
-  // 3. Extract the last 5 triage vitals from structured historical appointments
-  const pastAppointmentsWithVitals = await this.prisma.appointment.findMany({
-    where: {
-      patientId: appointment.patientId,
-      triageVitals: { isNot: null },
-    },
-    orderBy: { date: 'desc' },
-    take: 5,
-    include: { triageVitals: true },
-  });
-
-  // 4. Extract the last 3 clean historical diagnoses text definitions
-  const pastPrescriptionsWithDiagnoses = await this.prisma.prescription.findMany({
-    where: {
-      patientId: appointment.patientId,
-      AND: [
-        { diagnosis: { not: null } },
-        { diagnosis: { not: '' } },
-      ],
-    },
-    orderBy: { createdAt: 'desc' },
-    take: 3,
-  });
-
-  // 5. Query active, non-fulfilled pending treatment orders
-  const activePrescriptions = await this.prisma.prescription.findMany({
-    where: {
-      patientId: appointment.patientId,
-      status: 'PENDING', // Pulls active, non-fulfilled records awaiting medication dispatch
-    },
-    include: { prescriptionMedications: true },
-    orderBy: { createdAt: 'desc' },
-  });
-
-  return {
-    last5Vitals: pastAppointmentsWithVitals.map(app => app.triageVitals),
-    recentDiagnoses: pastPrescriptionsWithDiagnoses.map(pres => ({
-      date: pres.createdAt,
-      diagnosis: pres.diagnosis,
-      notes: pres.notes,
-    })),
-    activePrescriptions,
-  };
-}
-
-
-
 
   // ========================================
   // ASSERT HOSPITAL STAFF — shared guard
@@ -594,6 +666,115 @@ export class AppointmentsService {
         'You are not authorised to act on appointments at this hospital.',
       );
     }
+  }
+
+  // ========================================
+  // GET TELEMEDICINE ROOM CONFIG
+  // ========================================
+  async getTelemedicineRoom(id: string, userId?: string, role?: string) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+      include: {
+        ...appointmentInclude,
+        triageVitals: true,
+      },
+    });
+
+    if (!appointment) throw new NotFoundException('Appointment not found');
+
+    // Access control: only the patient, the doctor, or hospital/super admin can access (when authenticated)
+    if (userId && role) {
+      if (role === 'PATIENT') {
+        const patient = await this.prisma.patient.findUnique({
+          where: { userId },
+        });
+        if (appointment.patientId !== patient?.id) {
+          throw new ForbiddenException('Access denied');
+        }
+      } else if (role === 'DOCTOR') {
+        const doctor = await this.prisma.doctor.findUnique({
+          where: { userId },
+        });
+        if (appointment.doctorId !== doctor?.id) {
+          throw new ForbiddenException('Access denied');
+        }
+      } else if (role !== 'SUPER_ADMIN' && role !== 'HOSPITAL_ADMIN') {
+        throw new ForbiddenException('Access denied');
+      }
+    }
+
+    const staffName = appointment.doctor.user.hospitalStaff;
+    const doctorName = staffName
+      ? `Dr. ${staffName.firstName} ${staffName.lastName}`
+      : 'Doctor';
+
+    return {
+      roomName: `EVUZE-Consultation-${appointment.id}`,
+      domain: 'meet.jit.si',
+      jitsiUrl: `https://meet.jit.si/EVUZE-Consultation-${appointment.id}`,
+      appointmentId: appointment.id,
+      doctorName,
+      patientName: `${appointment.patient.firstName} ${appointment.patient.lastName}`,
+      appointmentType: appointment.type,
+      triageVitals: appointment.triageVitals,
+      reason: appointment.reason,
+    };
+  }
+
+  // ========================================
+  // LOG TELEMEDICINE SESSION & CALCULATE DURATION
+  // ========================================
+  async logConsultationSession(id: string, dto: ConsultationSessionDto) {
+    const appointment = await this.prisma.appointment.findUnique({
+      where: { id },
+    });
+    if (!appointment) throw new NotFoundException('Appointment not found');
+
+    // Save connection log
+    await this.prisma.telemedicineSessionLog.create({
+      data: {
+        appointmentId: id,
+        userId: dto.userId,
+        role: dto.role,
+        action: dto.action,
+      },
+    });
+
+    // If a doctor leaves, compute the active connection time session length and increment telemedicineDuration
+    if (dto.role === 'DOCTOR' && dto.action === 'LEAVE') {
+      const lastJoin = await this.prisma.telemedicineSessionLog.findFirst({
+        where: {
+          appointmentId: id,
+          userId: dto.userId,
+          role: 'DOCTOR',
+          action: 'JOIN',
+        },
+        orderBy: { timestamp: 'desc' },
+      });
+
+      if (lastJoin) {
+        const durationSeconds = Math.max(
+          0,
+          Math.floor(
+            (new Date().getTime() - lastJoin.timestamp.getTime()) / 1000,
+          ),
+        );
+
+        const currentDuration = appointment.telemedicineDuration || 0;
+
+        await this.prisma.appointment.update({
+          where: { id },
+          data: {
+            telemedicineDuration: currentDuration + durationSeconds,
+          },
+        });
+        console.log(
+          `⏱️ Doctor active call duration incremented by ${durationSeconds} seconds for appointment ${id}`,
+        );
+      }
+    }
+
+    return { success: true };
   }
 }
 

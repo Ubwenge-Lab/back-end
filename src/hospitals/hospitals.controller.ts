@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Post,
+  Patch,
   Body,
   Param,
   Query,
@@ -20,6 +21,8 @@ import {
 import { HospitalsService } from './hospitals.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { HospitalDto } from './dto/hospital.dto';
+import { UpdateDrugStockDto } from './dto/update-drug-stock.dto';
+import { UpdateLeaveStatusDto } from '../doctors/dto/update-leave-status.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -41,6 +44,37 @@ export class HospitalsController {
   @ApiOkResponse({ type: [HospitalDto], description: 'List of all hospitals' })
   findAll() {
     return this.hospitalsService.findAll();
+  }
+
+  @Get('leave-requests')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @ApiOperation({
+    summary:
+      'List all doctor leave requests for your hospital (Hospital Admin only)',
+  })
+  @ApiQuery({
+    name: 'status',
+    required: false,
+    enum: ['PENDING', 'APPROVED', 'REJECTED'],
+    description: 'Filter by leave status',
+  })
+  getLeaveRequests(@Req() req: any, @Query('status') status?: string) {
+    return this.hospitalsService.getLeaveRequests(req.user.sub, status);
+  }
+
+  @Patch('leave-requests/:id/status')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @ApiOperation({
+    summary:
+      'Approve or reject a doctor leave request. Approval auto-cancels affected appointments and triggers refunds. (Hospital Admin only)',
+  })
+  @ApiParam({ name: 'id', description: 'DoctorLeave UUID' })
+  updateLeaveStatus(
+    @Req() req: any,
+    @Param('id') id: string,
+    @Body() dto: UpdateLeaveStatusDto,
+  ) {
+    return this.hospitalsService.updateLeaveStatus(req.user.sub, id, dto);
   }
 
   @Get(':id')
@@ -165,5 +199,35 @@ export class HospitalsController {
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
   getWeeklyRevenue(@Param('id') id: string, @Req() req: any) {
     return this.hospitalsService.getWeeklyRevenue(id, req.user.sub);
+  }
+
+  // ========================================
+  // DRUG STOCK MANAGEMENT
+  // ========================================
+
+  @Get(':id/drug-stock')
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.PHARMACIST)
+  @ApiOperation({
+    summary:
+      'List all drugs in hospital inventory with stock levels and alerts',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getDrugStock(@Param('id') id: string) {
+    return this.hospitalsService.getDrugStock(id);
+  }
+
+  @Patch(':id/drug-stock/:drugId')
+  @Roles(Role.HOSPITAL_ADMIN, Role.PHARMACIST)
+  @ApiOperation({
+    summary: 'Update drug stock quantity or reorder level',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiParam({ name: 'drugId', description: 'MedicationRegistry drug UUID' })
+  updateDrugStock(
+    @Param('id') id: string,
+    @Param('drugId') drugId: string,
+    @Body() dto: UpdateDrugStockDto,
+  ) {
+    return this.hospitalsService.updateDrugStock(id, drugId, dto);
   }
 }

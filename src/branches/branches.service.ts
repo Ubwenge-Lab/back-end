@@ -32,18 +32,31 @@ export class BranchesService {
         'Pharmacy must be approved to create branches',
       );
 
+    const owner = await this.prisma.user.findUnique({
+      where: { id: hqUserId },
+      select: { email: true },
+    }); 
+    if (owner && owner.email.toLowerCase() === dto.branchManagerEmail.toLowerCase())
+      throw new ConflictException('Branch manager email cannot be the same as the pharmacy owner email');
+
     const existingEmail = await this.prisma.branch.findFirst({
       where: { branchManagerEmail: dto.branchManagerEmail },
     });
     if (existingEmail)
       throw new ConflictException('Email already assigned to another branch');
 
+    const existingUser = await this.prisma.user.findUnique({
+      where: { email: dto.branchManagerEmail },
+    });
+    if (existingUser)
+      throw new ConflictException('Email already in use by an existing user');
+
     const branch = await this.prisma.branch.create({
       data: {
         pharmacyId: pharmacy.id,
         name: dto.name,
         address: dto.address,
-        phone: dto.phone,
+        phone: dto.phone || '-',
         latitude: dto.latitude,
         longitude: dto.longitude,
         branchManagerEmail: dto.branchManagerEmail,
