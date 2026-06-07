@@ -9,9 +9,13 @@ import { TriangulationModule } from '../triangulation/triangulation.module';
 import { PrescriptionsModule } from '../prescriptions/prescriptions.module';
 
 @Module({
-  imports: [NotificationsModule, TriangulationModule, forwardRef(() => PrescriptionsModule)], // Import to use EmailService and TriangulationService
+  imports: [
+    NotificationsModule,
+    TriangulationModule,
+    forwardRef(() => PrescriptionsModule),
+  ], // Import to use EmailService and TriangulationService
   controllers: [PharmaciesController],
   providers: [PharmaciesService],
   exports: [PharmaciesService],
 })
-export class PharmaciesModule { }
+export class PharmaciesModule {}

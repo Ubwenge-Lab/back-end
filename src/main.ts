@@ -65,7 +65,12 @@ async function bootstrap() {
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
-    allowedHeaders: ['Content-Type', 'Authorization', 'x-request-id', 'ngrok-skip-browser-warning'],
+    allowedHeaders: [
+      'Content-Type',
+      'Authorization',
+      'x-request-id',
+      'ngrok-skip-browser-warning',
+    ],
     exposedHeaders: ['x-request-id'],
   });
 

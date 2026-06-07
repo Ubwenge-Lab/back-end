@@ -28,7 +28,9 @@ export function generateIcsString(params: {
   const dtEnd = formatIcsDate(endDate);
 
   // Escape description details (newlines, commas, semi-colons)
-  const escapedReason = params.reason.replace(/[,;\\]/g, '\\$&').replace(/\n/g, '\\n');
+  const escapedReason = params.reason
+    .replace(/[,;\\]/g, '\\$&')
+    .replace(/\n/g, '\\n');
   const escapedHospital = params.hospitalName.replace(/[,;\\]/g, '\\$&');
   const escapedDoctor = params.doctorName.replace(/[,;\\]/g, '\\$&');
 

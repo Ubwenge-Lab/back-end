@@ -692,7 +692,9 @@ export class EmailService {
 
     const isPatient = data.role === 'PATIENT';
     const isOnline = data.appointmentType === 'ONLINE';
-    const frontendUrl = (this.configService.get('FRONTEND_URL') || 'http://localhost:3000').replace(/\/$/, '');
+    const frontendUrl = (
+      this.configService.get('FRONTEND_URL') || 'http://localhost:3000'
+    ).replace(/\/$/, '');
     const roomLink = `${frontendUrl}/hospital/consultation/${data.appointmentId}`;
     const subject = isPatient
       ? `✅ Appointment confirmed — ${data.hospitalName}`
@@ -702,7 +704,9 @@ export class EmailService {
       ? `Hi <strong>${data.recipientName}</strong>, your appointment has been booked. Here are the details:`
       : `Hi <strong>${data.recipientName}</strong>, you have a new appointment scheduled with patient <strong>${data.patientName}</strong>. Here are the details:`;
 
-    const locationLabel = isOnline ? 'Location (Online Room)' : 'Location (In-Person)';
+    const locationLabel = isOnline
+      ? 'Location (Online Room)'
+      : 'Location (In-Person)';
     const locationValue = isOnline
       ? `<a href="${roomLink}" style="color:#0d9488;font-weight:bold;text-decoration:underline;">Join Online Call (Jitsi Meet)</a>`
       : `${data.hospitalName} - ${data.hospitalAddress || 'Hospital Premises'}`;

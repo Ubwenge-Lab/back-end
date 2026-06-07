@@ -616,7 +616,10 @@ export class HospitalsService {
           message: `Your appointment on ${appointment.date.toDateString()} with Dr. ${leave.doctor.firstName ?? ''} ${leave.doctor.lastName ?? ''} has been cancelled due to approved doctor leave.`,
         });
       } catch (e) {
-        console.error(`Failed to send cancellation notification for appointment ${appointment.id}:`, e);
+        console.error(
+          `Failed to send cancellation notification for appointment ${appointment.id}:`,
+          e,
+        );
       }
 
       const invoice = appointment.hospitalInvoice;
@@ -674,7 +677,8 @@ export class HospitalsService {
         }
 
         try {
-          const refundResult = await this.flutterwaveService.refund(transactionRef);
+          const refundResult =
+            await this.flutterwaveService.refund(transactionRef);
 
           if (refundResult.status === 'success') {
             await this.prisma.hospitalPayment.update({
@@ -690,7 +694,10 @@ export class HospitalsService {
               data: { paymentStatus: 'UNPAID' },
             });
 
-            refundResults.push({ appointmentId: appointment.id, status: 'refunded' });
+            refundResults.push({
+              appointmentId: appointment.id,
+              status: 'refunded',
+            });
 
             await this.notificationsService.create({
               userId: appointment.patient.user.id,
@@ -706,7 +713,10 @@ export class HospitalsService {
             });
           }
         } catch (err) {
-          console.error(`Refund failed for appointment ${appointment.id}:`, err);
+          console.error(
+            `Refund failed for appointment ${appointment.id}:`,
+            err,
+          );
           refundResults.push({
             appointmentId: appointment.id,
             status: 'failed',
@@ -729,7 +739,8 @@ export class HospitalsService {
     }
 
     return {
-      message: 'Leave request approved. Affected appointments have been cancelled.',
+      message:
+        'Leave request approved. Affected appointments have been cancelled.',
       appointmentsCancelled: affectedAppointments.length,
       refundSummary: {
         refunded: refundResults.filter((r) => r.status === 'refunded').length,

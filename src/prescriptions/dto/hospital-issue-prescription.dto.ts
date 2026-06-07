@@ -1,4 +1,12 @@
-import { IsString, IsNotEmpty, IsArray, ValidateNested, IsInt, Min, IsOptional } from 'class-validator';
+import {
+  IsString,
+  IsNotEmpty,
+  IsArray,
+  ValidateNested,
+  IsInt,
+  Min,
+  IsOptional,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
@@ -57,5 +65,4 @@ export class HospitalIssuePrescriptionDto {
   @Min(0)
   @IsOptional()
   refillsAllowed?: number;
-
 }

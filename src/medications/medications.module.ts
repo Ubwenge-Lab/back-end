@@ -8,9 +8,13 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { StaffModule } from '../staff/staff.module';
 
 @Module({
-  imports: [forwardRef(() => PharmaciesModule), NotificationsModule, StaffModule],
+  imports: [
+    forwardRef(() => PharmaciesModule),
+    NotificationsModule,
+    StaffModule,
+  ],
   controllers: [MedicationsController],
   providers: [MedicationsService],
   exports: [MedicationsService],
 })
-export class MedicationsModule { }
+export class MedicationsModule {}

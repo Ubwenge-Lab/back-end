@@ -20,7 +20,7 @@ import {
   ApiOperation,
   ApiBearerAuth,
   ApiOkResponse,
-  ApiResponse
+  ApiResponse,
 } from '@nestjs/swagger';
 import { PharmaciesService } from './pharmacies.service';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
@@ -41,7 +41,7 @@ export class PharmaciesController {
     private pharmaciesService: PharmaciesService,
     private triangulationService: TriangulationService,
     private prescriptionsService: PrescriptionsService,
-  ) { }
+  ) {}
 
   // ========================================
   // PATIENT ENDPOINTS
@@ -300,5 +300,4 @@ export class PharmaciesController {
   async verifyPrescription(@Body() dto: VerifyPrescriptionDto) {
     return this.prescriptionsService.verifyPrescription(dto);
   }
-
 }

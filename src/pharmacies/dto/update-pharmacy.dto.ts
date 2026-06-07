@@ -75,14 +75,18 @@ export class UpdatePharmacyDto {
   @IsOptional()
   deliveryZones?: any;
 
-  @ApiProperty({ required: false, description: 'JSON object of operating hours' })
+  @ApiProperty({
+    required: false,
+    description: 'JSON object of operating hours',
+  })
   @IsObject()
   @IsOptional()
   operatingHours?: any;
 
   @ApiProperty({
     required: false,
-    description: 'Pharmacy logo / owner profile picture (base64 data URI from POST /upload/medication-image)',
+    description:
+      'Pharmacy logo / owner profile picture (base64 data URI from POST /upload/medication-image)',
   })
   @IsString()
   @IsOptional()

@@ -612,7 +612,12 @@ async function main() {
   for (const email of hospitalAdminEmails) {
     await prisma.user.upsert({
       where: { email },
-      update: { password: password, role: UserRole.HOSPITAL_ADMIN, isVerified: true, isActive: true },
+      update: {
+        password: password,
+        role: UserRole.HOSPITAL_ADMIN,
+        isVerified: true,
+        isActive: true,
+      },
       create: {
         email,
         password: password,
@@ -650,7 +655,10 @@ async function main() {
   if (chukAdminId) {
     await prisma.hospital.upsert({
       where: { userId: chukAdminId },
-      update: { name: 'Kigali University Teaching Hospital (CHUK)', status: PharmacyStatus.APPROVED },
+      update: {
+        name: 'Kigali University Teaching Hospital (CHUK)',
+        status: PharmacyStatus.APPROVED,
+      },
       create: {
         id: chukId,
         userId: chukAdminId,
@@ -669,7 +677,12 @@ async function main() {
   for (const email of doctorEmails) {
     await prisma.user.upsert({
       where: { email },
-      update: { password: password, role: UserRole.DOCTOR, isVerified: true, isActive: true },
+      update: {
+        password: password,
+        role: UserRole.DOCTOR,
+        isVerified: true,
+        isActive: true,
+      },
       create: {
         email,
         password: password,
@@ -706,7 +719,9 @@ async function main() {
     // Seed Doctor Schedules
     for (let day = 1; day <= 5; day++) {
       const scheduleId = `robert-schedule-day-${day}`;
-      const existing = await prisma.doctorSchedule.findUnique({ where: { id: scheduleId } });
+      const existing = await prisma.doctorSchedule.findUnique({
+        where: { id: scheduleId },
+      });
       if (!existing) {
         await prisma.doctorSchedule.create({
           data: {
@@ -741,7 +756,9 @@ async function main() {
     // Seed Doctor Schedules
     for (let day = 1; day <= 5; day++) {
       const scheduleId = `eric-schedule-day-${day}`;
-      const existing = await prisma.doctorSchedule.findUnique({ where: { id: scheduleId } });
+      const existing = await prisma.doctorSchedule.findUnique({
+        where: { id: scheduleId },
+      });
       if (!existing) {
         await prisma.doctorSchedule.create({
           data: {
@@ -778,12 +795,18 @@ async function main() {
   });
 
   // Create Patient Hospital Registrations (CHUK & King Faisal)
-  const alicePatient = await prisma.patient.findFirst({ where: { firstName: 'Alice' } });
-  const bobPatient = await prisma.patient.findFirst({ where: { firstName: 'Bob' } });
+  const alicePatient = await prisma.patient.findFirst({
+    where: { firstName: 'Alice' },
+  });
+  const bobPatient = await prisma.patient.findFirst({
+    where: { firstName: 'Bob' },
+  });
 
   if (alicePatient) {
     const regId = `reg-alice-chuk`;
-    const existing = await prisma.hospitalPatientRegistration.findUnique({ where: { id: regId } });
+    const existing = await prisma.hospitalPatientRegistration.findUnique({
+      where: { id: regId },
+    });
     if (!existing) {
       await prisma.hospitalPatientRegistration.create({
         data: {
@@ -798,7 +821,9 @@ async function main() {
 
   if (bobPatient) {
     const regId = `reg-bob-kfh`;
-    const existing = await prisma.hospitalPatientRegistration.findUnique({ where: { id: regId } });
+    const existing = await prisma.hospitalPatientRegistration.findUnique({
+      where: { id: regId },
+    });
     if (!existing) {
       await prisma.hospitalPatientRegistration.create({
         data: {
@@ -815,7 +840,9 @@ async function main() {
   if (alicePatient && robertDocId) {
     // 1. Unpaid Hospital Invoice for testing
     const apptId1 = '70000000-0000-0000-0000-000000000001';
-    const apptExisting1 = await prisma.appointment.findUnique({ where: { id: apptId1 } });
+    const apptExisting1 = await prisma.appointment.findUnique({
+      where: { id: apptId1 },
+    });
     if (!apptExisting1) {
       await prisma.appointment.create({
         data: {
@@ -831,7 +858,9 @@ async function main() {
     }
 
     const hInvoiceId1 = '00000000-0000-0000-0000-000000000100';
-    const hInvoiceExisting1 = await prisma.hospitalInvoice.findUnique({ where: { id: hInvoiceId1 } });
+    const hInvoiceExisting1 = await prisma.hospitalInvoice.findUnique({
+      where: { id: hInvoiceId1 },
+    });
     if (!hInvoiceExisting1) {
       await prisma.hospitalInvoice.create({
         data: {
@@ -844,8 +873,18 @@ async function main() {
           issuedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
           items: {
             create: [
-              { description: 'Cardiology Consultation', quantity: 1, unitCost: 10000, subtotal: 10000 },
-              { description: 'Triage Check', quantity: 1, unitCost: 3000, subtotal: 3000 },
+              {
+                description: 'Cardiology Consultation',
+                quantity: 1,
+                unitCost: 10000,
+                subtotal: 10000,
+              },
+              {
+                description: 'Triage Check',
+                quantity: 1,
+                unitCost: 3000,
+                subtotal: 3000,
+              },
             ],
           },
         },
@@ -853,7 +892,9 @@ async function main() {
     }
 
     const invoiceId1 = '00000000-0000-0000-0000-000000000101';
-    const invoiceExisting1 = await prisma.invoice.findUnique({ where: { id: invoiceId1 } });
+    const invoiceExisting1 = await prisma.invoice.findUnique({
+      where: { id: invoiceId1 },
+    });
     if (!invoiceExisting1) {
       await prisma.invoice.create({
         data: {
@@ -866,8 +907,18 @@ async function main() {
           dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
           items: {
             create: [
-              { description: 'Cardiology Consultation', quantity: 1, unitPrice: 10000, subtotal: 10000 },
-              { description: 'Triage Check', quantity: 1, unitPrice: 3000, subtotal: 3000 },
+              {
+                description: 'Cardiology Consultation',
+                quantity: 1,
+                unitPrice: 10000,
+                subtotal: 10000,
+              },
+              {
+                description: 'Triage Check',
+                quantity: 1,
+                unitPrice: 3000,
+                subtotal: 3000,
+              },
             ],
           },
         },
@@ -876,7 +927,9 @@ async function main() {
 
     // 2. Paid Hospital Invoice with Payments logged
     const apptId2 = '70000000-0000-0000-0000-000000000002';
-    const apptExisting2 = await prisma.appointment.findUnique({ where: { id: apptId2 } });
+    const apptExisting2 = await prisma.appointment.findUnique({
+      where: { id: apptId2 },
+    });
     if (!apptExisting2) {
       await prisma.appointment.create({
         data: {
@@ -892,7 +945,9 @@ async function main() {
     }
 
     const hInvoiceId2 = '00000000-0000-0000-0000-000000000200';
-    const hInvoiceExisting2 = await prisma.hospitalInvoice.findUnique({ where: { id: hInvoiceId2 } });
+    const hInvoiceExisting2 = await prisma.hospitalInvoice.findUnique({
+      where: { id: hInvoiceId2 },
+    });
     if (!hInvoiceExisting2) {
       await prisma.hospitalInvoice.create({
         data: {
@@ -905,8 +960,18 @@ async function main() {
           issuedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
           items: {
             create: [
-              { description: 'Cardiology Consultation', quantity: 1, unitCost: 10000, subtotal: 10000 },
-              { description: 'Triage Check', quantity: 1, unitCost: 3000, subtotal: 3000 },
+              {
+                description: 'Cardiology Consultation',
+                quantity: 1,
+                unitCost: 10000,
+                subtotal: 10000,
+              },
+              {
+                description: 'Triage Check',
+                quantity: 1,
+                unitCost: 3000,
+                subtotal: 3000,
+              },
             ],
           },
         },
@@ -914,7 +979,9 @@ async function main() {
     }
 
     const invoiceId2 = '00000000-0000-0000-0000-000000000201';
-    const invoiceExisting2 = await prisma.invoice.findUnique({ where: { id: invoiceId2 } });
+    const invoiceExisting2 = await prisma.invoice.findUnique({
+      where: { id: invoiceId2 },
+    });
     if (!invoiceExisting2) {
       await prisma.invoice.create({
         data: {
@@ -927,8 +994,18 @@ async function main() {
           dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
           items: {
             create: [
-              { description: 'Cardiology Consultation', quantity: 1, unitPrice: 10000, subtotal: 10000 },
-              { description: 'Triage Check', quantity: 1, unitPrice: 3000, subtotal: 3000 },
+              {
+                description: 'Cardiology Consultation',
+                quantity: 1,
+                unitPrice: 10000,
+                subtotal: 10000,
+              },
+              {
+                description: 'Triage Check',
+                quantity: 1,
+                unitPrice: 3000,
+                subtotal: 3000,
+              },
             ],
           },
         },
@@ -937,7 +1014,9 @@ async function main() {
 
     // Seed payments for the paid general invoice
     const paymentId2 = 'payment-seed-record-2';
-    const paymentExisting2 = await prisma.hospitalPayment.findUnique({ where: { id: paymentId2 } });
+    const paymentExisting2 = await prisma.hospitalPayment.findUnique({
+      where: { id: paymentId2 },
+    });
     if (!paymentExisting2) {
       await prisma.hospitalPayment.create({
         data: {
@@ -955,7 +1034,9 @@ async function main() {
 
     // 3. Insurance Pending Claim
     const apptId3 = '70000000-0000-0000-0000-000000000003';
-    const apptExisting3 = await prisma.appointment.findUnique({ where: { id: apptId3 } });
+    const apptExisting3 = await prisma.appointment.findUnique({
+      where: { id: apptId3 },
+    });
     if (!apptExisting3) {
       await prisma.appointment.create({
         data: {
@@ -971,7 +1052,9 @@ async function main() {
     }
 
     const hInvoiceId3 = '00000000-0000-0000-0000-000000000300';
-    const hInvoiceExisting3 = await prisma.hospitalInvoice.findUnique({ where: { id: hInvoiceId3 } });
+    const hInvoiceExisting3 = await prisma.hospitalInvoice.findUnique({
+      where: { id: hInvoiceId3 },
+    });
     if (!hInvoiceExisting3) {
       await prisma.hospitalInvoice.create({
         data: {
@@ -985,8 +1068,18 @@ async function main() {
           issuedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
           items: {
             create: [
-              { description: 'Cardiology Consultation', quantity: 1, unitCost: 10000, subtotal: 10000 },
-              { description: 'Triage Check', quantity: 1, unitCost: 3000, subtotal: 3000 },
+              {
+                description: 'Cardiology Consultation',
+                quantity: 1,
+                unitCost: 10000,
+                subtotal: 10000,
+              },
+              {
+                description: 'Triage Check',
+                quantity: 1,
+                unitCost: 3000,
+                subtotal: 3000,
+              },
             ],
           },
         },
@@ -997,7 +1090,9 @@ async function main() {
   // ==========================================
   // 8. ADDITIONAL FAKER-BASED SEEDING (Merged from seed-full.ts in Idempotent Mode)
   // ==========================================
-  console.log('\n🏥 Seeding additional Faker-based Pharmacies, Branches & Staff...');
+  console.log(
+    '\n🏥 Seeding additional Faker-based Pharmacies, Branches & Staff...',
+  );
   const fakerPharmacies = [];
   const fakerBranches = [];
   const fakerPharmacyStaff = [];
@@ -1575,8 +1670,11 @@ async function main() {
       const branchId = branch.id;
       for (let m = 0; m < 10; m++) {
         const medId = `90000000-0000-0000-0000-00000000${i}${j}${m.toString().padStart(2, '0')}`;
-        const isRegistryLinked = registryIds.length > 0 && (i + j + m) % 2 === 0;
-        const regItem = isRegistryLinked ? registryItems[(i + j + m) % registryItems.length] : null;
+        const isRegistryLinked =
+          registryIds.length > 0 && (i + j + m) % 2 === 0;
+        const regItem = isRegistryLinked
+          ? registryItems[(i + j + m) % registryItems.length]
+          : null;
 
         const med = await prisma.medication.upsert({
           where: { id: medId },
@@ -1589,9 +1687,12 @@ async function main() {
             pharmacyId: pharmacy.id,
             registryId: isRegistryLinked ? regItem?.id : null,
             name: isRegistryLinked
-              ? regItem!.brandName
-              : baseMeds[(i + j + m) % baseMeds.length] + ' ' + ((m + 1) * 10) + 'mg',
-            price: 500 + (m * 200),
+              ? regItem.brandName
+              : baseMeds[(i + j + m) % baseMeds.length] +
+                ' ' +
+                (m + 1) * 10 +
+                'mg',
+            price: 500 + m * 200,
             quantity: 150,
             requiresPrescription: m % 3 === 0,
           },
@@ -1612,7 +1713,10 @@ async function main() {
     const appointment = await prisma.appointment.upsert({
       where: { id: appointmentId },
       update: {
-        status: i % 2 === 0 ? AppointmentStatus.COMPLETED : AppointmentStatus.SCHEDULED,
+        status:
+          i % 2 === 0
+            ? AppointmentStatus.COMPLETED
+            : AppointmentStatus.SCHEDULED,
         date: apptDate,
       },
       create: {
@@ -1621,7 +1725,10 @@ async function main() {
         doctorId: doctor.id,
         hospitalId: doctor.hospitalId,
         date: apptDate,
-        status: i % 2 === 0 ? AppointmentStatus.COMPLETED : AppointmentStatus.SCHEDULED,
+        status:
+          i % 2 === 0
+            ? AppointmentStatus.COMPLETED
+            : AppointmentStatus.SCHEDULED,
         reason: 'General Consultation',
       },
     });
@@ -1707,7 +1814,14 @@ async function main() {
       const med = await prisma.medication.findUnique({ where: { id: medId } });
       if (med) {
         const total = med.price;
-        const status = i % 4 === 0 ? OrderStatus.PENDING : (i % 4 === 1 ? OrderStatus.COMPLETED : (i % 4 === 2 ? OrderStatus.DELIVERED : OrderStatus.CANCELLED));
+        const status =
+          i % 4 === 0
+            ? OrderStatus.PENDING
+            : i % 4 === 1
+              ? OrderStatus.COMPLETED
+              : i % 4 === 2
+                ? OrderStatus.DELIVERED
+                : OrderStatus.CANCELLED;
         const type = i % 2 === 0 ? OrderType.DELIVERY : OrderType.PICKUP;
 
         const order = await prisma.order.create({
@@ -1735,7 +1849,10 @@ async function main() {
           },
         });
 
-        if (status === OrderStatus.COMPLETED || status === OrderStatus.DELIVERED) {
+        if (
+          status === OrderStatus.COMPLETED ||
+          status === OrderStatus.DELIVERED
+        ) {
           await prisma.payment.create({
             data: {
               orderId: order.id,
@@ -1798,7 +1915,7 @@ async function main() {
         },
         create: {
           patientId: patient.id,
-          pharmacyId: med.pharmacyId!,
+          pharmacyId: med.pharmacyId,
           medicationId: med.id,
           quantity: 2,
         },
@@ -1827,9 +1944,7 @@ async function main() {
     }
   }
 
-  console.log(
-    "\n✅ Seeding complete! Database is successfully synchronized.",
-  );
+  console.log('\n✅ Seeding complete! Database is successfully synchronized.');
 }
 
 main()
@@ -1897,4 +2012,3 @@ function parseDate(dateStr: string | undefined): Date {
     return new Date();
   }
 }
-

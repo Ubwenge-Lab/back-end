@@ -78,7 +78,10 @@ export class AppointmentsService {
             date,
             reason: dto.reason,
             status: AppointmentStatus.SCHEDULED,
-            type: dto.type === 'ONLINE' ? AppointmentType.ONLINE : AppointmentType.IN_PERSON,
+            type:
+              dto.type === 'ONLINE'
+                ? AppointmentType.ONLINE
+                : AppointmentType.IN_PERSON,
           },
           include: {
             doctor: {
@@ -682,12 +685,16 @@ export class AppointmentsService {
     // Access control: only the patient, the doctor, or hospital/super admin can access (when authenticated)
     if (userId && role) {
       if (role === 'PATIENT') {
-        const patient = await this.prisma.patient.findUnique({ where: { userId } });
+        const patient = await this.prisma.patient.findUnique({
+          where: { userId },
+        });
         if (appointment.patientId !== patient?.id) {
           throw new ForbiddenException('Access denied');
         }
       } else if (role === 'DOCTOR') {
-        const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
+        const doctor = await this.prisma.doctor.findUnique({
+          where: { userId },
+        });
         if (appointment.doctorId !== doctor?.id) {
           throw new ForbiddenException('Access denied');
         }
@@ -748,7 +755,9 @@ export class AppointmentsService {
       if (lastJoin) {
         const durationSeconds = Math.max(
           0,
-          Math.floor((new Date().getTime() - lastJoin.timestamp.getTime()) / 1000),
+          Math.floor(
+            (new Date().getTime() - lastJoin.timestamp.getTime()) / 1000,
+          ),
         );
 
         const currentDuration = appointment.telemedicineDuration || 0;
@@ -759,7 +768,9 @@ export class AppointmentsService {
             telemedicineDuration: currentDuration + durationSeconds,
           },
         });
-        console.log(`⏱️ Doctor active call duration incremented by ${durationSeconds} seconds for appointment ${id}`);
+        console.log(
+          `⏱️ Doctor active call duration incremented by ${durationSeconds} seconds for appointment ${id}`,
+        );
       }
     }
 

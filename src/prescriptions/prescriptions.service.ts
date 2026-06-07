@@ -641,7 +641,9 @@ Do not include any explanation, only the JSON array.`,
     let qrHash: string | undefined;
 
     if (!prescriptionId && !payload.qrCodePayload) {
-      throw new BadRequestException('Either prescription id or scanned QR code payload must be provided');
+      throw new BadRequestException(
+        'Either prescription id or scanned QR code payload must be provided',
+      );
     }
 
     // If scanned QR payload is passed, parse the JSON
@@ -806,7 +808,10 @@ Do not include any explanation, only the JSON array.`,
           date,
         );
 
-        const qrCodeUrl = await this.generateQrCode(prescriptionId, verificationHash);
+        const qrCodeUrl = await this.generateQrCode(
+          prescriptionId,
+          verificationHash,
+        );
 
         // Create parent prescription with security fields
         const prescription = await tx.prescription.create({
@@ -825,7 +830,6 @@ Do not include any explanation, only the JSON array.`,
             createdAt: date,
           },
         });
-
 
         // Find or get encounter invoice for auto-population
         let invoice = await tx.hospitalInvoice.findUnique({
