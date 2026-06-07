@@ -20,6 +20,8 @@ import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 import { PrescriptionMedication } from '@prisma/client';
+import * as crypto from 'crypto';
+import * as QRCode from 'qrcode';
 
 interface ExtractedMedication {
   name: string;
@@ -592,6 +594,161 @@ Do not include any explanation, only the JSON array.`,
         return 'image/jpeg';
     }
   }
+  // 1. Serialization and cryptographic HMAC-SHA256 signature generator
+  generatePrescriptionHash(
+    doctorLicense: string,
+    patientId: string,
+    medications: any[],
+    date: Date,
+  ): string {
+    // Sort medications deterministically to avoid array order mismatches
+    const canonicalMeds = medications
+      .map((med) => {
+        const name = (med.name || '').toLowerCase().trim();
+        const dosage = (med.dosage || '').toLowerCase().trim();
+        const qty = med.quantity ?? 1;
+        return `${name}:${dosage}:${qty}`;
+      })
+      .sort()
+      .join(',');
+
+    // Canonical representation
+    const serialized = [
+      doctorLicense.toLowerCase().trim(),
+      patientId.toLowerCase().trim(),
+      canonicalMeds,
+      date.toISOString(),
+    ].join('|');
+
+    const secret =
+      this.configService.get<string>('JWT_SECRET') ||
+      'default-prescription-secret-key-2026';
+    return crypto.createHmac('sha256', secret).update(serialized).digest('hex');
+  }
+
+  // 2. Base64 QR Code Generator
+  async generateQrCode(prescriptionId: string, hash: string): Promise<string> {
+    const payload = JSON.stringify({
+      id: prescriptionId,
+      hash: hash,
+    });
+    return QRCode.toDataURL(payload);
+  }
+
+  // 3. Verification & Refill Decrement Logic
+  async verifyPrescription(payload: { id?: string; qrCodePayload?: string }) {
+    let prescriptionId = payload.id;
+    let qrHash: string | undefined;
+
+    if (!prescriptionId && !payload.qrCodePayload) {
+      throw new BadRequestException('Either prescription id or scanned QR code payload must be provided');
+    }
+
+    // If scanned QR payload is passed, parse the JSON
+    if (payload.qrCodePayload) {
+      try {
+        const parsed = JSON.parse(payload.qrCodePayload);
+        if (parsed.id) {
+          prescriptionId = parsed.id;
+          qrHash = parsed.hash;
+        }
+      } catch (e) {
+        throw new BadRequestException('Invalid QR code payload format');
+      }
+    }
+
+    const prescription = await this.prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: {
+        doctor: true,
+        patient: true,
+        prescriptionMedications: true,
+      },
+    });
+
+    if (!prescription) {
+      throw new NotFoundException('Prescription not found');
+    }
+
+    // Retrieve active medications list in original format
+    const medications = prescription.prescriptionMedications.map((m) => ({
+      name: m.medicationName,
+      dosage: m.dosage,
+      quantity: m.quantity,
+    }));
+
+    const doctorLicense = prescription.doctor?.licenseNumber || '';
+
+    // Recalculate signature to check for tampering
+    const computedHash = this.generatePrescriptionHash(
+      doctorLicense,
+      prescription.patientId,
+      medications,
+      prescription.createdAt,
+    );
+
+    const storedHash = prescription.verificationHash;
+    const isTampered =
+      computedHash !== storedHash || (qrHash && qrHash !== storedHash);
+
+    const details = {
+      id: prescription.id,
+      patientId: prescription.patientId,
+      patientName: `${prescription.patient.firstName} ${prescription.patient.lastName}`,
+      doctorId: prescription.doctorId,
+      doctorLicense: doctorLicense,
+      medications,
+      refillsAllowed: prescription.refillsAllowed,
+      refillsRemaining: prescription.refillsRemaining,
+      createdAt: prescription.createdAt,
+    };
+
+    // A. TAMPERED CHECK
+    if (isTampered) {
+      return {
+        status: 'TAMPERED',
+        prescriptionDetails: details,
+      };
+    }
+
+    // B. EXPIRED CHECK (30 Days Validity)
+    const daysDifference =
+      (new Date().getTime() - prescription.createdAt.getTime()) /
+      (1000 * 3600 * 24);
+    if (daysDifference > 30) {
+      return {
+        status: 'EXPIRED',
+        prescriptionDetails: details,
+      };
+    }
+
+    // C. FILLED CHECK (0 Refills Remaining)
+    if (prescription.refillsRemaining <= 0) {
+      return {
+        status: 'FILLED',
+        prescriptionDetails: details,
+      };
+    }
+
+    // D. VALID: Decrement refillsRemaining by 1
+    const updated = await this.prisma.prescription.update({
+      where: { id: prescriptionId },
+      data: {
+        refillsRemaining: {
+          decrement: 1,
+        },
+      },
+    });
+
+    return {
+      status: 'VALID',
+      prescriptionDetails: {
+        ...details,
+        refillsRemaining: updated.refillsRemaining,
+      },
+    };
+  }
+
   // ========================================
   // HOSPITAL PRESCRIPTION ISSUE — STOCK CHECK + PHARMACY FALLBACK
   // ========================================
@@ -628,17 +785,47 @@ Do not include any explanation, only the JSON array.`,
           throw new NotFoundException('Hospital not found');
         }
 
-        // Create parent prescription
+        // Format the custom prescription ID: EVUZE-PRESC-[YEAR]-[6-DIGIT-RANDOM]
+        const year = new Date().getFullYear();
+        let prescriptionId = '';
+        let exists = true;
+        while (exists) {
+          const random6 = Math.floor(100000 + Math.random() * 900000);
+          prescriptionId = `EVUZE-PRESC-${year}-${random6}`;
+          const found = await tx.prescription.findUnique({
+            where: { id: prescriptionId },
+          });
+          if (!found) exists = false;
+        }
+
+        const date = new Date();
+        const verificationHash = this.generatePrescriptionHash(
+          doctor.licenseNumber,
+          dto.patientId,
+          dto.medications,
+          date,
+        );
+
+        const qrCodeUrl = await this.generateQrCode(prescriptionId, verificationHash);
+
+        // Create parent prescription with security fields
         const prescription = await tx.prescription.create({
           data: {
+            id: prescriptionId,
             patientId: dto.patientId,
             doctorId: doctor.id,
             hospitalId: dto.hospitalId,
             appointmentId: dto.appointmentId,
             diagnosis: appointment.diagnosisSummary || 'Clinical Consultation',
             status: 'APPROVED',
+            verificationHash,
+            qrCodeUrl,
+            refillsAllowed: dto.refillsAllowed ?? 1,
+            refillsRemaining: dto.refillsAllowed ?? 1,
+            createdAt: date,
           },
         });
+
 
         // Find or get encounter invoice for auto-population
         let invoice = await tx.hospitalInvoice.findUnique({
