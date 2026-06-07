@@ -90,6 +90,14 @@ export class StockTransfersService {
         }
       }
 
+
+      for (const item of dto.items) {
+        await tx.medication.update({
+          where: { id: item.medicationId },
+          data: { quantity: { decrement: item.quantity } },
+        });
+      }
+
       return tx.stockTransfer.create({
         data: {
           fromBranchId: fromBranch.id,
@@ -149,6 +157,22 @@ export class StockTransfersService {
       );
     }
 
+    if (dto.status === 'REJECTED') {
+      await this.prisma.$transaction(async (tx) => {
+        for (const item of transfer.items) {
+          await tx.medication.update({
+            where: { id: item.medicationId },
+            data: { quantity: { increment: item.quantity } },
+          });
+        }
+        await tx.stockTransfer.update({
+          where: { id: transferId },
+          data: { status: 'REJECTED' },
+        });
+      });
+      return { message: 'Transfer rejected and stock restored' };
+    }
+
     if (dto.status === 'COMPLETED') {
       await this.prisma.$transaction(async (tx) => {
         for (const item of transfer.items) {
@@ -156,16 +180,11 @@ export class StockTransfersService {
             where: { id: item.medicationId },
           });
 
-          if (!sendingMed || sendingMed.quantity < item.quantity) {
+          if (!sendingMed) {
             throw new BadRequestException(
-              `Insufficient stock to complete transfer for medication ID ${item.medicationId}`,
+              `Medication ID ${item.medicationId} not found`,
             );
           }
-
-          await tx.medication.update({
-            where: { id: item.medicationId },
-            data: { quantity: { decrement: item.quantity } },
-          });
 
           const destMed = await tx.medication.findFirst({
             where: {

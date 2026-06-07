@@ -58,6 +58,12 @@ export class CreateOrderDto {
   @IsEnum(['MTN_MOMO', 'AIRTEL_MONEY', 'CARD', 'INSURANCE', 'CASH'])
   paymentMethod: 'MTN_MOMO' | 'AIRTEL_MONEY' | 'CARD' | 'INSURANCE' | 'CASH';
 
+  // For POS orders created by staff on behalf of a walk-in patient
+  @ApiProperty({ required: false })
+  @IsString()
+  @IsOptional()
+  patientId?: string;
+
   // For insurance payments
   @ApiProperty({ required: false })
   @IsString()

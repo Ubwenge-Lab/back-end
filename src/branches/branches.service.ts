@@ -32,6 +32,13 @@ export class BranchesService {
         'Pharmacy must be approved to create branches',
       );
 
+    const owner = await this.prisma.user.findUnique({
+      where: { id: hqUserId },
+      select: { email: true },
+    }); 
+    if (owner && owner.email.toLowerCase() === dto.branchManagerEmail.toLowerCase())
+      throw new ConflictException('Branch manager email cannot be the same as the pharmacy owner email');
+
     const existingEmail = await this.prisma.branch.findFirst({
       where: { branchManagerEmail: dto.branchManagerEmail },
     });

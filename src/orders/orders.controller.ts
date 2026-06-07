@@ -55,10 +55,16 @@ export class OrdersController {
     return this.ordersService.findById(id, req.user.sub);
   }
 
-  // Patient - Create order
+  // Patient or POS staff - Create order
   @Post()
-  @Roles(Role.PATIENT)
-  @ApiOperation({ summary: 'Create order (Patient)' })
+  @Roles(
+    Role.PATIENT,
+    Role.PHARMACIST,
+    Role.CASHIER,
+    Role.NURSE,
+    Role.BRANCH_MANAGER,
+  )
+  @ApiOperation({ summary: 'Create order (Patient self-service or POS staff on behalf of patient)' })
   create(@Req() req: any, @Body() dto: CreateOrderDto) {
     return this.ordersService.create(req.user.sub, dto);
   }

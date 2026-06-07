@@ -1,7 +1,7 @@
 // backend/src/super-admin/super-admin.service.ts
 // FIXED VERSION - Added getAllPatients and document preview methods
 
-import { Injectable, NotFoundException, Logger } from '@nestjs/common';
+import { Injectable, NotFoundException, ConflictException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { EmailService } from '../notifications/email.service';
@@ -34,6 +34,7 @@ export class SuperAdminService {
       totalOrders,
       completedOrders,
       totalRevenue,
+      pendingBranches,
     ] = await Promise.all([
       this.prisma.patient.count(),
       this.prisma.pharmacy.count(),
@@ -44,6 +45,9 @@ export class SuperAdminService {
       this.prisma.payment.aggregate({
         where: { status: 'COMPLETED' },
         _sum: { amount: true },
+      }),
+      this.prisma.branch.count({
+        where: { branchStatus: { in: ['INVITED', 'PENDING'] } },
       }),
     ]);
 
@@ -56,6 +60,7 @@ export class SuperAdminService {
       totalPharmacies,
       approvedPharmacies,
       pendingPharmacies,
+      pendingBranches,
       totalOrders,
       completedOrders,
       totalRevenue: totalRevenue._sum.amount || 0,
@@ -218,7 +223,7 @@ export class SuperAdminService {
     } catch (error) {
       this.logger.error(
         'Failed to send pharmacy approval email',
-        error?.message || error,
+        String(error),
       );
     }
 
@@ -233,7 +238,7 @@ export class SuperAdminService {
     } catch (error) {
       this.logger.error(
         'Failed to create approval notification',
-        error?.message || error,
+        String(error),
       );
     }
 
@@ -277,7 +282,7 @@ export class SuperAdminService {
     } catch (error) {
       this.logger.error(
         'Failed to send pharmacy rejection email',
-        error?.message || error,
+        String(error),
       );
     }
 
@@ -292,7 +297,7 @@ export class SuperAdminService {
     } catch (error) {
       this.logger.error(
         'Failed to create rejection notification',
-        error?.message || error,
+        String(error),
       );
     }
 
@@ -412,6 +417,12 @@ export class SuperAdminService {
     const pharmacy = await this.prisma.pharmacy.findUnique({ where: { id } });
     if (!pharmacy) throw new NotFoundException('Pharmacy not found');
 
+    if (!dto.verified && !pharmacy.isLocationVerified)
+      throw new ConflictException('Pharmacy location is already flagged as unverified');
+
+    if (dto.verified && pharmacy.isLocationVerified)
+      throw new ConflictException('Pharmacy location is already verified');
+
     return this.prisma.pharmacy.update({
       where: { id },
       data: {
@@ -445,6 +456,12 @@ export class SuperAdminService {
     const branch = await this.prisma.branch.findUnique({ where: { id } });
     if (!branch) throw new NotFoundException('Branch not found');
 
+    if (!dto.verified && !branch.isLocationVerified)
+      throw new ConflictException('Branch location is already flagged as unverified');
+
+    if (dto.verified && branch.isLocationVerified)
+      throw new ConflictException('Branch location is already verified');
+
     return this.prisma.branch.update({
       where: { id },
       data: {
@@ -455,7 +472,7 @@ export class SuperAdminService {
   }
   async getPendingBranches() {
     return this.prisma.branch.findMany({
-      where: { branchStatus: 'PENDING' },
+      where: { branchStatus: { in: ['INVITED', 'PENDING'] } },
       select: {
         id: true,
         name: true,
@@ -463,6 +480,7 @@ export class SuperAdminService {
         phone: true,
         branchManagerEmail: true,
         pharmacyLicense: true,
+        branchStatus: true,
         createdAt: true,
         pharmacy: {
           select: { id: true, name: true, representativeName: true },
