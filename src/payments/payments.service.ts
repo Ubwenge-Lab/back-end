@@ -657,7 +657,7 @@ export class PaymentsService {
       );
     }
 
-    const receiptNumber = await this.generateReceiptNumber(branch.id);
+    const receiptNumber = this.generateReceiptNumber(branch.id);
 
     const existingPayment = await this.prisma.payment.findUnique({
       where: { orderId: order.id },
@@ -758,29 +758,14 @@ export class PaymentsService {
     return staff?.branch ?? null;
   }
 
-  private async generateReceiptNumber(branchId: string) {
-    const latestPayment = await this.prisma.payment.findFirst({
-      where: {
-        order: {
-          branchId,
-        },
-      },
-      orderBy: {
-        receiptNumber: 'desc',
-      },
-      select: {
-        receiptNumber: true,
-      },
-    });
-
-    let nextNumber = 1;
-    if (latestPayment?.receiptNumber) {
-      const match = latestPayment.receiptNumber.match(/RCP-(\d{6})$/);
-      if (match) {
-        nextNumber = Number(match[1]) + 1;
-      }
-    }
-
-    return `RCP-${nextNumber.toString().padStart(6, '0')}`;
+  // Use timestamp + random suffix to avoid the read-then-write race condition
+  // that occurred when two payments were recorded simultaneously (both could
+  // read the same "latest" receipt number and produce duplicates).
+  private generateReceiptNumber(branchId: string): string {
+    const suffix = Math.floor(Math.random() * 0xffffff)
+      .toString(16)
+      .toUpperCase()
+      .padStart(6, '0');
+    return `RCP-${suffix}`;
   }
 }

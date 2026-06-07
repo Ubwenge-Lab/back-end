@@ -20,6 +20,7 @@ import {
   ApiOperation,
   ApiBearerAuth,
   ApiOkResponse,
+  ApiResponse
 } from '@nestjs/swagger';
 import { PharmaciesService } from './pharmacies.service';
 import { UpdatePharmacyDto } from './dto/update-pharmacy.dto';
@@ -30,6 +31,8 @@ import { Role } from '../common/constants/role.enum';
 import { PharmacyStatsResponseDto } from './dto/stats-response.dto';
 import { TriangulationService } from '../triangulation/triangulation.service';
 import { ParseFloatPipe } from '@nestjs/common';
+import { PrescriptionsService } from '../prescriptions/prescriptions.service';
+import { VerifyPrescriptionDto } from '../prescriptions/dto/verify-prescription.dto';
 
 @ApiTags('Pharmacies')
 @Controller('pharmacies')
@@ -37,7 +40,8 @@ export class PharmaciesController {
   constructor(
     private pharmaciesService: PharmaciesService,
     private triangulationService: TriangulationService,
-  ) {}
+    private prescriptionsService: PrescriptionsService,
+  ) { }
 
   // ========================================
   // PATIENT ENDPOINTS
@@ -282,4 +286,19 @@ export class PharmaciesController {
   async getPharmacyById(@Param('id') id: string) {
     return this.pharmaciesService.getPharmacyDetails(id);
   }
+
+  @Post('verify-prescription')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY, Role.PHARMACIST, Role.CASHIER, Role.BRANCH_MANAGER)
+  @HttpCode(HttpStatus.OK)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Verify digital prescription QR code or ID' })
+  @ApiResponse({
+    status: 200,
+    description: 'Prescription verification status check',
+  })
+  async verifyPrescription(@Body() dto: VerifyPrescriptionDto) {
+    return this.prescriptionsService.verifyPrescription(dto);
+  }
+
 }

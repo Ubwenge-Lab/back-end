@@ -172,12 +172,17 @@ export class NotificationsService {
   }
 
   async sendAppointmentConfirmation(data: {
-    patientEmail: string;
-    patientName: string;
+    email: string;
+    recipientName: string;
     doctorName: string;
+    patientName: string;
     hospitalName: string;
     date: Date;
     reason: string;
+    appointmentId: string;
+    role: 'PATIENT' | 'DOCTOR';
+    appointmentType: 'ONLINE' | 'IN_PERSON';
+    hospitalAddress?: string;
   }) {
     await this.emailService.sendAppointmentConfirmation(data);
   }
