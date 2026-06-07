@@ -30,7 +30,38 @@ export class OrdersService {
   // ========================================
 
   async create(userId: string, dto: CreateOrderDto) {
-    const patient = await this.patientsService.findByUserId(userId);
+    // Resolve patient: self-ordering patient or POS staff providing patientId
+    let patient: Awaited<ReturnType<typeof this.patientsService.findByUserId>>;
+    try {
+      patient = await this.patientsService.findByUserId(userId);
+    } catch {
+      if (!dto.patientId) {
+        throw new BadRequestException(
+          'patientId is required when creating an order on behalf of a patient',
+        );
+      }
+      const found = await this.prisma.patient.findUnique({
+        where: { id: dto.patientId },
+      });
+      if (!found) throw new NotFoundException('Patient not found');
+      patient = found as any;
+    }
+
+    // Validate prescription before touching inventory
+    if (dto.prescriptionId) {
+      const prescription = await this.prisma.prescription.findUnique({
+        where: { id: dto.prescriptionId },
+      });
+      if (!prescription)
+        throw new NotFoundException('Prescription not found');
+      if (prescription.patientId !== patient.id)
+        throw new ForbiddenException('Prescription does not belong to this patient');
+      if (prescription.status !== 'APPROVED')
+        throw new BadRequestException(
+          'Prescription must be approved by a pharmacist before placing an order',
+        );
+    }
+
     const pharmacy = await this.pharmaciesService.findById(dto.pharmacyId);
 
     // Validate pharmacy is approved

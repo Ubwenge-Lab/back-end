@@ -34,6 +34,7 @@ export class SuperAdminService {
       totalOrders,
       completedOrders,
       totalRevenue,
+      pendingBranches,
     ] = await Promise.all([
       this.prisma.patient.count(),
       this.prisma.pharmacy.count(),
@@ -44,6 +45,9 @@ export class SuperAdminService {
       this.prisma.payment.aggregate({
         where: { status: 'COMPLETED' },
         _sum: { amount: true },
+      }),
+      this.prisma.branch.count({
+        where: { branchStatus: { in: ['INVITED', 'PENDING'] } },
       }),
     ]);
 
@@ -56,6 +60,7 @@ export class SuperAdminService {
       totalPharmacies,
       approvedPharmacies,
       pendingPharmacies,
+      pendingBranches,
       totalOrders,
       completedOrders,
       totalRevenue: totalRevenue._sum.amount || 0,
@@ -467,7 +472,7 @@ export class SuperAdminService {
   }
   async getPendingBranches() {
     return this.prisma.branch.findMany({
-      where: { branchStatus: 'PENDING' },
+      where: { branchStatus: { in: ['INVITED', 'PENDING'] } },
       select: {
         id: true,
         name: true,
@@ -475,6 +480,7 @@ export class SuperAdminService {
         phone: true,
         branchManagerEmail: true,
         pharmacyLicense: true,
+        branchStatus: true,
         createdAt: true,
         pharmacy: {
           select: { id: true, name: true, representativeName: true },
