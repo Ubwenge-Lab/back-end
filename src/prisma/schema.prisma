@@ -412,6 +412,9 @@ model Appointment {
   hospitalInvoice       HospitalInvoice?
   triageVitals          TriageVitals?
   invoice               Invoice?
+  type                  AppointmentType          @default(IN_PERSON)
+  telemedicineDuration  Int?
+  sessionLogs           TelemedicineSessionLog[]
 
   @@index([patientId])
   @@index([hospitalId])
@@ -918,6 +921,11 @@ enum AppointmentStatus {
   READY_FOR_DOCTOR
 }
 
+enum AppointmentType {
+  ONLINE
+  IN_PERSON
+}
+
 enum InvoiceStatus {
   UNPAID
   PARTIAL
@@ -973,4 +981,16 @@ model InsuranceClaim {
   updatedAt     DateTime              @updatedAt
   invoice       HospitalInvoice       @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
   @@map("insurance_claims")
+}
+
+model TelemedicineSessionLog {
+  id            String      @id @default(uuid())
+  appointmentId String
+  userId        String
+  role          String      // 'DOCTOR' or 'PATIENT'
+  action        String      // 'JOIN' or 'LEAVE'
+  timestamp     DateTime    @default(now())
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("telemedicine_session_logs")
 }
