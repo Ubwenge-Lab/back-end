@@ -479,7 +479,8 @@ export class MedicationsService {
 
   // Reduce stock with atomic operation + low-stock alerts
   async reduceStock(medicationId: string, quantity: number) {
-    // Check stock BEFORE decrementing
+    // First fetch medication details needed for notifications (read is safe here;
+    // the actual stock deduction uses an atomic conditional update below).
     const medication = await this.prisma.medication.findUnique({
       where: { id: medicationId },
       include: {
@@ -492,18 +493,28 @@ export class MedicationsService {
       throw new NotFoundException('Medication not found');
     }
 
-    if (medication.quantity < quantity) {
-      throw new ForbiddenException('Insufficient stock');
+    // Atomic conditional decrement: only succeeds if quantity is still sufficient.
+    // This eliminates the read-then-write race condition where two concurrent
+    // callers both pass the findUnique check but one then pushes quantity negative.
+    const updateResult = await this.prisma.medication.updateMany({
+      where: {
+        id: medicationId,
+        quantity: { gte: quantity },
+      },
+      data: {
+        quantity: { decrement: quantity },
+      },
+    });
+
+    if (updateResult.count === 0) {
+      throw new ForbiddenException(
+        `Insufficient stock for ${medication.name}. Stock may have been depleted by a concurrent request.`,
+      );
     }
 
-    // Atomically decrement stock
-    const updated = await this.prisma.medication.update({
+    // Re-fetch to get accurate post-update quantity for notification thresholds.
+    const updated = await this.prisma.medication.findUnique({
       where: { id: medicationId },
-      data: {
-        quantity: {
-          decrement: quantity,
-        },
-      },
     });
 
     // Send low-stock notification to pharmacy owner

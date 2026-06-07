@@ -1026,7 +1026,7 @@ export class AuthService {
       user.id,
       user.email,
       user.role,
-      undefined,
+      user.pharmacy?.status,
       hospitalId,
     );
     await this.updateRefreshToken(user.id, tokens.refreshToken);
