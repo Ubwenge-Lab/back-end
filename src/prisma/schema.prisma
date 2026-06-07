@@ -390,28 +390,28 @@ model InvoiceItem {
 }
 
 model Appointment {
-  id                        String                      @id @default(uuid())
-  patientId                 String
-  doctorId                  String
-  hospitalId                String
-  reason                    String?
-  status                    AppointmentStatus           @default(SCHEDULED)
-  createdAt                 DateTime                    @default(now())
-  updatedAt                 DateTime                    @updatedAt
-  date                      DateTime
-  notes                     String?
-  diagnosisSummary          String?
-  doctorRecommendations     String?
-  telemedicineDuration      Int?
-  type                      AppointmentType             @default(IN_PERSON)
-  doctor                    Doctor                      @relation(fields: [doctorId], references: [id])
-  hospital                  Hospital                    @relation(fields: [hospitalId], references: [id])
-  patient                   Patient                     @relation(fields: [patientId], references: [id])
-  hospitalInvoice           HospitalInvoice?
-  invoice                   Invoice?
-  prescriptions             Prescription[]
-  telemedicine_session_logs telemedicine_session_logs[]
-  triageVitals              TriageVitals?
+  id                    String                   @id @default(uuid())
+  patientId             String
+  doctorId              String
+  hospitalId            String
+  reason                String?
+  status                AppointmentStatus        @default(SCHEDULED)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  date                  DateTime
+  notes                 String?
+  diagnosisSummary      String?
+  doctorRecommendations String?
+  doctor                Doctor                   @relation(fields: [doctorId], references: [id])
+  hospital              Hospital                 @relation(fields: [hospitalId], references: [id])
+  patient               Patient                  @relation(fields: [patientId], references: [id])
+  prescriptions         Prescription[]
+  hospitalInvoice       HospitalInvoice?
+  triageVitals          TriageVitals?
+  invoice               Invoice?
+  type                  AppointmentType          @default(IN_PERSON)
+  telemedicineDuration  Int?
+  sessionLogs           TelemedicineSessionLog[]
 
   @@index([patientId])
   @@index([hospitalId])
@@ -808,16 +808,6 @@ model InsuranceClaim {
   @@map("insurance_claims")
 }
 
-model telemedicine_session_logs {
-  id            String      @id
-  appointmentId String
-  userId        String
-  role          String
-  action        String
-  timestamp     DateTime    @default(now())
-  appointments  Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-}
-
 enum UserRole {
   SUPER_ADMIN
   PHARMACY
@@ -940,6 +930,11 @@ enum AppointmentStatus {
   READY_FOR_DOCTOR
 }
 
+enum AppointmentType {
+  ONLINE
+  IN_PERSON
+}
+
 enum InvoiceStatus {
   UNPAID
   PARTIAL
@@ -983,7 +978,14 @@ enum ClaimStatus {
   REJECTED
 }
 
-enum AppointmentType {
-  ONLINE
-  IN_PERSON
+model TelemedicineSessionLog {
+  id            String      @id @default(uuid())
+  appointmentId String
+  userId        String
+  role          String // 'DOCTOR' or 'PATIENT'
+  action        String // 'JOIN' or 'LEAVE'
+  timestamp     DateTime    @default(now())
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("telemedicine_session_logs")
 }
