@@ -2,6 +2,7 @@ import {
   Controller,
   Get,
   Patch,
+  Post,
   Delete,
   Param,
   Body,
@@ -20,6 +21,7 @@ import {
 } from '@nestjs/swagger';
 import { DoctorsService } from './doctors.service';
 import { UpdateDoctorDto, DoctorFilterDto } from './dto';
+import { RequestLeaveDto } from './dto/request-leave.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -89,5 +91,15 @@ export class DoctorsController {
   @ApiParam({ name: 'id', description: 'Doctor UUID' })
   remove(@Req() req: any, @Param('id') id: string) {
     return this.doctorsService.remove(req.user.sub, id);
+  }
+
+  @Post('leave')
+  @Roles(Role.DOCTOR)
+  @ApiOperation({
+    summary:
+      'Submit a leave request — returns count of affected patient appointments (Doctor only)',
+  })
+  requestLeave(@Req() req: any, @Body() dto: RequestLeaveDto) {
+    return this.doctorsService.requestLeave(req.user.sub, dto);
   }
 }

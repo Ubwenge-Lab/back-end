@@ -83,6 +83,7 @@ model Doctor {
   signatureUrl   String?
   appointments   Appointment[]
   schedules      DoctorSchedule[]
+  leaveRequests  DoctorLeave[]
   hospital       Hospital         @relation(fields: [hospitalId], references: [id])
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   prescriptions  Prescription[]   @relation("DoctorToPrescription")
@@ -102,6 +103,25 @@ model DoctorSchedule {
 
   @@unique([doctorId, dayOfWeek, startTime])
   @@map("doctor_schedules")
+}
+
+model DoctorLeave {
+  id               String      @id @default(uuid())
+  doctorId         String
+  startDate        DateTime
+  endDate          DateTime
+  reason           String
+  status           LeaveStatus @default(PENDING)
+  affectedPatients Int         @default(0)
+  rejectionReason  String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([status])
+  @@map("doctor_leaves")
 }
 
 model HospitalStaff {
@@ -975,6 +995,12 @@ enum ClaimStatus {
   PENDING
   PAID
   PARTIAL
+  REJECTED
+}
+
+enum LeaveStatus {
+  PENDING
+  APPROVED
   REJECTED
 }
 
