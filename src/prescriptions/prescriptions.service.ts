@@ -6,17 +6,22 @@ import {
   NotFoundException,
   ForbiddenException,
   BadRequestException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { PatientsService } from '../patients/patients.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { MedicationsService } from '../medications/medications.service';
+import { HospitalsService } from '../hospitals/hospitals.service';
 import { CreatePrescriptionDto, UpdatePrescriptionStatusDto } from './dto';
 import { HospitalIssuePrescriptionDto } from './dto/hospital-issue-prescription.dto';
 import { StaffService } from '../staff/staff.service';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
+import { PrescriptionMedication } from '@prisma/client';
+import * as crypto from 'crypto';
+import * as QRCode from 'qrcode';
 
 interface ExtractedMedication {
   name: string;
@@ -40,6 +45,7 @@ export class PrescriptionsService {
     private medicationsService: MedicationsService,
     private configService: ConfigService,
     private staffService: StaffService,
+    private hospitalsService: HospitalsService,
   ) {
     // Initialize Google Gemini AI
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
@@ -529,7 +535,10 @@ Do not include any explanation, only the JSON array.`,
           message: 'Your prescription has been approved and is ready.',
         });
       } catch (error) {
-        console.error('Failed to send PRESCRIPTION_DISPATCHED notification:', error);
+        console.error(
+          'Failed to send PRESCRIPTION_DISPATCHED notification:',
+          error,
+        );
       }
     }
 
@@ -585,45 +594,512 @@ Do not include any explanation, only the JSON array.`,
         return 'image/jpeg';
     }
   }
-  async emitHospitalDigitalPrescription(doctorUserId: string, dto: HospitalIssuePrescriptionDto) {
-    return this.prisma.$transaction(async (tx) => {
-      // this resolves internal doctor profile from user context token
-      const doctor = await tx.doctor.findUnique({ where: { userId: doctorUserId } });
-      if (!doctor) {
-        throw new ForbiddenException('Profile validation failed: active doctor account not found');
-      }
+  // 1. Serialization and cryptographic HMAC-SHA256 signature generator
+  generatePrescriptionHash(
+    doctorLicense: string,
+    patientId: string,
+    medications: any[],
+    date: Date,
+  ): string {
+    // Sort medications deterministically to avoid array order mismatches
+    const canonicalMeds = medications
+      .map((med) => {
+        const name = (med.name || '').toLowerCase().trim();
+        const dosage = (med.dosage || '').toLowerCase().trim();
+        const qty = med.quantity ?? 1;
+        return `${name}:${dosage}:${qty}`;
+      })
+      .sort()
+      .join(',');
 
-      // Assert tracking encounter exists
-      const appointment = await tx.appointment.findUnique({
-        where: { id: dto.appointmentId },
+    // Canonical representation
+    const serialized = [
+      doctorLicense.toLowerCase().trim(),
+      patientId.toLowerCase().trim(),
+      canonicalMeds,
+      date.toISOString(),
+    ].join('|');
+
+    const secret =
+      this.configService.get<string>('JWT_SECRET') ||
+      'default-prescription-secret-key-2026';
+    return crypto.createHmac('sha256', secret).update(serialized).digest('hex');
+  }
+
+  // 2. Base64 QR Code Generator
+  async generateQrCode(prescriptionId: string, hash: string): Promise<string> {
+    const payload = JSON.stringify({
+      id: prescriptionId,
+      hash: hash,
+    });
+    return QRCode.toDataURL(payload);
+  }
+
+  // 3. Verification & Refill Decrement Logic
+  async verifyPrescription(payload: { id?: string; qrCodePayload?: string }) {
+    let prescriptionId = payload.id;
+    let qrHash: string | undefined;
+
+    if (!prescriptionId && !payload.qrCodePayload) {
+      throw new BadRequestException('Either prescription id or scanned QR code payload must be provided');
+    }
+
+    // If scanned QR payload is passed, parse the JSON
+    if (payload.qrCodePayload) {
+      try {
+        const parsed = JSON.parse(payload.qrCodePayload);
+        if (parsed.id) {
+          prescriptionId = parsed.id;
+          qrHash = parsed.hash;
+        }
+      } catch (e) {
+        throw new BadRequestException('Invalid QR code payload format');
+      }
+    }
+
+    const prescription = await this.prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: {
+        doctor: true,
+        patient: true,
+        prescriptionMedications: true,
+      },
+    });
+
+    if (!prescription) {
+      throw new NotFoundException('Prescription not found');
+    }
+
+    // Retrieve active medications list in original format
+    const medications = prescription.prescriptionMedications.map((m) => ({
+      name: m.medicationName,
+      dosage: m.dosage,
+      quantity: m.quantity,
+    }));
+
+    const doctorLicense = prescription.doctor?.licenseNumber || '';
+
+    // Recalculate signature to check for tampering
+    const computedHash = this.generatePrescriptionHash(
+      doctorLicense,
+      prescription.patientId,
+      medications,
+      prescription.createdAt,
+    );
+
+    const storedHash = prescription.verificationHash;
+    const isTampered =
+      computedHash !== storedHash || (qrHash && qrHash !== storedHash);
+
+    const details = {
+      id: prescription.id,
+      patientId: prescription.patientId,
+      patientName: `${prescription.patient.firstName} ${prescription.patient.lastName}`,
+      doctorId: prescription.doctorId,
+      doctorLicense: doctorLicense,
+      medications,
+      refillsAllowed: prescription.refillsAllowed,
+      refillsRemaining: prescription.refillsRemaining,
+      createdAt: prescription.createdAt,
+    };
+
+    // A. TAMPERED CHECK
+    if (isTampered) {
+      return {
+        status: 'TAMPERED',
+        prescriptionDetails: details,
+      };
+    }
+
+    // B. EXPIRED CHECK (30 Days Validity)
+    const daysDifference =
+      (new Date().getTime() - prescription.createdAt.getTime()) /
+      (1000 * 3600 * 24);
+    if (daysDifference > 30) {
+      return {
+        status: 'EXPIRED',
+        prescriptionDetails: details,
+      };
+    }
+
+    // C. FILLED CHECK (0 Refills Remaining)
+    if (prescription.refillsRemaining <= 0) {
+      return {
+        status: 'FILLED',
+        prescriptionDetails: details,
+      };
+    }
+
+    // D. VALID: Decrement refillsRemaining by 1
+    const updated = await this.prisma.prescription.update({
+      where: { id: prescriptionId },
+      data: {
+        refillsRemaining: {
+          decrement: 1,
+        },
+      },
+    });
+
+    return {
+      status: 'VALID',
+      prescriptionDetails: {
+        ...details,
+        refillsRemaining: updated.refillsRemaining,
+      },
+    };
+  }
+
+  // ========================================
+  // HOSPITAL PRESCRIPTION ISSUE — STOCK CHECK + PHARMACY FALLBACK
+  // ========================================
+
+  async emitHospitalDigitalPrescription(
+    doctorUserId: string,
+    dto: HospitalIssuePrescriptionDto,
+  ) {
+    return this.prisma.$transaction(
+      async (tx) => {
+        // Resolve doctor
+        const doctor = await tx.doctor.findUnique({
+          where: { userId: doctorUserId },
+        });
+        if (!doctor) {
+          throw new ForbiddenException(
+            'Profile validation failed: active doctor account not found',
+          );
+        }
+
+        // Validate appointment
+        const appointment = await tx.appointment.findUnique({
+          where: { id: dto.appointmentId },
+        });
+        if (!appointment) {
+          throw new NotFoundException('Target encounter record not found');
+        }
+
+        // Load hospital for coordinates (needed for pharmacy fallback)
+        const hospital = await tx.hospital.findUnique({
+          where: { id: dto.hospitalId },
+        });
+        if (!hospital) {
+          throw new NotFoundException('Hospital not found');
+        }
+
+        // Format the custom prescription ID: EVUZE-PRESC-[YEAR]-[6-DIGIT-RANDOM]
+        const year = new Date().getFullYear();
+        let prescriptionId = '';
+        let exists = true;
+        while (exists) {
+          const random6 = Math.floor(100000 + Math.random() * 900000);
+          prescriptionId = `EVUZE-PRESC-${year}-${random6}`;
+          const found = await tx.prescription.findUnique({
+            where: { id: prescriptionId },
+          });
+          if (!found) exists = false;
+        }
+
+        const date = new Date();
+        const verificationHash = this.generatePrescriptionHash(
+          doctor.licenseNumber,
+          dto.patientId,
+          dto.medications,
+          date,
+        );
+
+        const qrCodeUrl = await this.generateQrCode(prescriptionId, verificationHash);
+
+        // Create parent prescription with security fields
+        const prescription = await tx.prescription.create({
+          data: {
+            id: prescriptionId,
+            patientId: dto.patientId,
+            doctorId: doctor.id,
+            hospitalId: dto.hospitalId,
+            appointmentId: dto.appointmentId,
+            diagnosis: appointment.diagnosisSummary || 'Clinical Consultation',
+            status: 'APPROVED',
+            verificationHash,
+            qrCodeUrl,
+            refillsAllowed: dto.refillsAllowed ?? 1,
+            refillsRemaining: dto.refillsAllowed ?? 1,
+            createdAt: date,
+          },
+        });
+
+
+        // Find or get encounter invoice for auto-population
+        let invoice = await tx.hospitalInvoice.findUnique({
+          where: { appointmentId: dto.appointmentId },
+        });
+        if (!invoice) {
+          invoice = await tx.hospitalInvoice.create({
+            data: {
+              appointmentId: dto.appointmentId,
+              patientId: dto.patientId,
+              hospitalId: dto.hospitalId,
+              totalAmount: 0,
+            },
+          });
+        }
+
+        const prescriptionMeds: PrescriptionMedication[] = [];
+        let invoiceAddedTotal = 0;
+
+        for (const med of dto.medications) {
+          // Try to find the drug in hospital stock by name match
+          const stockItems = await tx.hospitalDrugStock.findMany({
+            where: { hospitalId: dto.hospitalId },
+            include: { drug: true },
+          });
+
+          const matchedStock = stockItems.find(
+            (s) =>
+              s.drug.brandName.toLowerCase().includes(med.name.toLowerCase()) ||
+              s.drug.genericName.toLowerCase().includes(med.name.toLowerCase()),
+          );
+
+          const qty = med.quantity ?? 1;
+
+          if (matchedStock && matchedStock.quantity >= qty) {
+            // PATH A: Hospital stock available — dispense internally
+            await tx.hospitalDrugStock.update({
+              where: {
+                drugId_hospitalId: {
+                  drugId: matchedStock.drugId,
+                  hospitalId: dto.hospitalId,
+                },
+                quantity: { gte: qty }, // Atomic guard
+              },
+              data: { quantity: { decrement: qty } },
+            });
+
+            const pmRow = await tx.prescriptionMedication.create({
+              data: {
+                prescriptionId: prescription.id,
+                medicationName: med.name,
+                dosage: med.dosage,
+                frequency: med.frequency,
+                duration: med.duration,
+                quantity: qty,
+                isHospitalMed: true,
+                hospitalDrugStockDrugId: matchedStock.drugId,
+                hospitalDrugStockHospitalId: matchedStock.hospitalId,
+                fulfilledAt: new Date(),
+                dispenseStatus: 'HOSPITAL_DISPENSED',
+                available: true,
+              },
+            });
+            prescriptionMeds.push(pmRow);
+
+            // Auto-add to invoice
+            const unitPrice = Number(matchedStock.unitPrice);
+            const subtotal = unitPrice * qty;
+            await tx.hospitalInvoiceItem.create({
+              data: {
+                invoiceId: invoice.id,
+                description: `${med.name} (hospital dispensed)`,
+                quantity: qty,
+                unitCost: unitPrice,
+                subtotal,
+                category: 'HOSPITAL_DRUG',
+              },
+            });
+            invoiceAddedTotal += subtotal;
+          } else {
+            // PATH B: Out of stock — route to nearest E-Vuze pharmacy
+            let assignedPharmacyId: string | null = null;
+            if (hospital.latitude && hospital.longitude) {
+              const nearest =
+                await this.hospitalsService.findNearestPartnerPharmacy(
+                  hospital.latitude,
+                  hospital.longitude,
+                );
+              if (nearest) assignedPharmacyId = nearest.id;
+            }
+
+            const pmRow = await tx.prescriptionMedication.create({
+              data: {
+                prescriptionId: prescription.id,
+                medicationName: med.name,
+                dosage: med.dosage,
+                frequency: med.frequency,
+                duration: med.duration,
+                quantity: qty,
+                isHospitalMed: false,
+                pharmacyId: assignedPharmacyId,
+                dispenseStatus: 'PENDING',
+                available: false,
+              },
+            });
+            prescriptionMeds.push(pmRow);
+
+            // Add tracking line item to invoice
+            if (assignedPharmacyId) {
+              await tx.hospitalInvoiceItem.create({
+                data: {
+                  invoiceId: invoice.id,
+                  description: `${med.name} (dispatched to pharmacy)`,
+                  quantity: qty,
+                  unitCost: 0,
+                  subtotal: 0,
+                  category: 'PHARMACY_DRUG',
+                  pharmacyId: assignedPharmacyId,
+                },
+              });
+            }
+          }
+        }
+
+        // Update invoice total
+        if (invoiceAddedTotal > 0) {
+          await tx.hospitalInvoice.update({
+            where: { id: invoice.id },
+            data: {
+              totalAmount: {
+                increment: invoiceAddedTotal,
+              },
+            },
+          });
+        }
+
+        return {
+          prescription: {
+            ...prescription,
+            prescriptionMedications: prescriptionMeds,
+          },
+          summary: {
+            totalDrugs: dto.medications.length,
+            hospitalDispensed: prescriptionMeds.filter((m) => m.isHospitalMed)
+              .length,
+            routedToPharmacy: prescriptionMeds.filter((m) => !m.isHospitalMed)
+              .length,
+          },
+        };
+      },
+      { timeout: 20000 },
+    );
+  }
+
+  // ========================================
+  // EXTERNAL PHARMACY DISPATCH
+  // ========================================
+
+  async dispatchExternal(prescriptionId: string) {
+    const prescription = await this.prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: { prescriptionMedications: true },
+    });
+    if (!prescription) {
+      throw new NotFoundException('Prescription not found');
+    }
+
+    // 409 Conflict — prevent duplicate dispatch
+    if (prescription.dispatchedAt) {
+      throw new ConflictException(
+        'This prescription has already been dispatched to external pharmacies',
+      );
+    }
+
+    const externalItems = prescription.prescriptionMedications.filter(
+      (m) => !m.isHospitalMed && m.pharmacyId,
+    );
+
+    if (externalItems.length === 0) {
+      throw new BadRequestException(
+        'No items require external pharmacy dispatch',
+      );
+    }
+
+    // Group by pharmacy
+    const byPharmacy = new Map<string, typeof externalItems>();
+    for (const item of externalItems) {
+      const pid = item.pharmacyId;
+      if (!byPharmacy.has(pid)) byPharmacy.set(pid, []);
+      byPharmacy.get(pid).push(item);
+    }
+
+    const createdOrders: any[] = [];
+
+    await this.prisma.$transaction(
+      async (tx) => {
+        for (const pharmacyId of byPharmacy.keys()) {
+          const total = 0; // Price TBD by pharmacy
+          const order = await tx.order.create({
+            data: {
+              patientId: prescription.patientId,
+              pharmacyId,
+              type: 'PICKUP',
+              status: 'PENDING',
+              total,
+              prescriptionId: undefined, // Don't link — already linked via prescription model
+            },
+          });
+          createdOrders.push(order);
+        }
+
+        // Mark each item as dispatched
+        for (const item of externalItems) {
+          await tx.prescriptionMedication.update({
+            where: { id: item.id },
+            data: { dispenseStatus: 'DISPATCHED_TO_PHARMACY' },
+          });
+        }
+
+        // Mark prescription as dispatched
+        await tx.prescription.update({
+          where: { id: prescriptionId },
+          data: { dispatchedAt: new Date() },
+        });
+      },
+      { timeout: 20000 },
+    );
+
+    return {
+      message: `Dispatched ${externalItems.length} item(s) to ${byPharmacy.size} pharmacy(ies)`,
+      orders: createdOrders,
+    };
+  }
+
+  // ========================================
+  // PATIENT PRESCRIPTIONS BY MRN
+  // ========================================
+
+  async findByPatientMrn(mrn: string, hospitalId: string) {
+    const registration =
+      await this.prisma.hospitalPatientRegistration.findUnique({
+        where: { hospitalId_mrn: { hospitalId, mrn } },
       });
-      if (!appointment) {
-        throw new NotFoundException('Target tracking encounter record not found');
-      }
 
-      // Write parent prescription container alongside child array elements atomically
-      return tx.prescription.create({
-        data: {
-          patientId: dto.patientId,
-          doctorId: doctor.id,
-          hospitalId: dto.hospitalId,
-          appointmentId: dto.appointmentId,
-          diagnosis: appointment.diagnosisSummary || 'Clinical Consultation',
-          status: 'PENDING',
-          prescriptionMedications: {
-            create: dto.medications.map((med) => ({
-              medicationName: med.name,
-              dosage: med.dosage,
-              frequency: med.frequency,
-              duration: med.duration,
-              quantity: med.quantity ?? 1,
-            })),
+    if (!registration) {
+      throw new NotFoundException(
+        `No patient found with MRN ${mrn} at this hospital`,
+      );
+    }
+
+    const prescriptions = await this.prisma.prescription.findMany({
+      where: { patientId: registration.patientId, hospitalId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        prescriptionMedications: {
+          select: {
+            id: true,
+            medicationName: true,
+            dosage: true,
+            frequency: true,
+            duration: true,
+            quantity: true,
+            isHospitalMed: true,
+            pharmacyId: true,
+            fulfilledAt: true,
+            dispenseStatus: true,
           },
         },
-        include: {
-          prescriptionMedications: true,
+        doctor: {
+          select: { firstName: true, lastName: true, specialization: true },
         },
-      });
+      },
     });
+
+    return prescriptions;
   }
 }

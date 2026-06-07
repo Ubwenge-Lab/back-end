@@ -83,6 +83,7 @@ model Doctor {
   signatureUrl   String?
   appointments   Appointment[]
   schedules      DoctorSchedule[]
+  leaveRequests  DoctorLeave[]
   hospital       Hospital         @relation(fields: [hospitalId], references: [id])
   user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
   prescriptions  Prescription[]   @relation("DoctorToPrescription")
@@ -102,6 +103,25 @@ model DoctorSchedule {
 
   @@unique([doctorId, dayOfWeek, startTime])
   @@map("doctor_schedules")
+}
+
+model DoctorLeave {
+  id               String      @id @default(uuid())
+  doctorId         String
+  startDate        DateTime
+  endDate          DateTime
+  reason           String
+  status           LeaveStatus @default(PENDING)
+  affectedPatients Int         @default(0)
+  rejectionReason  String?
+  createdAt        DateTime    @default(now())
+  updatedAt        DateTime    @updatedAt
+
+  doctor Doctor @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([status])
+  @@map("doctor_leaves")
 }
 
 model HospitalStaff {
@@ -183,6 +203,7 @@ model Pharmacy {
   address              String
   latitude             Float?
   longitude            Float?
+  logoUrl              String?
   dateOfIncorporation  DateTime?
   rdbCertificate       String?
   pharmacyLicense      String?
@@ -343,16 +364,16 @@ model Medication {
 }
 
 model HospitalDrugStock {
-  hospitalId               String
-  quantity                 Int                      @default(0)
-  unitPrice                Decimal                  @db.Decimal(12, 2)
-  expiryDate               DateTime
-  drugId                   String
-  lastUpdated              DateTime                 @default(now()) @updatedAt
-  reorderLevel             Int                      @default(10)
-  drug                     MedicationRegistry       @relation(fields: [drugId], references: [id], onDelete: Cascade)
-  hospital                 Hospital                 @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  prescription_medications PrescriptionMedication[]
+  hospitalId              String
+  quantity                Int                      @default(0)
+  unitPrice               Decimal                  @db.Decimal(12, 2)
+  expiryDate              DateTime
+  drugId                  String
+  lastUpdated             DateTime                 @default(now()) @updatedAt
+  reorderLevel            Int                      @default(10)
+  drug                    MedicationRegistry       @relation(fields: [drugId], references: [id], onDelete: Cascade)
+  hospital                Hospital                 @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  prescriptionMedications PrescriptionMedication[]
 
   @@id([drugId, hospitalId])
   @@index([hospitalId])
@@ -390,28 +411,28 @@ model InvoiceItem {
 }
 
 model Appointment {
-  id                        String                      @id @default(uuid())
-  patientId                 String
-  doctorId                  String
-  hospitalId                String
-  reason                    String?
-  status                    AppointmentStatus           @default(SCHEDULED)
-  createdAt                 DateTime                    @default(now())
-  updatedAt                 DateTime                    @updatedAt
-  date                      DateTime
-  notes                     String?
-  diagnosisSummary          String?
-  doctorRecommendations     String?
-  telemedicineDuration      Int?
-  type                      AppointmentType             @default(IN_PERSON)
-  doctor                    Doctor                      @relation(fields: [doctorId], references: [id])
-  hospital                  Hospital                    @relation(fields: [hospitalId], references: [id])
-  patient                   Patient                     @relation(fields: [patientId], references: [id])
-  hospitalInvoice           HospitalInvoice?
-  invoice                   Invoice?
-  prescriptions             Prescription[]
-  telemedicine_session_logs telemedicine_session_logs[]
-  triageVitals              TriageVitals?
+  id                    String                   @id @default(uuid())
+  patientId             String
+  doctorId              String
+  hospitalId            String
+  reason                String?
+  status                AppointmentStatus        @default(SCHEDULED)
+  createdAt             DateTime                 @default(now())
+  updatedAt             DateTime                 @updatedAt
+  date                  DateTime
+  notes                 String?
+  diagnosisSummary      String?
+  doctorRecommendations String?
+  doctor                Doctor                   @relation(fields: [doctorId], references: [id])
+  hospital              Hospital                 @relation(fields: [hospitalId], references: [id])
+  patient               Patient                  @relation(fields: [patientId], references: [id])
+  prescriptions         Prescription[]
+  hospitalInvoice       HospitalInvoice?
+  triageVitals          TriageVitals?
+  invoice               Invoice?
+  type                  AppointmentType          @default(IN_PERSON)
+  telemedicineDuration  Int?
+  sessionLogs           TelemedicineSessionLog[]
 
   @@index([patientId])
   @@index([hospitalId])
@@ -491,7 +512,7 @@ model PrescriptionMedication {
   hospitalDrugStockHospitalId String?
   isHospitalMed               Boolean            @default(false)
   pharmacyId                  String?
-  hospital_drug_stock         HospitalDrugStock? @relation(fields: [hospitalDrugStockDrugId, hospitalDrugStockHospitalId], references: [drugId, hospitalId])
+  hospitalDrugStock           HospitalDrugStock? @relation(fields: [hospitalDrugStockDrugId, hospitalDrugStockHospitalId], references: [drugId, hospitalId])
   matchedMedication           Medication?        @relation(fields: [matchedMedicationId], references: [id])
   prescription                Prescription       @relation(fields: [prescriptionId], references: [id], onDelete: Cascade)
 
@@ -756,7 +777,7 @@ model HospitalInvoice {
   appointment      Appointment           @relation(fields: [appointmentId], references: [id])
   hospital         Hospital              @relation(fields: [hospitalId], references: [id])
   patient          Patient               @relation(fields: [patientId], references: [id])
-  insurance_claims insurance_claims?
+  insuranceClaim   InsuranceClaim?
 
   @@index([patientId])
   @@index([hospitalId])
@@ -793,27 +814,19 @@ model HospitalConfig {
   @@map("hospital_configs")
 }
 
-model insurance_claims {
-  id                String          @id
-  invoiceId         String          @unique
-  provider          String
-  claimAmount       Decimal         @db.Decimal(12, 2)
-  settledAmount     Decimal         @default(0) @db.Decimal(12, 2)
-  difference        Decimal         @default(0) @db.Decimal(12, 2)
-  status            ClaimStatus     @default(PENDING)
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime
-  hospital_invoices HospitalInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
-}
+model InsuranceClaim {
+  id            String          @id @default(uuid())
+  invoiceId     String          @unique
+  provider      String
+  claimAmount   Decimal         @db.Decimal(12, 2)
+  settledAmount Decimal         @default(0) @db.Decimal(12, 2)
+  difference    Decimal         @default(0) @db.Decimal(12, 2)
+  status        ClaimStatus     @default(PENDING)
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  invoice       HospitalInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
 
-model telemedicine_session_logs {
-  id            String      @id
-  appointmentId String
-  userId        String
-  role          String
-  action        String
-  timestamp     DateTime    @default(now())
-  appointments  Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  @@map("insurance_claims")
 }
 
 enum UserRole {
@@ -938,6 +951,11 @@ enum AppointmentStatus {
   READY_FOR_DOCTOR
 }
 
+enum AppointmentType {
+  ONLINE
+  IN_PERSON
+}
+
 enum InvoiceStatus {
   UNPAID
   PARTIAL
@@ -967,9 +985,11 @@ enum HospitalBillingStatus {
   PARTIAL
 }
 
-enum AppointmentType {
-  ONLINE
-  IN_PERSON
+enum DispenseStatus {
+  PENDING
+  HOSPITAL_DISPENSED
+  DISPATCHED_TO_PHARMACY
+  FULFILLED
 }
 
 enum ClaimStatus {
@@ -979,9 +999,20 @@ enum ClaimStatus {
   REJECTED
 }
 
-enum DispenseStatus {
+enum LeaveStatus {
   PENDING
-  HOSPITAL_DISPENSED
-  DISPATCHED_TO_PHARMACY
-  FULFILLED
+  APPROVED
+  REJECTED
+}
+
+model TelemedicineSessionLog {
+  id            String      @id @default(uuid())
+  appointmentId String
+  userId        String
+  role          String // 'DOCTOR' or 'PATIENT'
+  action        String // 'JOIN' or 'LEAVE'
+  timestamp     DateTime    @default(now())
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("telemedicine_session_logs")
 }

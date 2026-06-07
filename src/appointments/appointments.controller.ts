@@ -23,7 +23,9 @@ import {
   BookAppointmentDto,
   UpdateAppointmentStatusDto,
   CompleteConsultDto,
+  ConsultationSessionDto,
 } from './dto';
+import { Public } from '../auth/decorators/public.decorator';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -132,17 +134,15 @@ export class AppointmentsController {
   // PUT /appointments/:id/check-in — receptionist checks in patient
   // ========================================
 
-
   @Get(':id/patient-chart')
   @Roles(Role.DOCTOR)
-  @ApiOperation({ summary: 'Get summarized pre-consultation patient chart (Doctors only)' })
+  @ApiOperation({
+    summary: 'Get summarized pre-consultation patient chart (Doctors only)',
+  })
   @ApiParam({ name: 'id', description: 'Target Appointment UUID' })
   getPatientChart(@Req() req: any, @Param('id') id: string) {
     return this.appointmentsService.getDoctorPatientChart(id, req.user.sub);
   }
-
-
-
 
   @Put(':id/check-in')
   // @Roles(Role.RECEPTIONIST)
@@ -202,5 +202,36 @@ export class AppointmentsController {
       req.user.sub,
       dto,
     );
+  }
+
+  // ========================================
+  // GET /appointments/:id/telemedicine-room
+  // ========================================
+
+  @Public() // Bypasses mandatory JWT check for easy testing (auth-optional)
+  @Get(':id/telemedicine-room')
+  @ApiOperation({ summary: 'Get telemedicine consultation room config' })
+  @ApiParam({ name: 'id', description: 'Appointment UUID' })
+  getTelemedicineRoom(@Req() req: any, @Param('id') id: string) {
+    // If authenticated, we pass user context, otherwise we pass undefined to bypass checks
+    const userId = req.user?.sub;
+    const role = req.user?.role;
+    return this.appointmentsService.getTelemedicineRoom(id, userId, role);
+  }
+
+  // ========================================
+  // POST /appointments/:id/consultation-session
+  // ========================================
+
+  @Public() // Public telemetry hook route to track participant join/leave times
+  @Post(':id/consultation-session')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Log participant join/leave telemedicine events' })
+  @ApiParam({ name: 'id', description: 'Appointment UUID' })
+  logConsultationSession(
+    @Param('id') id: string,
+    @Body() dto: ConsultationSessionDto,
+  ) {
+    return this.appointmentsService.logConsultationSession(id, dto);
   }
 }

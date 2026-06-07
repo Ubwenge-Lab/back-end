@@ -51,4 +51,11 @@ export class HospitalIssuePrescriptionDto {
   @ValidateNested({ each: true })
   @Type(() => HospitalMedicationItemDto)
   medications: HospitalMedicationItemDto[];
+
+  @ApiPropertyOptional({ example: 1, default: 1 })
+  @IsInt()
+  @Min(0)
+  @IsOptional()
+  refillsAllowed?: number;
+
 }

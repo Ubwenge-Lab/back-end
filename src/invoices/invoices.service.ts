@@ -4,12 +4,17 @@ import {
   ForbiddenException,
   BadRequestException,
 } from '@nestjs/common';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
 import { HospitalBillingStatus } from '@prisma/client';
+import { InvoicePaidEvent } from '../documents/invoice-paid.event';
 
 @Injectable()
 export class InvoicesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly eventEmitter: EventEmitter2,
+  ) {}
 
   // ========================================
   // ADMIN LIST — paginated, filtered by hospital
@@ -129,8 +134,31 @@ export class InvoicesService {
     const updated = await this.prisma.hospitalInvoice.update({
       where: { id },
       data: { paymentStatus: HospitalBillingStatus.PAID },
-      include: hospitalInvoiceInclude,
+      include: {
+        ...hospitalInvoiceInclude,
+        patient: {
+          select: {
+            firstName: true,
+            lastName: true,
+            phone: true,
+            user: { select: { email: true } },
+          },
+        },
+      },
     });
+
+    // Fire async — does not block the response
+    const patientEmail = updated.patient?.user?.email;
+    if (patientEmail) {
+      this.eventEmitter.emit(
+        'invoice.paid',
+        new InvoicePaidEvent(
+          updated.id,
+          patientEmail,
+          `${updated.patient.firstName} ${updated.patient.lastName}`,
+        ),
+      );
+    }
 
     return { message: 'Invoice marked as PAID.', invoice: updated };
   }
