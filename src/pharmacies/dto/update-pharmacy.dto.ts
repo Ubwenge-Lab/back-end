@@ -82,4 +82,13 @@ export class UpdatePharmacyDto {
   @IsObject()
   @IsOptional()
   operatingHours?: any;
+
+  @ApiProperty({
+    required: false,
+    description:
+      'Pharmacy logo / owner profile picture (base64 data URI from POST /upload/medication-image)',
+  })
+  @IsString()
+  @IsOptional()
+  logoUrl?: string;
 }

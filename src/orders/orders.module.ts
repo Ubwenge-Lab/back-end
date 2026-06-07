@@ -1,6 +1,6 @@
 // backend/src/orders/orders.module.ts
 
-import { Module } from '@nestjs/common';
+import { Module, forwardRef } from '@nestjs/common';
 import { OrdersService } from './orders.service';
 import { OrdersController } from './orders.controller';
 import { PatientsModule } from '../patients/patients.module';
@@ -14,11 +14,11 @@ import { StaffModule } from '../staff/staff.module';
 @Module({
   imports: [
     PatientsModule,
-    PharmaciesModule,
+    forwardRef(() => PharmaciesModule),
     MedicationsModule,
-    PrescriptionsModule,
+    forwardRef(() => PrescriptionsModule),
     NotificationsModule,
-    PaymentsModule,
+    forwardRef(() => PaymentsModule),
     StaffModule,
   ],
   controllers: [OrdersController],

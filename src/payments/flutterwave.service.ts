@@ -64,6 +64,16 @@ export class FlutterwaveService implements OnModuleInit {
     customerPhone: string;
     paymentMethod: 'MTN_MOMO' | 'AIRTEL_MONEY' | 'CARD';
   }) {
+    if (this.secretKey?.includes('your-secret-key')) {
+      return {
+        status: 'success',
+        message: 'Mock payment initialized',
+        data: {
+          link: `${this.configService.get('FRONTEND_URL') || 'http://localhost:3000'}/patient/orders/${data.orderId}?mock_pay=true`,
+        },
+      };
+    }
+
     const payload = {
       tx_ref: `${data.orderId}-${Date.now()}`,
       amount: data.amount,
@@ -105,6 +115,21 @@ export class FlutterwaveService implements OnModuleInit {
   // ========================================
 
   async verifyPayment(transactionId: string) {
+    if (this.secretKey?.includes('your-secret-key')) {
+      return {
+        status: 'success',
+        message: 'Mock payment verified successfully',
+        data: {
+          status: 'successful',
+          id: Number(transactionId) || 123456,
+          tx_ref: `mock-tx-ref-${transactionId}`,
+          flw_ref: `mock-flw-ref-${transactionId}`,
+          amount: 1000,
+          currency: 'RWF',
+        },
+      };
+    }
+
     try {
       const response = await firstValueFrom(
         this.httpService.get(
@@ -137,6 +162,21 @@ export class FlutterwaveService implements OnModuleInit {
     customerEmail: string;
     customerName: string;
   }) {
+    if (this.secretKey?.includes('your-secret-key')) {
+      return {
+        status: 'success',
+        message: 'Mock charge initiated',
+        meta: {
+          authorization: {
+            mode: 'otp',
+          },
+        },
+        data: {
+          flw_ref: `mock-flw-ref-${data.orderId}`,
+        },
+      };
+    }
+
     const payload = {
       tx_ref: `${data.orderId}-${Date.now()}`,
       amount: data.amount,
@@ -174,6 +214,21 @@ export class FlutterwaveService implements OnModuleInit {
   // ========================================
 
   async validateMobileMoneyOTP(data: { otp: string; flw_ref: string }) {
+    if (this.secretKey?.includes('your-secret-key')) {
+      return {
+        status: 'success',
+        message: 'Mock OTP validated successfully',
+        data: {
+          status: 'successful',
+          id: 123456,
+          tx_ref: data.flw_ref.replace('mock-flw-ref-', ''),
+          flw_ref: data.flw_ref,
+          amount: 1000,
+          currency: 'RWF',
+        },
+      };
+    }
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(
@@ -213,6 +268,21 @@ export class FlutterwaveService implements OnModuleInit {
     customerEmail: string;
     customerName: string;
   }) {
+    if (this.secretKey?.includes('your-secret-key')) {
+      return {
+        status: 'success',
+        message: 'Mock card charge successful',
+        data: {
+          status: 'successful',
+          id: 123456,
+          tx_ref: `${data.orderId}-mock-card`,
+          flw_ref: `mock-flw-ref-${data.orderId}`,
+          amount: data.amount,
+          currency: 'RWF',
+        },
+      };
+    }
+
     const payload = {
       tx_ref: `${data.orderId}-${Date.now()}`,
       amount: data.amount,
@@ -249,6 +319,13 @@ export class FlutterwaveService implements OnModuleInit {
   // ========================================
 
   async refund(transactionId: string) {
+    if (this.secretKey?.includes('your-secret-key')) {
+      return {
+        status: 'success',
+        message: 'Mock refund successful',
+      };
+    }
+
     try {
       const response = await firstValueFrom(
         this.httpService.post(

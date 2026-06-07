@@ -67,25 +67,30 @@ export class StockTransfersService {
       throw new BadRequestException('Invalid destination branch');
     }
 
-    for (const item of dto.items) {
-      const medication = await this.prisma.medication.findUnique({
-        where: { id: item.medicationId },
-      });
-
-      if (!medication || medication.branchId !== fromBranch.id) {
-        throw new BadRequestException(
-          `Medication ${item.medicationId} not found in your branch inventory`,
-        );
-      }
-
-      if (medication.quantity < item.quantity) {
-        throw new BadRequestException(
-          `Insufficient stock for medication: ${medication.name}. Available: ${medication.quantity}, Requested: ${item.quantity}`,
-        );
-      }
-    }
-
+    // Wrap stock validation + transfer creation in a transaction so that the
+    // quantity check and the record creation are atomic. Without this, two
+    // concurrent transfer requests could both pass the stock check and both
+    // be created even when only one had enough stock.
     return this.prisma.$transaction(async (tx) => {
+      for (const item of dto.items) {
+        const medication = await tx.medication.findUnique({
+          where: { id: item.medicationId },
+        });
+
+        if (!medication || medication.branchId !== fromBranch.id) {
+          throw new BadRequestException(
+            `Medication ${item.medicationId} not found in your branch inventory`,
+          );
+        }
+
+        if (medication.quantity < item.quantity) {
+          throw new BadRequestException(
+            `Insufficient stock for medication: ${medication.name}. Available: ${medication.quantity}, Requested: ${item.quantity}`,
+          );
+        }
+      }
+
+
       for (const item of dto.items) {
         await tx.medication.update({
           where: { id: item.medicationId },
@@ -106,7 +111,9 @@ export class StockTransfersService {
             })),
           },
         },
-        include: { items: true },
+        include: {
+          items: true,
+        },
       });
     });
   }

@@ -3,6 +3,7 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Resend } from 'resend';
+import { generateIcsString } from '../utils/ics.util';
 
 @Injectable()
 export class EmailService {
@@ -666,12 +667,17 @@ export class EmailService {
   // ========================================
 
   async sendAppointmentConfirmation(data: {
-    patientEmail: string;
-    patientName: string;
+    email: string;
+    recipientName: string;
     doctorName: string;
+    patientName: string;
     hospitalName: string;
     date: Date;
     reason: string;
+    appointmentId: string;
+    role: 'PATIENT' | 'DOCTOR';
+    appointmentType: 'ONLINE' | 'IN_PERSON';
+    hospitalAddress?: string;
   }) {
     const dateStr = data.date.toLocaleDateString('en-GB', {
       weekday: 'long',
@@ -684,26 +690,31 @@ export class EmailService {
       minute: '2-digit',
     });
 
-    console.log('==========================================');
-    console.log(`📅 APPOINTMENT CONFIRMED`);
-    console.log(`👤 Patient:  ${data.patientName} (${data.patientEmail})`);
-    console.log(`🩺 Doctor:   ${data.doctorName}`);
-    console.log(`🏥 Hospital: ${data.hospitalName}`);
-    console.log(`🕐 When:     ${dateStr} at ${timeStr}`);
-    console.log(`📋 Reason:   ${data.reason}`);
-    console.log('==========================================');
+    const isPatient = data.role === 'PATIENT';
+    const isOnline = data.appointmentType === 'ONLINE';
+    const frontendUrl = (
+      this.configService.get('FRONTEND_URL') || 'http://localhost:3000'
+    ).replace(/\/$/, '');
+    const roomLink = `${frontendUrl}/hospital/consultation/${data.appointmentId}`;
+    const subject = isPatient
+      ? `✅ Appointment confirmed — ${data.hospitalName}`
+      : `📅 New Appointment scheduled — ${data.hospitalName}`;
 
-    if (!this.resend) {
-      console.warn(
-        '⚠️  Resend not configured - confirmation logged above only',
-      );
-      return;
-    }
+    const introText = isPatient
+      ? `Hi <strong>${data.recipientName}</strong>, your appointment has been booked. Here are the details:`
+      : `Hi <strong>${data.recipientName}</strong>, you have a new appointment scheduled with patient <strong>${data.patientName}</strong>. Here are the details:`;
+
+    const locationLabel = isOnline
+      ? 'Location (Online Room)'
+      : 'Location (In-Person)';
+    const locationValue = isOnline
+      ? `<a href="${roomLink}" style="color:#0d9488;font-weight:bold;text-decoration:underline;">Join Online Call (Jitsi Meet)</a>`
+      : `${data.hospitalName} - ${data.hospitalAddress || 'Hospital Premises'}`;
 
     const html = this.baseTemplate(`
       <h2 style="margin:0 0 12px;color:#1a1a2e;font-size:22px;">Appointment Confirmed ✅</h2>
       <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.7;">
-        Hi <strong>${data.patientName}</strong>, your appointment has been booked. Here are the details:
+        ${introText}
       </p>
 
       <table width="100%" cellpadding="0" cellspacing="0" style="background:#f8f9ff;border-radius:10px;margin:0 0 24px;border:1px solid #e8ecf4;">
@@ -711,6 +722,12 @@ export class EmailService {
           <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
             <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Doctor</p>
             <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${data.doctorName}</p>
+          </td>
+        </tr>
+        <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Patient</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${data.patientName}</p>
           </td>
         </tr>
         <tr>
@@ -726,6 +743,12 @@ export class EmailService {
           </td>
         </tr>
         <tr>
+          <td style="padding:14px 24px;border-bottom:1px solid #e8ecf4;">
+            <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">${locationLabel}</p>
+            <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;font-weight:600;">${locationValue}</p>
+          </td>
+        </tr>
+        <tr>
           <td style="padding:14px 24px;">
             <p style="margin:0;color:#888;font-size:12px;text-transform:uppercase;letter-spacing:1px;">Reason for Visit</p>
             <p style="margin:4px 0 0;color:#1a1a2e;font-size:15px;">${data.reason}</p>
@@ -733,19 +756,67 @@ export class EmailService {
         </tr>
       </table>
 
+      ${
+        isOnline
+          ? `
+        <div style="text-align:center;margin:30px 0;">
+          <a href="${roomLink}" style="background-color:#0d9488;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;box-shadow:0 4px 6px rgba(13,148,136,0.2);">
+            Join Telemedicine Consultation
+          </a>
+        </div>
+        `
+          : ''
+      }
+
       <p style="margin:0;color:#bbb;font-size:12px;text-align:center;line-height:1.6;">
-        Need to cancel? Log in to your Evuze account and manage your appointments there.
+        To manage or cancel your appointments, log in to your Evuze account.
       </p>
     `);
 
+    console.log('==========================================');
+    console.log(`📅 APPOINTMENT CONFIRMED (${data.role})`);
+    console.log(`👤 Recipient: ${data.recipientName} (${data.email})`);
+    console.log(`🩺 Doctor:    ${data.doctorName}`);
+    console.log(`👤 Patient:   ${data.patientName}`);
+    console.log(`🏥 Hospital:  ${data.hospitalName}`);
+    console.log(`🕐 When:      ${dateStr} at ${timeStr}`);
+    console.log(`📋 Reason:    ${data.reason}`);
+    console.log(`🔗 Type:      ${data.appointmentType}`);
+    console.log('==========================================');
+
+    if (!this.resend) {
+      console.warn(
+        '⚠️  Resend not configured - confirmation logged above only',
+      );
+      return;
+    }
+
+    const attachments: { filename: string; content: string }[] = [];
+    if (isOnline) {
+      const icsString = generateIcsString({
+        id: data.appointmentId,
+        doctorName: data.doctorName,
+        patientName: data.patientName,
+        date: data.date,
+        reason: data.reason,
+        roomLink,
+        hospitalName: data.hospitalName,
+      });
+      attachments.push({
+        filename: `consultation-${data.appointmentId}.ics`,
+        content: Buffer.from(icsString).toString('base64'),
+      });
+    }
+
     try {
       await this.resend.emails.send({
-        to: data.patientEmail,
+        to: data.email,
         from: this.getFrom(),
-        subject: `✅ Appointment confirmed — ${data.hospitalName}`,
+        subject,
         html,
+        ...(attachments.length > 0 && { attachments }),
       });
-      console.log(`✅ Appointment confirmation sent to ${data.patientEmail}`);
+      console.log(`✅ Appointment confirmation sent to ${data.email}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
     }

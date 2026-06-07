@@ -3,10 +3,34 @@ import {
   UserRole,
   PharmacyStatus,
   BranchStatus,
+  PaymentMethod,
+  PaymentStatus,
+  AppointmentStatus,
+  HospitalBillingStatus,
+  InvoiceStatus,
+  OrderStatus,
+  OrderType,
+  StaffStatus,
+  NotificationType,
+  ClaimStatus,
 } from '@prisma/client';
 import { generateMRN } from '../utils/hospital';
+import { faker } from '@faker-js/faker';
 import * as bcrypt from 'bcrypt';
 import 'dotenv/config';
+import * as fs from 'fs';
+import * as path from 'path';
+import * as readline from 'readline';
+
+const medicineImages = [
+  'https://images.unsplash.com/photo-1584017911766-d451b3d0e843?w=500&auto=format&fit=crop&q=60', // Pills container
+  'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&auto=format&fit=crop&q=60', // Blue pills
+  'https://images.unsplash.com/photo-1607619056574-7b8d3ee536b2?w=500&auto=format&fit=crop&q=60', // Capsules
+  'https://images.unsplash.com/photo-1628771065518-0d82f15e8562?w=500&auto=format&fit=crop&q=60', // Medicine bottles
+  'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=500&auto=format&fit=crop&q=60', // Syringe / liquid
+  'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=500&auto=format&fit=crop&q=60', // Pills on hand
+  'https://images.unsplash.com/photo-1550572017-edd951b55104?w=500&auto=format&fit=crop&q=60', // White pills
+];
 
 const prisma = new PrismaClient();
 
@@ -157,7 +181,12 @@ async function main() {
   for (const u of users) {
     await prisma.user.upsert({
       where: { email: u.email },
-      update: { role: u.role, isVerified: u.isVerified, isActive: true },
+      update: {
+        role: u.role,
+        isVerified: u.isVerified,
+        isActive: true,
+        password: u.pass,
+      },
       create: {
         id: u.id,
         email: u.email,
@@ -190,6 +219,7 @@ async function main() {
       address: 'KN 5 Ave, Nyarugenge, Kigali',
       latitude: -1.9441,
       longitude: 30.0619,
+      logoUrl: 'https://images.unsplash.com/photo-1586015555751-63bb77f4322a?w=150',
       dateOfIncorporation: new Date('2018-03-15'),
       rdbCertificate: 'RDB-2018-001234',
       pharmacyLicense: 'LIC-2018-PH-001',
@@ -205,6 +235,7 @@ async function main() {
       address: 'KG 11 Ave, Kimironko, Gasabo, Kigali',
       latitude: -1.9412,
       longitude: 30.1092,
+      logoUrl: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=150',
       dateOfIncorporation: new Date('2019-06-20'),
       rdbCertificate: 'RDB-2019-004521',
       pharmacyLicense: 'LIC-2019-PH-022',
@@ -220,6 +251,7 @@ async function main() {
       address: 'KN 3 Rd, City Centre, Nyarugenge, Kigali',
       latitude: -1.95,
       longitude: 30.0588,
+      logoUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=150',
       dateOfIncorporation: new Date('2020-01-10'),
       rdbCertificate: 'RDB-2020-005566',
       pharmacyLicense: 'LIC-2020-PH-055',
@@ -235,6 +267,7 @@ async function main() {
       address: 'KG 9 Ave, Remera, Gasabo, Kigali',
       latitude: -1.9559,
       longitude: 30.1125,
+      logoUrl: 'https://images.unsplash.com/photo-1628771065518-0d82f15e8562?w=150',
       dateOfIncorporation: new Date('2023-08-05'),
       rdbCertificate: 'RDB-2023-009988',
       pharmacyLicense: 'LIC-2023-PH-099',
@@ -473,6 +506,7 @@ async function main() {
         category: 'Antibiotics',
         price: 2500,
         quantity: 200,
+        imageUrl: medicineImages[0],
       },
     });
 
@@ -584,9 +618,1394 @@ async function main() {
     });
   }
 
+  // ==========================================
+  // 7. HOSPITALS, DOCTORS, APPOINTMENTS & INVOICES (Idempotent Hospital Seeding)
+  // ==========================================
+  console.log('🏥 Syncing hospitals, doctors, appointments & invoices...');
+
+  // Create Hospital Admin Users
+  const hospitalAdminEmails = ['admin@kingfaisal.com', 'admin@chuk.com'];
+  for (const email of hospitalAdminEmails) {
+    await prisma.user.upsert({
+      where: { email },
+      update: {
+        password: password,
+        role: UserRole.HOSPITAL_ADMIN,
+        isVerified: true,
+        isActive: true,
+      },
+      create: {
+        email,
+        password: password,
+        role: UserRole.HOSPITAL_ADMIN,
+        isVerified: true,
+        isActive: true,
+      },
+    });
+  }
+
+  const kfhAdminId = await getUserId('admin@kingfaisal.com');
+  const chukAdminId = await getUserId('admin@chuk.com');
+
+  // Create Hospitals
+  const kfhId = '50000000-0000-0000-0000-000000000001';
+  const chukId = '50000000-0000-0000-0000-000000000002';
+
+  if (kfhAdminId) {
+    await prisma.hospital.upsert({
+      where: { userId: kfhAdminId },
+      update: { name: 'King Faisal Hospital', status: PharmacyStatus.APPROVED },
+      create: {
+        id: kfhId,
+        userId: kfhAdminId,
+        name: 'King Faisal Hospital',
+        address: 'KG 544 St, Kigali',
+        phone: '+250788111111',
+        status: PharmacyStatus.APPROVED,
+        latitude: -1.9439,
+        longitude: 30.0935,
+      },
+    });
+  }
+
+  if (chukAdminId) {
+    await prisma.hospital.upsert({
+      where: { userId: chukAdminId },
+      update: {
+        name: 'Kigali University Teaching Hospital (CHUK)',
+        status: PharmacyStatus.APPROVED,
+      },
+      create: {
+        id: chukId,
+        userId: chukAdminId,
+        name: 'Kigali University Teaching Hospital (CHUK)',
+        address: 'KN 4 Ave, Nyarugenge, Kigali',
+        phone: '+250788222222',
+        status: PharmacyStatus.APPROVED,
+        latitude: -1.9489,
+        longitude: 30.0592,
+      },
+    });
+  }
+
+  // Create Doctor Users
+  const doctorEmails = ['robert@chuk.com', 'eric@kingfaisal.com'];
+  for (const email of doctorEmails) {
+    await prisma.user.upsert({
+      where: { email },
+      update: {
+        password: password,
+        role: UserRole.DOCTOR,
+        isVerified: true,
+        isActive: true,
+      },
+      create: {
+        email,
+        password: password,
+        role: UserRole.DOCTOR,
+        isVerified: true,
+        isActive: true,
+      },
+    });
+  }
+
+  const robertUserId = await getUserId('robert@chuk.com');
+  const ericUserId = await getUserId('eric@kingfaisal.com');
+
+  const robertDocId = '60000000-0000-0000-0000-000000000001';
+  const ericDocId = '60000000-0000-0000-0000-000000000002';
+
+  if (robertUserId) {
+    await prisma.doctor.upsert({
+      where: { userId: robertUserId },
+      update: { specialization: 'Cardiology' },
+      create: {
+        id: robertDocId,
+        userId: robertUserId,
+        hospitalId: chukId,
+        specialization: 'Cardiology',
+        licenseNumber: 'RW-MED-12345',
+        firstName: 'Robert',
+        lastName: 'Niyonkuru',
+        isAvailable: true,
+        bio: 'Senior Cardiologist specializing in heart rhythm disorders.',
+      },
+    });
+
+    // Seed Doctor Schedules
+    for (let day = 1; day <= 5; day++) {
+      const scheduleId = `robert-schedule-day-${day}`;
+      const existing = await prisma.doctorSchedule.findUnique({
+        where: { id: scheduleId },
+      });
+      if (!existing) {
+        await prisma.doctorSchedule.create({
+          data: {
+            id: scheduleId,
+            doctorId: robertDocId,
+            dayOfWeek: day,
+            startTime: '08:00',
+            endTime: '17:00',
+          },
+        });
+      }
+    }
+  }
+
+  if (ericUserId) {
+    await prisma.doctor.upsert({
+      where: { userId: ericUserId },
+      update: { specialization: 'Pediatrics' },
+      create: {
+        id: ericDocId,
+        userId: ericUserId,
+        hospitalId: kfhId,
+        specialization: 'Pediatrics',
+        licenseNumber: 'RW-MED-67890',
+        firstName: 'Eric',
+        lastName: 'Havugimana',
+        isAvailable: true,
+        bio: 'Compassionate Pediatrician with 8+ years of experience.',
+      },
+    });
+
+    // Seed Doctor Schedules
+    for (let day = 1; day <= 5; day++) {
+      const scheduleId = `eric-schedule-day-${day}`;
+      const existing = await prisma.doctorSchedule.findUnique({
+        where: { id: scheduleId },
+      });
+      if (!existing) {
+        await prisma.doctorSchedule.create({
+          data: {
+            id: scheduleId,
+            doctorId: ericDocId,
+            dayOfWeek: day,
+            startTime: '08:00',
+            endTime: '17:00',
+          },
+        });
+      }
+    }
+  }
+
+  // Create Hospital Configs
+  await prisma.hospitalConfig.upsert({
+    where: { hospitalId: chukId },
+    update: { consultationFee: 10000, triageFee: 3000 },
+    create: {
+      hospitalId: chukId,
+      consultationFee: 10000,
+      triageFee: 3000,
+    },
+  });
+
+  await prisma.hospitalConfig.upsert({
+    where: { hospitalId: kfhId },
+    update: { consultationFee: 25000, triageFee: 5000 },
+    create: {
+      hospitalId: kfhId,
+      consultationFee: 25000,
+      triageFee: 5000,
+    },
+  });
+
+  // Create Patient Hospital Registrations (CHUK & King Faisal)
+  const alicePatient = await prisma.patient.findFirst({
+    where: { firstName: 'Alice' },
+  });
+  const bobPatient = await prisma.patient.findFirst({
+    where: { firstName: 'Bob' },
+  });
+
+  if (alicePatient) {
+    const regId = `reg-alice-chuk`;
+    const existing = await prisma.hospitalPatientRegistration.findUnique({
+      where: { id: regId },
+    });
+    if (!existing) {
+      await prisma.hospitalPatientRegistration.create({
+        data: {
+          id: regId,
+          patientId: alicePatient.id,
+          hospitalId: chukId,
+          mrn: alicePatient.mrn,
+        },
+      });
+    }
+  }
+
+  if (bobPatient) {
+    const regId = `reg-bob-kfh`;
+    const existing = await prisma.hospitalPatientRegistration.findUnique({
+      where: { id: regId },
+    });
+    if (!existing) {
+      await prisma.hospitalPatientRegistration.create({
+        data: {
+          id: regId,
+          patientId: bobPatient.id,
+          hospitalId: kfhId,
+          mrn: bobPatient.mrn,
+        },
+      });
+    }
+  }
+
+  // Seed Predictable Appointments and Invoices
+  if (alicePatient && robertDocId) {
+    // 1. Unpaid Hospital Invoice for testing
+    const apptId1 = '70000000-0000-0000-0000-000000000001';
+    const apptExisting1 = await prisma.appointment.findUnique({
+      where: { id: apptId1 },
+    });
+    if (!apptExisting1) {
+      await prisma.appointment.create({
+        data: {
+          id: apptId1,
+          patientId: alicePatient.id,
+          doctorId: robertDocId,
+          hospitalId: chukId,
+          date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
+          status: AppointmentStatus.COMPLETED,
+          reason: 'Routine Cardiac Followup',
+        },
+      });
+    }
+
+    const hInvoiceId1 = '00000000-0000-0000-0000-000000000100';
+    const hInvoiceExisting1 = await prisma.hospitalInvoice.findUnique({
+      where: { id: hInvoiceId1 },
+    });
+    if (!hInvoiceExisting1) {
+      await prisma.hospitalInvoice.create({
+        data: {
+          id: hInvoiceId1,
+          appointmentId: apptId1,
+          patientId: alicePatient.id,
+          hospitalId: chukId,
+          totalAmount: 13000,
+          paymentStatus: HospitalBillingStatus.UNPAID,
+          issuedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+          items: {
+            create: [
+              {
+                description: 'Cardiology Consultation',
+                quantity: 1,
+                unitCost: 10000,
+                subtotal: 10000,
+                category: 'CONSULTATION',
+              },
+              {
+                description: 'Triage Check',
+                quantity: 1,
+                unitCost: 3000,
+                subtotal: 3000,
+                category: 'TRIAGE',
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    const invoiceId1 = '00000000-0000-0000-0000-000000000101';
+    const invoiceExisting1 = await prisma.invoice.findUnique({
+      where: { id: invoiceId1 },
+    });
+    if (!invoiceExisting1) {
+      await prisma.invoice.create({
+        data: {
+          id: invoiceId1,
+          appointmentId: apptId1,
+          patientId: alicePatient.id,
+          hospitalId: chukId,
+          totalAmount: 13000,
+          status: InvoiceStatus.UNPAID,
+          dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
+          items: {
+            create: [
+              {
+                description: 'Cardiology Consultation',
+                quantity: 1,
+                unitPrice: 10000,
+                subtotal: 10000,
+              },
+              {
+                description: 'Triage Check',
+                quantity: 1,
+                unitPrice: 3000,
+                subtotal: 3000,
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    // 2. Paid Hospital Invoice with Payments logged
+    const apptId2 = '70000000-0000-0000-0000-000000000002';
+    const apptExisting2 = await prisma.appointment.findUnique({
+      where: { id: apptId2 },
+    });
+    if (!apptExisting2) {
+      await prisma.appointment.create({
+        data: {
+          id: apptId2,
+          patientId: alicePatient.id,
+          doctorId: robertDocId,
+          hospitalId: chukId,
+          date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
+          status: AppointmentStatus.COMPLETED,
+          reason: 'Chest pain examination',
+        },
+      });
+    }
+
+    const hInvoiceId2 = '00000000-0000-0000-0000-000000000200';
+    const hInvoiceExisting2 = await prisma.hospitalInvoice.findUnique({
+      where: { id: hInvoiceId2 },
+    });
+    if (!hInvoiceExisting2) {
+      await prisma.hospitalInvoice.create({
+        data: {
+          id: hInvoiceId2,
+          appointmentId: apptId2,
+          patientId: alicePatient.id,
+          hospitalId: chukId,
+          totalAmount: 13000,
+          paymentStatus: HospitalBillingStatus.PAID,
+          issuedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+          items: {
+            create: [
+              {
+                description: 'Cardiology Consultation',
+                quantity: 1,
+                unitCost: 10000,
+                subtotal: 10000,
+                category: 'CONSULTATION',
+              },
+              {
+                description: 'Triage Check',
+                quantity: 1,
+                unitCost: 3000,
+                subtotal: 3000,
+                category: 'TRIAGE',
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    const invoiceId2 = '00000000-0000-0000-0000-000000000201';
+    const invoiceExisting2 = await prisma.invoice.findUnique({
+      where: { id: invoiceId2 },
+    });
+    if (!invoiceExisting2) {
+      await prisma.invoice.create({
+        data: {
+          id: invoiceId2,
+          appointmentId: apptId2,
+          patientId: alicePatient.id,
+          hospitalId: chukId,
+          totalAmount: 13000,
+          status: InvoiceStatus.PAID,
+          dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
+          items: {
+            create: [
+              {
+                description: 'Cardiology Consultation',
+                quantity: 1,
+                unitPrice: 10000,
+                subtotal: 10000,
+              },
+              {
+                description: 'Triage Check',
+                quantity: 1,
+                unitPrice: 3000,
+                subtotal: 3000,
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    // Seed payments for the paid general invoice
+    const paymentId2 = 'payment-seed-record-2';
+    const paymentExisting2 = await prisma.hospitalPayment.findUnique({
+      where: { id: paymentId2 },
+    });
+    if (!paymentExisting2) {
+      await prisma.hospitalPayment.create({
+        data: {
+          id: paymentId2,
+          invoiceId: invoiceId2,
+          patientId: alicePatient.id,
+          amount: 13000,
+          method: PaymentMethod.MTN_MOMO,
+          status: PaymentStatus.COMPLETED,
+          paidAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
+          notes: 'Seeded payment record for paid test invoice',
+        },
+      });
+    }
+
+    // 3. Insurance Pending Claim
+    const apptId3 = '70000000-0000-0000-0000-000000000003';
+    const apptExisting3 = await prisma.appointment.findUnique({
+      where: { id: apptId3 },
+    });
+    if (!apptExisting3) {
+      await prisma.appointment.create({
+        data: {
+          id: apptId3,
+          patientId: alicePatient.id,
+          doctorId: robertDocId,
+          hospitalId: chukId,
+          date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1 day ago
+          status: AppointmentStatus.COMPLETED,
+          reason: 'Emergency consult',
+        },
+      });
+    }
+
+    const hInvoiceId3 = '00000000-0000-0000-0000-000000000300';
+    const hInvoiceExisting3 = await prisma.hospitalInvoice.findUnique({
+      where: { id: hInvoiceId3 },
+    });
+    if (!hInvoiceExisting3) {
+      await prisma.hospitalInvoice.create({
+        data: {
+          id: hInvoiceId3,
+          appointmentId: apptId3,
+          patientId: alicePatient.id,
+          hospitalId: chukId,
+          totalAmount: 13000,
+          paymentStatus: HospitalBillingStatus.INSURANCE_PENDING,
+          insuranceCovered: true,
+          issuedAt: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000),
+          items: {
+            create: [
+              {
+                description: 'Cardiology Consultation',
+                quantity: 1,
+                unitCost: 10000,
+                subtotal: 10000,
+                category: 'CONSULTATION',
+              },
+              {
+                description: 'Triage Check',
+                quantity: 1,
+                unitCost: 3000,
+                subtotal: 3000,
+                category: 'TRIAGE',
+              },
+            ],
+          },
+        },
+      });
+    }
+
+    // Seed InsuranceClaim for hInvoiceId3
+    const claimId3 = 'claim-seed-record-3';
+    const claimExisting3 = await prisma.insuranceClaim.findUnique({
+      where: { id: claimId3 },
+    });
+    if (!claimExisting3) {
+      await prisma.insuranceClaim.create({
+        data: {
+          id: claimId3,
+          invoiceId: hInvoiceId3,
+          provider: 'RSSB',
+          claimAmount: 13000,
+          settledAmount: 0,
+          difference: 0,
+          status: ClaimStatus.PENDING,
+        },
+      });
+    }
+  }
+
+  // ==========================================
+  // 8. ADDITIONAL FAKER-BASED SEEDING (Merged from seed-full.ts in Idempotent Mode)
+  // ==========================================
   console.log(
-    "\n✅ Nelly's branch conflict resolved and updated with Dev branch!",
+    '\n🏥 Seeding additional Faker-based Pharmacies, Branches & Staff...',
   );
+  const fakerPharmacies = [];
+  const fakerBranches = [];
+  const fakerPharmacyStaff = [];
+
+  const realisticPharmacyNames = [
+    'Kacyiru Health Pharmacy',
+    'Gikondo Community Pharmacy',
+    'Nyamirambo Care Pharmacy',
+    'Kicukiro Heights Pharmacy',
+    'Kanombe Wellness Pharmacy',
+  ];
+
+  const realisticLogoUrls = [
+    'https://images.unsplash.com/photo-1586015555751-63bb77f4322a?w=150',
+    'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=150',
+    'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=150',
+    'https://images.unsplash.com/photo-1628771065518-0d82f15e8562?w=150',
+    'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=150',
+  ];
+
+  for (let i = 0; i < 5; i++) {
+    const ownerEmail = `owner${i + 1}@pharmacy.com`;
+    const ownerUserId = `00000000-0000-0000-0001-00000000000${i}`;
+    const pharmacyId = `10000000-0000-0000-0001-00000000000${i}`;
+
+    const owner = await prisma.user.upsert({
+      where: { email: ownerEmail },
+      update: {
+        role: UserRole.PHARMACY,
+        isVerified: true,
+        isActive: true,
+        password: password,
+      },
+      create: {
+        id: ownerUserId,
+        email: ownerEmail,
+        role: UserRole.PHARMACY,
+        isVerified: true,
+        password: password,
+        isActive: true,
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+      },
+    });
+
+    const coords = getKigaliCoordinates();
+    const pharmacy = await prisma.pharmacy.upsert({
+      where: { userId: owner.id },
+      update: {
+        name: realisticPharmacyNames[i],
+        logoUrl: realisticLogoUrls[i],
+        status: PharmacyStatus.APPROVED,
+        approvedAt: new Date('2026-01-01'),
+      },
+      create: {
+        id: pharmacyId,
+        userId: owner.id,
+        name: realisticPharmacyNames[i],
+        logoUrl: realisticLogoUrls[i],
+        phone: '+250788' + faker.string.numeric(6),
+        address: faker.location.streetAddress() + ', Kigali',
+        latitude: coords.latitude,
+        longitude: coords.longitude,
+        status: PharmacyStatus.APPROVED,
+        approvedAt: new Date('2026-01-01'),
+      },
+    });
+    fakerPharmacies.push(pharmacy);
+
+    // Create 2 branches per pharmacy
+    for (let j = 0; j < 2; j++) {
+      const branchManagerEmail = `manager${i}_${j}@pharmacy.com`;
+      const managerUserId = `00000000-0000-0000-0002-0000000000${i}${j}`;
+      const branchId = `20000000-0000-0000-0001-0000000000${i}${j}`;
+
+      const manager = await prisma.user.upsert({
+        where: { email: branchManagerEmail },
+        update: {
+          role: UserRole.BRANCH_MANAGER,
+          isVerified: true,
+          isActive: true,
+          password: password,
+        },
+        create: {
+          id: managerUserId,
+          email: branchManagerEmail,
+          role: UserRole.BRANCH_MANAGER,
+          isVerified: true,
+          password: password,
+          isActive: true,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+        },
+      });
+
+      const bCoords = getKigaliCoordinates();
+      const branch = await prisma.branch.upsert({
+        where: { managerId: manager.id },
+        update: {
+          name: `${pharmacy.name} - ${j === 0 ? 'Main Branch' : 'Express Branch'}`,
+          isActive: true,
+          status: BranchStatus.APPROVED,
+          branchStatus: BranchStatus.APPROVED,
+        },
+        create: {
+          id: branchId,
+          pharmacyId: pharmacy.id,
+          managerId: manager.id,
+          name: `${pharmacy.name} - ${j === 0 ? 'Main Branch' : 'Express Branch'}`,
+          address: faker.location.streetAddress() + ', Kigali',
+          phone: '+250788' + faker.string.numeric(6),
+          latitude: bCoords.latitude,
+          longitude: bCoords.longitude,
+          status: BranchStatus.APPROVED,
+          branchStatus: BranchStatus.APPROVED,
+          isActive: true,
+        },
+      });
+      fakerBranches.push(branch);
+
+      // Pharmacist
+      const pharmacistEmail = `pharmacist${i}_${j}@pharmacy.com`;
+      const pharmacistUserId = `00000000-0000-0000-0003-0000000000${i}${j}`;
+      const pharmacistStaffId = `30000000-0000-0000-0001-0000000000${i}${j}`;
+
+      const pharmacistUser = await prisma.user.upsert({
+        where: { email: pharmacistEmail },
+        update: {
+          role: UserRole.PHARMACIST,
+          isVerified: true,
+          isActive: true,
+          password: password,
+        },
+        create: {
+          id: pharmacistUserId,
+          email: pharmacistEmail,
+          role: UserRole.PHARMACIST,
+          isVerified: true,
+          password: password,
+          isActive: true,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+        },
+      });
+
+      const pharmacist = await prisma.staff.upsert({
+        where: { userId: pharmacistUser.id },
+        update: {
+          branchId: branch.id,
+          status: StaffStatus.ACTIVE,
+        },
+        create: {
+          id: pharmacistStaffId,
+          userId: pharmacistUser.id,
+          branchId: branch.id,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+          status: StaffStatus.ACTIVE,
+        },
+      });
+
+      // Cashier
+      const cashierEmail = `cashier${i}_${j}@pharmacy.com`;
+      const cashierUserId = `00000000-0000-0000-0004-0000000000${i}${j}`;
+      const cashierStaffId = `40000000-0000-0000-0001-0000000000${i}${j}`;
+
+      const cashierUser = await prisma.user.upsert({
+        where: { email: cashierEmail },
+        update: {
+          role: UserRole.CASHIER,
+          isVerified: true,
+          isActive: true,
+          password: password,
+        },
+        create: {
+          id: cashierUserId,
+          email: cashierEmail,
+          role: UserRole.CASHIER,
+          isVerified: true,
+          password: password,
+          isActive: true,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+        },
+      });
+
+      const cashier = await prisma.staff.upsert({
+        where: { userId: cashierUser.id },
+        update: {
+          branchId: branch.id,
+          status: StaffStatus.ACTIVE,
+        },
+        create: {
+          id: cashierStaffId,
+          userId: cashierUser.id,
+          branchId: branch.id,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+          status: StaffStatus.ACTIVE,
+        },
+      });
+
+      fakerPharmacyStaff.push(pharmacist, cashier);
+
+      await prisma.staffPermissions.upsert({
+        where: { staffId: pharmacist.id },
+        update: {
+          permissions: ['MANAGE_INVENTORY', 'DISPENSE_MEDS'],
+        },
+        create: {
+          staffId: pharmacist.id,
+          permissions: ['MANAGE_INVENTORY', 'DISPENSE_MEDS'],
+        },
+      });
+
+      await prisma.staffPermissions.upsert({
+        where: { staffId: cashier.id },
+        update: {
+          permissions: ['PROCESS_PAYMENTS'],
+        },
+        create: {
+          staffId: cashier.id,
+          permissions: ['PROCESS_PAYMENTS'],
+        },
+      });
+    }
+  }
+
+  console.log('🏥 Seeding additional Faker-based Hospitals & Doctors...');
+  const fakerHospitals = [];
+  const fakerDoctors = [];
+  const fakerHospitalStaffList = [];
+
+  for (let i = 0; i < 3; i++) {
+    const adminEmail = `hospitaladmin${i + 1}@hospital.com`;
+    const adminUserId = `00000000-0000-0000-0005-00000000000${i}`;
+    const hospitalId = `50000000-0000-0000-0001-00000000000${i}`;
+
+    const adminUser = await prisma.user.upsert({
+      where: { email: adminEmail },
+      update: {
+        role: UserRole.HOSPITAL_ADMIN,
+        isVerified: true,
+        isActive: true,
+        password: password,
+      },
+      create: {
+        id: adminUserId,
+        email: adminEmail,
+        role: UserRole.HOSPITAL_ADMIN,
+        isVerified: true,
+        password: password,
+        isActive: true,
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+      },
+    });
+
+    const hCoords = getKigaliCoordinates();
+    const hospital = await prisma.hospital.upsert({
+      where: { userId: adminUser.id },
+      update: {
+        name: `Faker Hospital ${i + 1}`,
+        status: PharmacyStatus.APPROVED,
+      },
+      create: {
+        id: hospitalId,
+        userId: adminUser.id,
+        name: `Faker Hospital ${i + 1}`,
+        address: faker.location.streetAddress() + ', Kigali',
+        phone: '+250788' + faker.string.numeric(6),
+        latitude: hCoords.latitude,
+        longitude: hCoords.longitude,
+        status: PharmacyStatus.APPROVED,
+      },
+    });
+    fakerHospitals.push(hospital);
+
+    // Create 3 hospital staff per hospital
+    for (let j = 0; j < 3; j++) {
+      const hStaffEmail = `nurse${i}_${j}@hospital.com`;
+      const nurseUserId = `00000000-0000-0000-0006-0000000000${i}${j}`;
+      const nurseStaffId = `60000000-0000-0000-0001-0000000000${i}${j}`;
+
+      const hStaffUser = await prisma.user.upsert({
+        where: { email: hStaffEmail },
+        update: {
+          role: UserRole.NURSE,
+          isVerified: true,
+          isActive: true,
+          password: password,
+        },
+        create: {
+          id: nurseUserId,
+          email: hStaffEmail,
+          role: UserRole.NURSE,
+          isVerified: true,
+          password: password,
+          isActive: true,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+        },
+      });
+
+      const hStaff = await prisma.hospitalStaff.upsert({
+        where: { userId: hStaffUser.id },
+        update: {
+          hospitalId: hospital.id,
+          status: StaffStatus.ACTIVE,
+        },
+        create: {
+          id: nurseStaffId,
+          userId: hStaffUser.id,
+          hospitalId: hospital.id,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+          phone: '+250788' + faker.string.numeric(6),
+          status: StaffStatus.ACTIVE,
+        },
+      });
+      fakerHospitalStaffList.push(hStaff);
+    }
+
+    // Doctors
+    for (let j = 0; j < 5; j++) {
+      const docEmail = `doctor${i}_${j}@hospital.com`;
+      const doctorUserId = `00000000-0000-0000-0007-0000000000${i}${j}`;
+      const doctorId = `70000000-0000-0000-0001-0000000000${i}${j}`;
+
+      const docUser = await prisma.user.upsert({
+        where: { email: docEmail },
+        update: {
+          role: UserRole.DOCTOR,
+          isVerified: true,
+          isActive: true,
+          password: password,
+        },
+        create: {
+          id: doctorUserId,
+          email: docEmail,
+          role: UserRole.DOCTOR,
+          isVerified: true,
+          password: password,
+          isActive: true,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+        },
+      });
+
+      const doctor = await prisma.doctor.upsert({
+        where: { userId: docUser.id },
+        update: {
+          hospitalId: hospital.id,
+          isAvailable: true,
+        },
+        create: {
+          id: doctorId,
+          userId: docUser.id,
+          hospitalId: hospital.id,
+          firstName: docUser.firstName || faker.person.firstName(),
+          lastName: docUser.lastName || faker.person.lastName(),
+          specialization: faker.helpers.arrayElement([
+            'Cardiology',
+            'Pediatrics',
+            'General Practice',
+            'Orthopedics',
+            'Dermatology',
+          ]),
+          licenseNumber: 'RW-MED-' + faker.string.numeric(5) + `-${i}-${j}`,
+          isAvailable: true,
+          bio: faker.person.bio(),
+        },
+      });
+      fakerDoctors.push(doctor);
+
+      // Doctor Schedules (Mon-Fri)
+      for (let day = 1; day <= 5; day++) {
+        await prisma.doctorSchedule.upsert({
+          where: {
+            doctorId_dayOfWeek_startTime: {
+              doctorId: doctor.id,
+              dayOfWeek: day,
+              startTime: '08:00',
+            },
+          },
+          update: {
+            endTime: '17:00',
+          },
+          create: {
+            doctorId: doctor.id,
+            dayOfWeek: day,
+            startTime: '08:00',
+            endTime: '17:00',
+          },
+        });
+      }
+    }
+  }
+
+  console.log('🧑‍🤝‍🧑 Seeding additional Faker-based Patients...');
+  const fakerPatients = [];
+  for (let k = 0; k < 50; k++) {
+    const patientEmail = `patient${k + 1}@patient.com`;
+    const patientUserId = `00000000-0000-0000-0008-0000000000${k.toString().padStart(2, '0')}`;
+    const patientId = `80000000-0000-0000-0001-0000000000${k.toString().padStart(2, '0')}`;
+
+    const patientUser = await prisma.user.upsert({
+      where: { email: patientEmail },
+      update: {
+        role: UserRole.PATIENT,
+        isVerified: true,
+        isActive: true,
+        password: password,
+      },
+      create: {
+        id: patientUserId,
+        email: patientEmail,
+        role: UserRole.PATIENT,
+        isVerified: true,
+        password: password,
+        isActive: true,
+        firstName: faker.person.firstName(),
+        lastName: faker.person.lastName(),
+      },
+    });
+
+    const patient = await prisma.patient.upsert({
+      where: { userId: patientUser.id },
+      update: {
+        firstName: patientUser.firstName || 'Patient',
+        lastName: patientUser.lastName || `${k + 1}`,
+      },
+      create: {
+        id: patientId,
+        userId: patientUser.id,
+        firstName: patientUser.firstName || faker.person.firstName(),
+        lastName: patientUser.lastName || faker.person.lastName(),
+        phone: '+250788' + faker.string.numeric(6),
+        address: faker.location.streetAddress() + ', Kigali',
+        mrn: 'MRN-' + faker.string.numeric(6) + `-${k}`,
+        nationalId: faker.string.numeric(16),
+        insuranceProvider: faker.helpers.arrayElement([
+          'RSSB',
+          'MMI',
+          'RADIANT',
+          null,
+        ]),
+        insuranceCoverage: faker.helpers.arrayElement([0, 50, 80, 100]),
+      },
+    });
+    fakerPatients.push(patient);
+
+    // Register Patient at a deterministic hospital
+    const hospital = fakerHospitals[k % fakerHospitals.length];
+    await prisma.hospitalPatientRegistration.upsert({
+      where: {
+        patientId_hospitalId: {
+          patientId: patient.id,
+          hospitalId: hospital.id,
+        },
+      },
+      update: {
+        mrn: patient.mrn || `MRN-REG-${k}`,
+      },
+      create: {
+        patientId: patient.id,
+        hospitalId: hospital.id,
+        mrn: patient.mrn || `MRN-REG-${k}`,
+      },
+    });
+  }
+
+  console.log('📝 Seeding Medication Registry from CSV file...');
+  const csvFilePath = path.join(__dirname, '../../medication-registry.csv');
+
+  if (fs.existsSync(csvFilePath)) {
+    const fileStream = fs.createReadStream(csvFilePath);
+    const rl = readline.createInterface({
+      input: fileStream,
+      crlfDelay: Infinity,
+    });
+
+    let csvHeaders: string[] = [];
+    let csvRowCount = 0;
+    const registryRecords: any[] = [];
+    const seenRegNos = new Set<string>();
+    let lineBuffer = '';
+
+    for await (const line of rl) {
+      if (lineBuffer) {
+        lineBuffer += '\n' + line;
+      } else {
+        lineBuffer = line;
+      }
+
+      const quoteCount = (lineBuffer.match(/"/g) || []).length;
+      if (quoteCount % 2 !== 0) continue;
+
+      const recordText = lineBuffer;
+      lineBuffer = '';
+      if (!recordText.trim()) continue;
+
+      const columns = parseCSVLine(recordText);
+
+      if (csvRowCount === 0) {
+        csvHeaders = columns.map((h) => h.toLowerCase().trim());
+        csvRowCount++;
+        continue;
+      }
+
+      try {
+        const getVal = (index: number, ...possibleHeaders: string[]) => {
+          for (const ph of possibleHeaders) {
+            const foundIdx = csvHeaders.findIndex((h) =>
+              h.includes(ph.toLowerCase()),
+            );
+            if (foundIdx !== -1 && columns[foundIdx])
+              return columns[foundIdx].trim();
+          }
+          return columns[index] ? columns[index].trim() : '';
+        };
+
+        const registrationNumber = getVal(1, 'registration no');
+        if (!registrationNumber) continue;
+
+        const cleanDate = (str: string) => {
+          if (!str) return undefined;
+          return str.split('\n')[0].trim();
+        };
+
+        const regDateStr = cleanDate(getVal(14, 'registration date'));
+        const expDateStr = cleanDate(getVal(15, 'expiry date'));
+
+        const record = {
+          registrationNumber,
+          brandName: getVal(2, 'brand name', 'product name'),
+          genericName: getVal(3, 'generic name'),
+          dosageStrength: getVal(4, 'strength', 'dosage strength'),
+          dosageForm: getVal(5, 'dosage form', 'form'),
+          packSize: getVal(6, 'pack size'),
+          packagingType: getVal(7, 'packaging type', 'packaging'),
+          shelfLife: getVal(8, 'shelf life'),
+          manufacturerName: getVal(9, 'manufacturer'),
+          manufacturerAddress: getVal(10, 'address'),
+          manufacturerCountry: getVal(11, 'country'),
+          marketingAuthHolder: getVal(12, 'mah', 'holder'),
+          localTechRep: getVal(13, 'ltr', 'representative'),
+          registrationDate: parseDate(regDateStr),
+          expiryDate: parseDate(expDateStr),
+        };
+
+        if (!seenRegNos.has(record.registrationNumber)) {
+          seenRegNos.add(record.registrationNumber);
+          registryRecords.push(record);
+        }
+      } catch {
+        // Ignore row error
+      }
+      csvRowCount++;
+    }
+
+    console.log(
+      `📥 Bulk importing ${registryRecords.length} records into medication_registry...`,
+    );
+    await prisma.medicationRegistry.createMany({
+      data: registryRecords,
+      skipDuplicates: true,
+    });
+  } else {
+    console.warn(
+      `⚠️  CSV not found at ${csvFilePath} — skipping registry import`,
+    );
+  }
+
+  const registryItems = await prisma.medicationRegistry.findMany();
+  const registryIds = registryItems.map((r) => r.id);
+  const fakerMedications = [];
+  const baseMeds = [
+    'Amoxicillin',
+    'Paracetamol',
+    'Ibuprofen',
+    'Cetirizine',
+    'Omeprazole',
+    'Metformin',
+    'Amlodipine',
+  ];
+
+  console.log('💊 Seeding additional Medications for Faker branches...');
+  for (let i = 0; i < fakerPharmacies.length; i++) {
+    const pharmacy = fakerPharmacies[i];
+    for (let j = 0; j < 2; j++) {
+      const branch = fakerBranches[i * 2 + j];
+      const branchId = branch.id;
+      for (let m = 0; m < 10; m++) {
+        const medId = `90000000-0000-0000-0000-00000000${i}${j}${m.toString().padStart(2, '0')}`;
+        const isRegistryLinked =
+          registryIds.length > 0 && (i + j + m) % 2 === 0;
+        const regItem = isRegistryLinked
+          ? registryItems[(i + j + m) % registryItems.length]
+          : null;
+
+        const med = await prisma.medication.upsert({
+          where: { id: medId },
+          update: {
+            quantity: 150,
+          },
+          create: {
+            id: medId,
+            branchId: branchId,
+            pharmacyId: pharmacy.id,
+            registryId: isRegistryLinked ? regItem?.id : null,
+            name: isRegistryLinked
+              ? regItem.brandName
+              : baseMeds[(i + j + m) % baseMeds.length] +
+                ' ' +
+                (m + 1) * 10 +
+                'mg',
+            price: 500 + m * 200,
+            quantity: 150,
+            requiresPrescription: m % 3 === 0,
+            imageUrl: medicineImages[(i + j + m) % medicineImages.length],
+          },
+        });
+        fakerMedications.push(med);
+      }
+    }
+  }
+
+  console.log('📅 Seeding additional Appointments & Invoices...');
+  for (let i = 0; i < 50; i++) {
+    const appointmentId = `a0000000-0000-0000-0000-0000000000${i.toString().padStart(2, '0')}`;
+    const patient = fakerPatients[i % fakerPatients.length];
+    const doctor = fakerDoctors[i % fakerDoctors.length];
+    const dayStr = ((i % 28) + 1).toString().padStart(2, '0');
+    const apptDate = new Date(`2026-05-${dayStr}T10:00:00Z`);
+
+    const appointment = await prisma.appointment.upsert({
+      where: { id: appointmentId },
+      update: {
+        status:
+          i % 2 === 0
+            ? AppointmentStatus.COMPLETED
+            : AppointmentStatus.SCHEDULED,
+        date: apptDate,
+      },
+      create: {
+        id: appointmentId,
+        patientId: patient.id,
+        doctorId: doctor.id,
+        hospitalId: doctor.hospitalId,
+        date: apptDate,
+        status:
+          i % 2 === 0
+            ? AppointmentStatus.COMPLETED
+            : AppointmentStatus.SCHEDULED,
+        reason: 'General Consultation',
+      },
+    });
+
+    if (i % 2 === 0) {
+      // Completed, so seed Hospital Invoice
+      const existingInvoice = await prisma.hospitalInvoice.findUnique({
+        where: { appointmentId },
+      });
+      if (!existingInvoice) {
+        await prisma.hospitalInvoice.create({
+          data: {
+            appointmentId,
+            patientId: patient.id,
+            hospitalId: doctor.hospitalId,
+            totalAmount: 15000,
+            paymentStatus: 'PAID',
+            issuedAt: apptDate,
+            items: {
+              create: [
+                {
+                  description: 'Consultation Fee',
+                  quantity: 1,
+                  unitCost: 15000,
+                  subtotal: 15000,
+                  category: 'CONSULTATION',
+                },
+              ],
+            },
+          },
+        });
+      }
+
+      // Seed Prescription
+      if (i % 3 === 0) {
+        const prescriptionId = `p0000000-0000-0000-0000-0000000000${i.toString().padStart(2, '0')}`;
+        const existingPresc = await prisma.prescription.findUnique({
+          where: { id: prescriptionId },
+        });
+        if (!existingPresc) {
+          const prescription = await prisma.prescription.create({
+            data: {
+              id: prescriptionId,
+              patientId: patient.id,
+              doctorId: doctor.id,
+              appointmentId: appointment.id,
+              diagnosis: 'Common Cold',
+              status: 'APPROVED',
+            },
+          });
+
+          await prisma.prescriptionMedication.create({
+            data: {
+              prescriptionId: prescription.id,
+              medicationName: baseMeds[i % baseMeds.length],
+              dosage: '1 tablet',
+              frequency: 'Twice a day',
+              duration: '5 days',
+            },
+          });
+        }
+      }
+    }
+  }
+
+  console.log('📦 Seeding additional Orders & Payments...');
+  for (let i = 0; i < 150; i++) {
+    const orderId = `d0000000-0000-0000-0000-00000000${i.toString().padStart(4, '0')}`;
+    const orderNumber = `ORD-F-${i.toString().padStart(4, '0')}`;
+
+    const existingOrder = await prisma.order.findUnique({
+      where: { id: orderId },
+    });
+    if (!existingOrder) {
+      const patient = fakerPatients[i % fakerPatients.length];
+      const branchIndex = i % fakerBranches.length;
+      const branch = fakerBranches[branchIndex];
+
+      // Find faker medications seeded for this specific branch
+      const pharmacyIndex = Math.floor(branchIndex / 2);
+      const branchSubIndex = branchIndex % 2;
+      const medId = `90000000-0000-0000-0000-00000000${pharmacyIndex}${branchSubIndex}00`; // pick first med of the branch
+
+      const med = await prisma.medication.findUnique({ where: { id: medId } });
+      if (med) {
+        const total = med.price;
+        const status =
+          i % 4 === 0
+            ? OrderStatus.PENDING
+            : i % 4 === 1
+              ? OrderStatus.COMPLETED
+              : i % 4 === 2
+                ? OrderStatus.DELIVERED
+                : OrderStatus.CANCELLED;
+        const type = i % 2 === 0 ? OrderType.DELIVERY : OrderType.PICKUP;
+
+        const order = await prisma.order.create({
+          data: {
+            id: orderId,
+            orderNumber,
+            patientId: patient.id,
+            pharmacyId: branch.pharmacyId,
+            branchId: branch.id,
+            total: total,
+            status: status,
+            type: type,
+            paymentMethod: PaymentMethod.MTN_MOMO,
+            subtotal: total,
+            deliveryFee: 1500,
+          },
+        });
+
+        await prisma.orderItem.create({
+          data: {
+            orderId: order.id,
+            medicationId: med.id,
+            quantity: 1,
+            price: med.price,
+          },
+        });
+
+        if (
+          status === OrderStatus.COMPLETED ||
+          status === OrderStatus.DELIVERED
+        ) {
+          await prisma.payment.create({
+            data: {
+              orderId: order.id,
+              amount: total + 1500,
+              paymentMethod: PaymentMethod.MTN_MOMO,
+              status: PaymentStatus.COMPLETED,
+              transactionId: `TXN-F-${i.toString().padStart(4, '0')}`,
+            },
+          });
+        }
+      }
+    }
+  }
+
+  // Stock Transfer
+  console.log('🔄 Seeding additional Stock Transfers...');
+  const transferId = 'transfer-seed-record-faker';
+  const existingTransfer = await prisma.stockTransfer.findUnique({
+    where: { id: transferId },
+  });
+  if (!existingTransfer && fakerBranches.length >= 2) {
+    const transfer = await prisma.stockTransfer.create({
+      data: {
+        id: transferId,
+        fromBranchId: fakerBranches[0].id,
+        toBranchId: fakerBranches[1].id,
+        status: 'COMPLETED',
+      },
+    });
+
+    const medId = `90000000-0000-0000-0000-000000000000`; // pharmacy 0 branch 0 first med
+    await prisma.stockTransferItem.create({
+      data: {
+        transferId: transfer.id,
+        medicationId: medId,
+        quantity: 10,
+      },
+    });
+  }
+
+  // Carts
+  console.log('🛒 Seeding additional Cart Items...');
+  for (let i = 0; i < 10; i++) {
+    const patient = fakerPatients[i % fakerPatients.length];
+    const pharmacyIndex = i % fakerPharmacies.length;
+    const branchSubIndex = 0;
+    const medId = `90000000-0000-0000-0000-00000000${pharmacyIndex}${branchSubIndex}01`;
+
+    const med = await prisma.medication.findUnique({ where: { id: medId } });
+    if (med) {
+      await prisma.cartItem.upsert({
+        where: {
+          patientId_medicationId: {
+            patientId: patient.id,
+            medicationId: med.id,
+          },
+        },
+        update: {
+          quantity: 2,
+        },
+        create: {
+          patientId: patient.id,
+          pharmacyId: med.pharmacyId,
+          medicationId: med.id,
+          quantity: 2,
+        },
+      });
+    }
+  }
+
+  // Notifications
+  console.log('🔔 Seeding additional Notifications...');
+  for (let i = 0; i < 20; i++) {
+    const notificationId = `n0000000-0000-0000-0000-0000000000${i.toString().padStart(2, '0')}`;
+    const existingNotif = await prisma.notification.findUnique({
+      where: { id: notificationId },
+    });
+    if (!existingNotif) {
+      const patient = fakerPatients[i % fakerPatients.length];
+      await prisma.notification.create({
+        data: {
+          id: notificationId,
+          userId: patient.userId,
+          type: NotificationType.ORDER_PLACED,
+          title: 'New Update',
+          message: 'You have a new update regarding your interaction.',
+        },
+      });
+    }
+  }
+
+  console.log('\n✅ Seeding complete! Database is successfully synchronized.');
 }
 
 main()
@@ -597,3 +2016,60 @@ main()
   .finally(async () => {
     await prisma.$disconnect();
   });
+
+function getKigaliCoordinates() {
+  return {
+    latitude: faker.location.latitude({ max: -1.9, min: -1.97, precision: 4 }),
+    longitude: faker.location.longitude({
+      max: 30.15,
+      min: 30.03,
+      precision: 4,
+    }),
+  };
+}
+
+function parseCSVLine(text: string): string[] {
+  const result: string[] = [];
+  let curVal = '';
+  let inQuote = false;
+
+  for (let i = 0; i < text.length; i++) {
+    const char = text[i];
+    if (inQuote) {
+      if (char === '"') {
+        if (i < text.length - 1 && text[i + 1] === '"') {
+          curVal += '"';
+          i++;
+        } else {
+          inQuote = false;
+        }
+      } else {
+        curVal += char;
+      }
+    } else {
+      if (char === '"') {
+        inQuote = true;
+      } else if (char === ',') {
+        result.push(curVal);
+        curVal = '';
+      } else {
+        curVal += char;
+      }
+    }
+  }
+  result.push(curVal);
+  return result;
+}
+
+function parseDate(dateStr: string | undefined): Date {
+  if (!dateStr) return new Date();
+  try {
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) {
+      return new Date();
+    }
+    return d;
+  } catch (e) {
+    return new Date();
+  }
+}
