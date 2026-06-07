@@ -12,6 +12,7 @@ import {
   OrderType,
   StaffStatus,
   NotificationType,
+  ClaimStatus,
 } from '@prisma/client';
 import { generateMRN } from '../utils/hospital';
 import { faker } from '@faker-js/faker';
@@ -20,6 +21,16 @@ import 'dotenv/config';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as readline from 'readline';
+
+const medicineImages = [
+  'https://images.unsplash.com/photo-1584017911766-d451b3d0e843?w=500&auto=format&fit=crop&q=60', // Pills container
+  'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=500&auto=format&fit=crop&q=60', // Blue pills
+  'https://images.unsplash.com/photo-1607619056574-7b8d3ee536b2?w=500&auto=format&fit=crop&q=60', // Capsules
+  'https://images.unsplash.com/photo-1628771065518-0d82f15e8562?w=500&auto=format&fit=crop&q=60', // Medicine bottles
+  'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=500&auto=format&fit=crop&q=60', // Syringe / liquid
+  'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=500&auto=format&fit=crop&q=60', // Pills on hand
+  'https://images.unsplash.com/photo-1550572017-edd951b55104?w=500&auto=format&fit=crop&q=60', // White pills
+];
 
 const prisma = new PrismaClient();
 
@@ -208,6 +219,7 @@ async function main() {
       address: 'KN 5 Ave, Nyarugenge, Kigali',
       latitude: -1.9441,
       longitude: 30.0619,
+      logoUrl: 'https://images.unsplash.com/photo-1586015555751-63bb77f4322a?w=150',
       dateOfIncorporation: new Date('2018-03-15'),
       rdbCertificate: 'RDB-2018-001234',
       pharmacyLicense: 'LIC-2018-PH-001',
@@ -223,6 +235,7 @@ async function main() {
       address: 'KG 11 Ave, Kimironko, Gasabo, Kigali',
       latitude: -1.9412,
       longitude: 30.1092,
+      logoUrl: 'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=150',
       dateOfIncorporation: new Date('2019-06-20'),
       rdbCertificate: 'RDB-2019-004521',
       pharmacyLicense: 'LIC-2019-PH-022',
@@ -238,6 +251,7 @@ async function main() {
       address: 'KN 3 Rd, City Centre, Nyarugenge, Kigali',
       latitude: -1.95,
       longitude: 30.0588,
+      logoUrl: 'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=150',
       dateOfIncorporation: new Date('2020-01-10'),
       rdbCertificate: 'RDB-2020-005566',
       pharmacyLicense: 'LIC-2020-PH-055',
@@ -253,6 +267,7 @@ async function main() {
       address: 'KG 9 Ave, Remera, Gasabo, Kigali',
       latitude: -1.9559,
       longitude: 30.1125,
+      logoUrl: 'https://images.unsplash.com/photo-1628771065518-0d82f15e8562?w=150',
       dateOfIncorporation: new Date('2023-08-05'),
       rdbCertificate: 'RDB-2023-009988',
       pharmacyLicense: 'LIC-2023-PH-099',
@@ -491,6 +506,7 @@ async function main() {
         category: 'Antibiotics',
         price: 2500,
         quantity: 200,
+        imageUrl: medicineImages[0],
       },
     });
 
@@ -878,12 +894,14 @@ async function main() {
                 quantity: 1,
                 unitCost: 10000,
                 subtotal: 10000,
+                category: 'CONSULTATION',
               },
               {
                 description: 'Triage Check',
                 quantity: 1,
                 unitCost: 3000,
                 subtotal: 3000,
+                category: 'TRIAGE',
               },
             ],
           },
@@ -965,12 +983,14 @@ async function main() {
                 quantity: 1,
                 unitCost: 10000,
                 subtotal: 10000,
+                category: 'CONSULTATION',
               },
               {
                 description: 'Triage Check',
                 quantity: 1,
                 unitCost: 3000,
                 subtotal: 3000,
+                category: 'TRIAGE',
               },
             ],
           },
@@ -1073,15 +1093,36 @@ async function main() {
                 quantity: 1,
                 unitCost: 10000,
                 subtotal: 10000,
+                category: 'CONSULTATION',
               },
               {
                 description: 'Triage Check',
                 quantity: 1,
                 unitCost: 3000,
                 subtotal: 3000,
+                category: 'TRIAGE',
               },
             ],
           },
+        },
+      });
+    }
+
+    // Seed InsuranceClaim for hInvoiceId3
+    const claimId3 = 'claim-seed-record-3';
+    const claimExisting3 = await prisma.insuranceClaim.findUnique({
+      where: { id: claimId3 },
+    });
+    if (!claimExisting3) {
+      await prisma.insuranceClaim.create({
+        data: {
+          id: claimId3,
+          invoiceId: hInvoiceId3,
+          provider: 'RSSB',
+          claimAmount: 13000,
+          settledAmount: 0,
+          difference: 0,
+          status: ClaimStatus.PENDING,
         },
       });
     }
@@ -1096,6 +1137,22 @@ async function main() {
   const fakerPharmacies = [];
   const fakerBranches = [];
   const fakerPharmacyStaff = [];
+
+  const realisticPharmacyNames = [
+    'Kacyiru Health Pharmacy',
+    'Gikondo Community Pharmacy',
+    'Nyamirambo Care Pharmacy',
+    'Kicukiro Heights Pharmacy',
+    'Kanombe Wellness Pharmacy',
+  ];
+
+  const realisticLogoUrls = [
+    'https://images.unsplash.com/photo-1586015555751-63bb77f4322a?w=150',
+    'https://images.unsplash.com/photo-1576091160550-2173dba999ef?w=150',
+    'https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=150',
+    'https://images.unsplash.com/photo-1628771065518-0d82f15e8562?w=150',
+    'https://images.unsplash.com/photo-1471864190281-a93a3070b6de?w=150',
+  ];
 
   for (let i = 0; i < 5; i++) {
     const ownerEmail = `owner${i + 1}@pharmacy.com`;
@@ -1126,14 +1183,16 @@ async function main() {
     const pharmacy = await prisma.pharmacy.upsert({
       where: { userId: owner.id },
       update: {
-        name: `Faker Pharmacy ${i + 1}`,
+        name: realisticPharmacyNames[i],
+        logoUrl: realisticLogoUrls[i],
         status: PharmacyStatus.APPROVED,
         approvedAt: new Date('2026-01-01'),
       },
       create: {
         id: pharmacyId,
         userId: owner.id,
-        name: `Faker Pharmacy ${i + 1}`,
+        name: realisticPharmacyNames[i],
+        logoUrl: realisticLogoUrls[i],
         phone: '+250788' + faker.string.numeric(6),
         address: faker.location.streetAddress() + ', Kigali',
         latitude: coords.latitude,
@@ -1174,7 +1233,7 @@ async function main() {
       const branch = await prisma.branch.upsert({
         where: { managerId: manager.id },
         update: {
-          name: `${pharmacy.name} - Branch ${j + 1}`,
+          name: `${pharmacy.name} - ${j === 0 ? 'Main Branch' : 'Express Branch'}`,
           isActive: true,
           status: BranchStatus.APPROVED,
           branchStatus: BranchStatus.APPROVED,
@@ -1183,7 +1242,7 @@ async function main() {
           id: branchId,
           pharmacyId: pharmacy.id,
           managerId: manager.id,
-          name: `${pharmacy.name} - Branch ${j + 1}`,
+          name: `${pharmacy.name} - ${j === 0 ? 'Main Branch' : 'Express Branch'}`,
           address: faker.location.streetAddress() + ', Kigali',
           phone: '+250788' + faker.string.numeric(6),
           latitude: bCoords.latitude,
@@ -1695,6 +1754,7 @@ async function main() {
             price: 500 + m * 200,
             quantity: 150,
             requiresPrescription: m % 3 === 0,
+            imageUrl: medicineImages[(i + j + m) % medicineImages.length],
           },
         });
         fakerMedications.push(med);
@@ -1754,6 +1814,7 @@ async function main() {
                   quantity: 1,
                   unitCost: 15000,
                   subtotal: 15000,
+                  category: 'CONSULTATION',
                 },
               ],
             },
