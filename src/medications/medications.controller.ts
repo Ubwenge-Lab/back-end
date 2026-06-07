@@ -22,6 +22,7 @@ import {
   CreateMedicationDto,
   UpdateMedicationDto,
   SearchMedicationsDto,
+  BulkCreateMedicationDto,
 } from './dto';
 
 // Import Throttle decorator for rate limiting
@@ -101,6 +102,16 @@ export class MedicationsController {
   @ApiOperation({ summary: 'Get medication by ID' })
   getMedicationById(@Param('id') id: string) {
     return this.medicationsService.findById(id);
+  }
+
+  // Pharmacy - Bulk create/upsert medications from CSV upload
+  @Post('bulk')
+  @UseGuards(JwtAuthGuard, RolesGuard)
+  @Roles(Role.PHARMACY, Role.BRANCH_MANAGER)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: 'Bulk create medications from CSV upload' })
+  bulkCreate(@Req() req: any, @Body() dto: BulkCreateMedicationDto) {
+    return this.medicationsService.bulkCreate(req.user.sub, dto);
   }
 
   // Pharmacy - Create medication
