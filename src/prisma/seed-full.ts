@@ -10,6 +10,8 @@ import {
   AppointmentStatus,
   StaffStatus,
   NotificationType,
+  HospitalBillingStatus,
+  InvoiceStatus,
 } from '@prisma/client';
 import { faker } from '@faker-js/faker';
 import * as bcrypt from 'bcrypt';
@@ -519,7 +521,7 @@ async function main() {
   for (let i = 0; i < 50; i++) {
     const patient = faker.helpers.arrayElement(patients);
     const doctor = faker.helpers.arrayElement(doctors);
-    const isPast = faker.datatype.boolean();
+    const isPast = (i === 0 || i === 1) ? true : faker.datatype.boolean();
 
     const appointment = await prisma.appointment.create({
       data: {
@@ -537,20 +539,47 @@ async function main() {
     });
 
     if (isPast) {
-      // NOTE: Skipping Invoice/InvoiceItem creation — invoices.paymentId column
-      // doesn't exist in the actual DB (schema out of sync with migrations).
-      // These are pharmacy-side models not used by the stats engine.
-      //
-      // Also skip HospitalPayment temporarily — we only need HospitalInvoice for stats.
+      // Determine invoice statuses
+      const rand = Math.random();
+      let hospitalBillingStatus: HospitalBillingStatus = HospitalBillingStatus.PAID;
+      let invoiceStatus: InvoiceStatus = InvoiceStatus.PAID;
 
-      // Create Hospital Invoice (for Stats Engine)
-      await prisma.hospitalInvoice.create({
+      if (rand < 0.45) {
+        hospitalBillingStatus = HospitalBillingStatus.UNPAID;
+        invoiceStatus = InvoiceStatus.UNPAID;
+      } else if (rand < 0.90) {
+        hospitalBillingStatus = HospitalBillingStatus.PAID;
+        invoiceStatus = InvoiceStatus.PAID;
+      } else {
+        hospitalBillingStatus = HospitalBillingStatus.INSURANCE_PENDING;
+        invoiceStatus = InvoiceStatus.UNPAID;
+      }
+
+      let hospitalInvoiceId: string | undefined = undefined;
+      let invoiceId: string | undefined = undefined;
+
+      if (i === 0) {
+        hospitalInvoiceId = '00000000-0000-0000-0000-000000000100';
+        invoiceId = '00000000-0000-0000-0000-000000000101';
+        hospitalBillingStatus = HospitalBillingStatus.UNPAID;
+        invoiceStatus = InvoiceStatus.UNPAID;
+      } else if (i === 1) {
+        hospitalInvoiceId = '00000000-0000-0000-0000-000000000200';
+        invoiceId = '00000000-0000-0000-0000-000000000201';
+        hospitalBillingStatus = HospitalBillingStatus.PAID;
+        invoiceStatus = InvoiceStatus.PAID;
+      }
+
+      // Create Hospital Invoice (for Stats Engine & Payment Integration)
+      const hInvoice = await prisma.hospitalInvoice.create({
         data: {
+          id: hospitalInvoiceId,
           hospital: { connect: { id: doctor.hospitalId } },
           patient: { connect: { id: patient.id } },
           appointment: { connect: { id: appointment.id } },
           totalAmount: 15000,
-          paymentStatus: 'PAID',
+          paymentStatus: hospitalBillingStatus,
+          insuranceCovered: hospitalBillingStatus === HospitalBillingStatus.INSURANCE_PENDING,
           issuedAt: appointment.date,
           items: {
             create: {
@@ -562,6 +591,42 @@ async function main() {
           },
         },
       });
+
+      // Create General Invoice (Pharmacy-side invoicing)
+      const invoice = await prisma.invoice.create({
+        data: {
+          id: invoiceId,
+          hospitalId: doctor.hospitalId,
+          patientId: patient.id,
+          appointmentId: appointment.id,
+          totalAmount: 15000,
+          status: invoiceStatus,
+          dueDate: faker.date.future(),
+          items: {
+            create: {
+              description: 'Consultation Fee',
+              quantity: 1,
+              unitPrice: 15000,
+              subtotal: 15000,
+            },
+          },
+        },
+      });
+
+      // If the status is PAID, create a corresponding HospitalPayment record
+      if (invoiceStatus === InvoiceStatus.PAID) {
+        await prisma.hospitalPayment.create({
+          data: {
+            invoiceId: invoiceId || invoice.id,
+            patientId: patient.id,
+            amount: 15000,
+            method: PaymentMethod.MTN_MOMO,
+            status: PaymentStatus.COMPLETED,
+            paidAt: appointment.date,
+            notes: 'Seeded payment record',
+          },
+        });
+      }
 
       // Create Prescription
       if (Math.random() > 0.3) {
