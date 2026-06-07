@@ -68,25 +68,27 @@ model Hospital {
 }
 
 model Doctor {
-  id             String           @id @default(uuid())
-  userId         String           @unique
-  hospitalId     String
-  specialization String
-  licenseNumber  String           @unique
-  bio            String?
-  createdAt      DateTime         @default(now())
-  isAvailable    Boolean          @default(true)
-  rating         Float            @default(0)
-  updatedAt      DateTime         @updatedAt
-  firstName      String?
-  lastName       String?
-  signatureUrl   String?
-  appointments   Appointment[]
-  schedules      DoctorSchedule[]
-  leaveRequests  DoctorLeave[]
-  hospital       Hospital         @relation(fields: [hospitalId], references: [id])
-  user           User             @relation(fields: [userId], references: [id], onDelete: Cascade)
-  prescriptions  Prescription[]   @relation("DoctorToPrescription")
+  id                     String                 @id @default(uuid())
+  userId                 String                 @unique
+  hospitalId             String
+  specialization         String
+  licenseNumber          String                 @unique
+  bio                    String?
+  createdAt              DateTime               @default(now())
+  isAvailable            Boolean                @default(true)
+  rating                 Float                  @default(0)
+  updatedAt              DateTime               @updatedAt
+  firstName              String?
+  lastName               String?
+  signatureUrl           String?
+  appointments           Appointment[]
+  schedules              DoctorSchedule[]
+  leaveRequests          DoctorLeave[]
+  hospital               Hospital               @relation(fields: [hospitalId], references: [id])
+  user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prescriptions          Prescription[]         @relation("DoctorToPrescription")
+  medicalHistoryAccesses MedicalHistoryAccess[]
+  medicalRecordLogs      MedicalRecordLog[]
 
   @@index([hospitalId])
   @@index([specialization])
@@ -145,34 +147,36 @@ model HospitalStaff {
 }
 
 model Patient {
-  id                    String                        @id @default(uuid())
-  userId                String                        @unique
-  firstName             String
-  lastName              String
-  phone                 String
-  dateOfBirth           DateTime?
-  gender                String?
-  address               String?
-  nationalId            String?
-  insuranceProvider     String?
-  insurancePolicy       String?
-  insuranceMemberId     String?
-  insuranceCoverage     Int?                          @default(0)
-  createdAt             DateTime                      @default(now())
-  updatedAt             DateTime                      @updatedAt
-  lastLat               Float?
-  lastLng               Float?
-  mrn                   String?
-  appointments          Appointment[]
-  cartItems             CartItem[]
-  hospitalInvoices      HospitalInvoice[]
-  hospitalRegistrations HospitalPatientRegistration[]
-  hospitalPayments      HospitalPayment[]
-  invoices              Invoice[]
-  notifications         Notification[]
-  orders                Order[]
-  user                  User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  prescriptions         Prescription[]
+  id                     String                        @id @default(uuid())
+  userId                 String                        @unique
+  firstName              String
+  lastName               String
+  phone                  String
+  dateOfBirth            DateTime?
+  gender                 String?
+  address                String?
+  nationalId             String?
+  insuranceProvider      String?
+  insurancePolicy        String?
+  insuranceMemberId      String?
+  insuranceCoverage      Int?                          @default(0)
+  createdAt              DateTime                      @default(now())
+  updatedAt              DateTime                      @updatedAt
+  lastLat                Float?
+  lastLng                Float?
+  mrn                    String?
+  appointments           Appointment[]
+  cartItems              CartItem[]
+  hospitalInvoices       HospitalInvoice[]
+  hospitalRegistrations  HospitalPatientRegistration[]
+  hospitalPayments       HospitalPayment[]
+  invoices               Invoice[]
+  notifications          Notification[]
+  orders                 Order[]
+  user                   User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  prescriptions          Prescription[]
+  medicalHistoryAccesses MedicalHistoryAccess[]
+  medicalRecordLogs      MedicalRecordLog[]
 
   @@index([userId])
   @@map("patients")
@@ -1015,4 +1019,35 @@ model TelemedicineSessionLog {
   appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
   @@map("telemedicine_session_logs")
+}
+
+model MedicalHistoryAccess {
+  id        String   @id @default(uuid())
+  doctorId  String
+  patientId String
+  token     String   @unique @default(uuid())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([patientId])
+  @@map("medical_history_access")
+}
+
+model MedicalRecordLog {
+  id         String   @id @default(uuid())
+  doctorId   String?
+  patientId  String
+  timestamp  DateTime @default(now())
+  accessType String // 'TREAT_DOCTOR', 'CONSENT_TOKEN', 'PATIENT_OWN', 'ADMIN'
+  reason     String?
+  doctor     Doctor?  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([patientId])
+  @@map("medical_record_logs")
 }

@@ -4,6 +4,7 @@ import {
   Controller,
   Get,
   Put,
+  Post,
   Body,
   UseGuards,
   Req,
@@ -23,6 +24,8 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
+import { SymptomCheckDto } from './dto/symptom-check.dto';
+import { GrantConsentDto } from './dto/grant-consent.dto';
 
 @ApiTags('Patients')
 @Controller('patients')
@@ -73,5 +76,19 @@ export class PatientsController {
       page,
       limit,
     );
+  }
+
+  @Post('symptom-check')
+  @Roles(Role.PATIENT)
+  @ApiOperation({ summary: 'AI-assisted symptom checker with clinical specialty recommendations' })
+  symptomCheck(@Body() dto: SymptomCheckDto) {
+    return this.patientsService.symptomCheck(dto.symptoms);
+  }
+
+  @Post('consent')
+  @Roles(Role.PATIENT)
+  @ApiOperation({ summary: 'Grant temporary 7-day medical history read access to a doctor' })
+  grantConsent(@Req() req: any, @Body() dto: GrantConsentDto) {
+    return this.patientsService.grantConsent(req.user.sub, dto);
   }
 }
