@@ -40,7 +40,9 @@ import {
 } from './logger';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ReportsModule } from './reports/reports.module';
+import { PlatformBillingModule } from './platform-billing/platform-billing.module';
 
 @Module({
   imports: [
@@ -57,6 +59,7 @@ import { ReportsModule } from './reports/reports.module';
     ]),
 
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     LoggerModule,
     PrismaModule,
     AuthModule,
@@ -86,6 +89,7 @@ import { ReportsModule } from './reports/reports.module';
     ReportsModule,
     DocumentsModule,
     ClaimsModule,
+    PlatformBillingModule,
   ],
   controllers: [AppController],
   providers: [
