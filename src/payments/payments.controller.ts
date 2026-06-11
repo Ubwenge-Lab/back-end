@@ -16,6 +16,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
 import { MtnCallbackDto } from './dto/mtn-callback.dto';
+import { HospitalPaymentWebhookDto } from './dto/hospital-payment-webhook.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import {
   InitiatePaymentDto,
@@ -65,11 +66,18 @@ export class PaymentsController {
     return this.paymentsService.getRecentSuccessfulPayments();
   }
 
-  @Public() // This tells NestJS: "Don't require a login for this specific URL"
+  @Public()
   @Post('webhook/mtn')
   async handleMtnWebhook(@Body() data: MtnCallbackDto) {
     console.log('Received MTN Webhook:', data);
     return this.paymentsService.processMtnPayment(data);
+  }
+
+  @Public()
+  @Post('webhook/hospital')
+  @ApiOperation({ summary: 'Mock hospital invoice payment webhook' })
+  async handleHospitalWebhook(@Body() data: HospitalPaymentWebhookDto) {
+    return this.paymentsService.processHospitalPaymentWebhook(data);
   }
 
   @Get(':paymentId/receipt')

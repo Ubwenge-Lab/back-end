@@ -18,7 +18,12 @@ import {
   RecordPaymentDto,
 } from './dto';
 import { MtnCallbackDto } from './dto/mtn-callback.dto';
+import {
+  HospitalPaymentWebhookDto,
+  HospitalPaymentWebhookStatus,
+} from './dto/hospital-payment-webhook.dto';
 import { CreateOrderDto } from '../orders/dto';
+import { Prisma } from '@prisma/client';
 
 @Injectable()
 export class PaymentsService {
@@ -739,6 +744,46 @@ export class PaymentsService {
       message: 'Payment recorded successfully',
       receiptNumber,
     };
+  }
+
+  // ========================================
+  // HOSPITAL PAYMENT WEBHOOK (MOCK)
+  // ========================================
+
+  async processHospitalPaymentWebhook(dto: HospitalPaymentWebhookDto) {
+    return this.prisma.$transaction(
+      async (tx) => {
+        // Re-read inside the serializable transaction to prevent double-payment
+        const invoice = await tx.hospitalInvoice.findUnique({
+          where: { id: dto.invoiceId },
+        });
+
+        if (!invoice) {
+          throw new NotFoundException(`Invoice ${dto.invoiceId} not found`);
+        }
+
+        // Idempotency: already settled, safe to acknowledge
+        if (invoice.paymentStatus === 'PAID') {
+          return { status: 'success', message: 'Invoice already paid' };
+        }
+
+        if (dto.status !== HospitalPaymentWebhookStatus.SUCCESSFUL) {
+          return { status: 'failed', message: 'Payment not successful' };
+        }
+
+        await tx.hospitalInvoice.update({
+          where: { id: dto.invoiceId },
+          data: { paymentStatus: 'PAID' },
+        });
+
+        return {
+          status: 'success',
+          message: 'Invoice transitioned to PAID',
+          invoiceId: dto.invoiceId,
+        };
+      },
+      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
+    );
   }
 
   private async resolveBranchForStaff(userId: string) {
