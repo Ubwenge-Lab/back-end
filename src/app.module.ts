@@ -43,6 +43,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ReportsModule } from './reports/reports.module';
 import { PlatformBillingModule } from './platform-billing/platform-billing.module';
+import { InpatientBillingModule } from './inpatient-billing/inpatient-billing.module';
 
 @Module({
   imports: [
@@ -90,6 +91,7 @@ import { PlatformBillingModule } from './platform-billing/platform-billing.modul
     DocumentsModule,
     ClaimsModule,
     PlatformBillingModule,
+    InpatientBillingModule,
   ],
   controllers: [AppController],
   providers: [
