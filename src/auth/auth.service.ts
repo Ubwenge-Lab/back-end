@@ -315,6 +315,23 @@ export class AuthService {
           }
         }
 
+        // DOCTOR staff onboarded via onboard/hospital-staff also get a
+        // matching Doctor row (same transaction) — surface its id/
+        // specialization so the frontend has the one ID that
+        // Appointment.doctorId / Prescription.doctorId actually reference.
+        let doctorFields: { doctorId?: string; specialization?: string } = {};
+        if (user.role === 'DOCTOR') {
+          const doctor = await this.prisma.doctor.findFirst({
+            where: { userId: user.id },
+          });
+          if (doctor) {
+            doctorFields = {
+              doctorId: doctor.id,
+              specialization: doctor.specialization,
+            };
+          }
+        }
+
         const tokens = await this.generateTokens(
           user.id,
           user.email,
@@ -329,13 +346,53 @@ export class AuthService {
             id: user.id,
             email: user.email,
             role: user.role,
+            firstName: hospitalStaff.firstName,
+            lastName: hospitalStaff.lastName,
             hospitalId: hospitalStaff.hospitalId,
             hospitalName: hospitalStaff.hospital.name,
             status: hospitalStaff.status,
             requiresPasswordChange: !!isUsingTempPassword,
+            ...doctorFields,
           },
           ...tokens,
         };
+      }
+
+      // Fallback for a DOCTOR whose User has a Doctor record but no
+      // HospitalStaff row (e.g. seeded via prisma.doctor.create directly,
+      // bypassing the onboard/hospital-staff flow that creates both).
+      if (user.role === 'DOCTOR') {
+        const doctor = await this.prisma.doctor.findFirst({
+          where: { userId: user.id },
+          include: { hospital: true },
+        });
+
+        if (doctor) {
+          const tokens = await this.generateTokens(
+            user.id,
+            user.email,
+            user.role,
+            undefined,
+            doctor.hospitalId,
+          );
+          await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+          return {
+            user: {
+              id: user.id,
+              email: user.email,
+              role: user.role,
+              firstName: doctor.firstName,
+              lastName: doctor.lastName,
+              hospitalId: doctor.hospitalId,
+              hospitalName: doctor.hospital.name,
+              doctorId: doctor.id,
+              specialization: doctor.specialization,
+              requiresPasswordChange: false,
+            },
+            ...tokens,
+          };
+        }
       }
 
       throw new UnauthorizedException('Staff profile not found');

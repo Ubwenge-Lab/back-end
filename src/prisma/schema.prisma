@@ -83,6 +83,7 @@ model Doctor {
   firstName              String?
   lastName               String?
   signatureUrl           String?
+  isDepartmentHead       Boolean                @default(false)
   appointments           Appointment[]
   schedules              DoctorSchedule[]
   leaveRequests          DoctorLeave[]
@@ -135,6 +136,7 @@ model HospitalStaff {
   firstName          String
   lastName           String
   phone              String?
+  department         String?
   status             StaffStatus @default(ACTIVE)
   tempPasswordHash   String?
   tempPasswordExpiry DateTime?
