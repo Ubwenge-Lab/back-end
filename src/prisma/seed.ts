@@ -395,6 +395,7 @@ async function main() {
 
   const patients = [
     {
+      id: 'b39bcac3-9eae-4c50-b408-347fd13e9b33',
       email: 'alice@patient.com',
       firstName: 'Alice',
       lastName: 'Mukamana',
@@ -403,6 +404,7 @@ async function main() {
       coverage: 80,
     },
     {
+      id: 'c7dbe656-1869-45d1-a498-f6341cd54930',
       email: 'bob@patient.com',
       firstName: 'Bob',
       lastName: 'Habimana',
@@ -411,6 +413,7 @@ async function main() {
       coverage: 0,
     },
     {
+      id: '1e14481d-5a94-4206-8b34-83c35044ae3d',
       email: 'claire@patient.com',
       firstName: 'Claire',
       lastName: 'Ingabire',
@@ -419,6 +422,7 @@ async function main() {
       coverage: 60,
     },
     {
+      id: '6416e65b-a0be-40cb-bad8-c3f2ec4a8f7a',
       email: 'david@patient.com',
       firstName: 'David',
       lastName: 'Nshuti',
@@ -440,6 +444,7 @@ async function main() {
         address: p.address,
       },
       create: {
+        id: p.id,
         user: { connect: { id: userId } },
         firstName: p.firstName,
         lastName: p.lastName,
@@ -462,6 +467,7 @@ async function main() {
       where: { userId: pharmId },
       update: { firstName: 'Samuel', status: 'ACTIVE' },
       create: {
+        id: '86e18f92-8874-4d4c-b9e7-aaba80d6a11c',
         userId: pharmId,
         branchId: medPlusMain.id,
         firstName: 'Samuel',
@@ -478,6 +484,7 @@ async function main() {
       where: { userId: cashierId },
       update: { firstName: 'Grace', status: 'ACTIVE' },
       create: {
+        id: 'e091747a-6eec-4131-923f-f0e727ef4fb7',
         userId: cashierId,
         branchId: medPlusMain.id,
         firstName: 'Grace',
@@ -796,6 +803,7 @@ async function main() {
     where: { hospitalId: chukId },
     update: { consultationFee: 10000, triageFee: 3000 },
     create: {
+      id: '879a7899-beac-4c20-a463-66e111740b61',
       hospitalId: chukId,
       consultationFee: 10000,
       triageFee: 3000,
@@ -806,6 +814,7 @@ async function main() {
     where: { hospitalId: kfhId },
     update: { consultationFee: 25000, triageFee: 5000 },
     create: {
+      id: '736789d0-f12e-4476-ba23-e38c4e5c98d1',
       hospitalId: kfhId,
       consultationFee: 25000,
       triageFee: 5000,
@@ -1207,7 +1216,7 @@ async function main() {
 
     // Create 2 branches per pharmacy
     for (let j = 0; j < 2; j++) {
-      const branchManagerEmail = `manager${i}_${j}@pharmacy.com`;
+      const branchManagerEmail = `manager${i}_${j}@manager.com`;
       const managerUserId = `00000000-0000-0000-0002-0000000000${i}${j}`;
       const branchId = `20000000-0000-0000-0001-0000000000${i}${j}`;
 
