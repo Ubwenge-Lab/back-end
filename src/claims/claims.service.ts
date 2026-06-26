@@ -105,6 +105,10 @@ export class ClaimsService {
         nextClaimStatus = ClaimStatus.PAID;
         nextBillingStatus = HospitalBillingStatus.PAID;
         difference = 0;
+      } else if (settledAmount === 0) {
+        nextClaimStatus = ClaimStatus.REJECTED;
+        nextBillingStatus = HospitalBillingStatus.PARTIAL;
+        difference = claimAmount;
       } else {
         nextClaimStatus = ClaimStatus.PARTIAL;
         nextBillingStatus = HospitalBillingStatus.PARTIAL;
