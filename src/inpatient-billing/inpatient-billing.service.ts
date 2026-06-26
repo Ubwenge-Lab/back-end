@@ -14,7 +14,7 @@ export class InpatientBillingService {
     this.logger.log('Running daily ward charge aggregation...');
 
     // Find all active admissions
-    const activeAdmissions = await this.prisma.admission.findMany({
+    const activeAdmissions = await this.prisma.inpatientAdmission.findMany({
       where: { status: 'ACTIVE' },
       include: {
         bed: { include: { ward: true } },
@@ -70,7 +70,7 @@ export class InpatientBillingService {
 
   // 2. Log bedside supply consumption
   async logSupplyConsumption(admissionId: string, data: any, staffId: string) {
-    const admission = await this.prisma.admission.findUnique({
+    const admission = await this.prisma.inpatientAdmission.findUnique({
       where: { id: admissionId },
       include: { hospitalInvoice: true },
     });
