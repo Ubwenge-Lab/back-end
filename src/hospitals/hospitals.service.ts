@@ -917,8 +917,16 @@ export class HospitalsService {
     const requestingDoctor = booking.teamAssignments.find(
       (a: any) => a.doctor?.userId === userId,
     );
-    if (!requestingDoctor && booking.status !== 'COMPLETED') {
-      // Fallback check placeholder
+    if (!requestingDoctor) {
+      throw new ForbiddenException(
+        'You are not authorized to log a report for this surgery booking',
+      );
+    }
+
+    if (booking.status === 'COMPLETED') {
+      throw new ConflictException(
+        'A report has already been logged for this surgery booking',
+      );
     }
 
     return this.prisma.surgeryBooking.update({
