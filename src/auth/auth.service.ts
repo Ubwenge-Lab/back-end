@@ -324,6 +324,14 @@ export class AuthService {
         );
         await this.updateRefreshToken(user.id, tokens.refreshToken);
 
+        let doctorProfile: { id: string; firstName: string | null; lastName: string | null; specialization: string } | null = null;
+        if (user.role === 'DOCTOR') {
+          doctorProfile = await this.prisma.doctor.findFirst({
+            where: { userId: user.id },
+            select: { id: true, firstName: true, lastName: true, specialization: true },
+          });
+        }
+
         return {
           user: {
             id: user.id,
@@ -333,9 +341,50 @@ export class AuthService {
             hospitalName: hospitalStaff.hospital.name,
             status: hospitalStaff.status,
             requiresPasswordChange: !!isUsingTempPassword,
+            ...(doctorProfile && {
+              doctorId: doctorProfile.id,
+              firstName: doctorProfile.firstName,
+              lastName: doctorProfile.lastName,
+              specialization: doctorProfile.specialization,
+            }),
           },
           ...tokens,
         };
+      }
+
+      // Fallback for doctors who have no HospitalStaff row (standard case for seeded doctors)
+      if (user.role === 'DOCTOR') {
+        const doctor = await this.prisma.doctor.findFirst({
+          where: { userId: user.id },
+          include: { hospital: true },
+        });
+
+        if (doctor) {
+          const tokens = await this.generateTokens(
+            user.id,
+            user.email,
+            user.role,
+            undefined,
+            doctor.hospitalId,
+          );
+          await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+          return {
+            user: {
+              id: user.id,
+              email: user.email,
+              role: user.role,
+              hospitalId: doctor.hospitalId,
+              hospitalName: doctor.hospital.name,
+              doctorId: doctor.id,
+              firstName: doctor.firstName,
+              lastName: doctor.lastName,
+              specialization: doctor.specialization,
+              requiresPasswordChange: false,
+            },
+            ...tokens,
+          };
+        }
       }
 
       throw new UnauthorizedException('Staff profile not found');
