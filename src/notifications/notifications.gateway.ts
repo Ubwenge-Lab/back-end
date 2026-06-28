@@ -38,6 +38,12 @@ export class NotificationsGateway
   }
 
   sendNotificationToUser(userId: string, notification: any) {
-    this.server.to(`user_${userId}`).emit('newNotification', notification);
+    if (this.server) {
+      this.server.to(`user_${userId}`).emit('newNotification', notification);
+    } else {
+      this.logger.warn(
+        `WebSocket server not initialized; cannot send real-time notification to user_${userId}`,
+      );
+    }
   }
 }

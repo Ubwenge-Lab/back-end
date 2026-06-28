@@ -44,6 +44,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ReportsModule } from './reports/reports.module';
 import { PlatformBillingModule } from './platform-billing/platform-billing.module';
 import { InpatientModule } from './inpatient/inpatient.module';
+import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 
 @Module({
   imports: [
@@ -92,6 +93,7 @@ import { InpatientModule } from './inpatient/inpatient.module';
     ClaimsModule,
     PlatformBillingModule,
     InpatientModule,
+    DiagnosticsModule,
   ],
   controllers: [AppController],
   providers: [

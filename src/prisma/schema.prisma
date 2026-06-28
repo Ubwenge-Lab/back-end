@@ -36,21 +36,21 @@ model User {
 }
 
 model Hospital {
-  id                    String                        @id @default(uuid())
-  userId                String                        @unique
-  name                  String
-  representativeName    String?
-  address               String
-  phone                 String
-  latitude              Float?
-  longitude             Float?
-  dateOfIncorporation   DateTime?
-  rdbCertificate        String?
-  pharmacyLicense       String?
-  businessRegistration  String?
-  status                PharmacyStatus                @default(PENDING)
-  createdAt             DateTime                      @default(now())
-  updatedAt             DateTime                      @updatedAt
+  id                          String                        @id @default(uuid())
+  userId                      String                        @unique
+  name                        String
+  representativeName          String?
+  address                     String
+  phone                       String
+  latitude                    Float?
+  longitude                   Float?
+  dateOfIncorporation         DateTime?
+  rdbCertificate              String?
+  pharmacyLicense             String?
+  businessRegistration        String?
+  status                      PharmacyStatus                @default(PENDING)
+  createdAt                   DateTime                      @default(now())
+  updatedAt                   DateTime                      @updatedAt
   licenseNumber               String?
   platformBalance             Decimal                       @default(0) @db.Decimal(12, 2)
   appointments                Appointment[]
@@ -92,6 +92,7 @@ model Doctor {
   prescriptions          Prescription[]         @relation("DoctorToPrescription")
   medicalHistoryAccesses MedicalHistoryAccess[]
   medicalRecordLogs      MedicalRecordLog[]
+  diagnosticOrders       DiagnosticOrder[]
 
   @@index([hospitalId])
   @@index([specialization])
@@ -144,9 +145,9 @@ model HospitalStaff {
   hospital           Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
   user               User              @relation(fields: [userId], references: [id])
   vitalsRecorded     InpatientVitals[] @relation("VitalsNurse")
-  marAdministered    MARLog[]             @relation("MARNurse")
-  handoversGiven     NursingHandover[]    @relation("HandoverOutgoing")
-  handoversReceived  NursingHandover[]    @relation("HandoverIncoming")
+  marAdministered    MARLog[]          @relation("MARNurse")
+  handoversGiven     NursingHandover[] @relation("HandoverOutgoing")
+  handoversReceived  NursingHandover[] @relation("HandoverIncoming")
 
   @@index([hospitalId])
   @@index([userId])
@@ -185,6 +186,7 @@ model Patient {
   medicalHistoryAccesses MedicalHistoryAccess[]
   medicalRecordLogs      MedicalRecordLog[]
   admissions             InpatientAdmission[]
+  diagnosticOrders       DiagnosticOrder[]
 
   @@index([userId])
   @@map("patients")
@@ -445,6 +447,7 @@ model Appointment {
   type                  AppointmentType          @default(IN_PERSON)
   telemedicineDuration  Int?
   sessionLogs           TelemedicineSessionLog[]
+  diagnosticOrders      DiagnosticOrder[]
 
   @@index([patientId])
   @@index([hospitalId])
@@ -864,6 +867,7 @@ enum UserRole {
   DOCTOR
   RECEPTIONIST
   NURSE
+  TECHNICIAN
 }
 
 enum PharmacyStatus {
@@ -1105,14 +1109,14 @@ model InpatientAdmission {
 }
 
 model InpatientVitals {
-  id          String   @id @default(uuid())
-  admissionId String
+  id           String   @id @default(uuid())
+  admissionId  String
   recordedById String
-  readings    Json
-  checklist   Json
-  nurseNotes  String?
-  recordedAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
+  readings     Json
+  checklist    Json
+  nurseNotes   String?
+  recordedAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   admission InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
   nurse     HospitalStaff      @relation("VitalsNurse", fields: [recordedById], references: [id])
@@ -1123,7 +1127,7 @@ model InpatientVitals {
 }
 
 model MARLog {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   admissionId       String
   administeredById  String
   medicationName    String
@@ -1133,7 +1137,7 @@ model MARLog {
   scheduledAt       DateTime?
   administeredAt    DateTime
   notes             String?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime  @default(now())
 
   admission InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
   nurse     HospitalStaff      @relation("MARNurse", fields: [administeredById], references: [id])
@@ -1155,9 +1159,9 @@ model NursingHandover {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  admission      InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
-  outgoingNurse  HospitalStaff      @relation("HandoverOutgoing", fields: [handedOverById], references: [id])
-  incomingNurse  HospitalStaff?     @relation("HandoverIncoming", fields: [receivedById], references: [id])
+  admission     InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  outgoingNurse HospitalStaff      @relation("HandoverOutgoing", fields: [handedOverById], references: [id])
+  incomingNurse HospitalStaff?     @relation("HandoverIncoming", fields: [receivedById], references: [id])
 
   @@index([admissionId])
   @@map("nursing_handovers")
@@ -1173,4 +1177,43 @@ enum ShiftType {
   MORNING
   AFTERNOON
   NIGHT
+}
+
+enum DiagnosticType {
+  BLOOD
+  URINE
+  XRAY
+  MRI
+}
+
+enum DiagnosticStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+model DiagnosticOrder {
+  id            String           @id @default(uuid())
+  patientId     String
+  doctorId      String
+  appointmentId String?
+  testType      DiagnosticType
+  icd10Code     String
+  status        DiagnosticStatus @default(PENDING)
+  findings      String?
+  resultValue   String?
+  fileUrl       String?
+  fileName      String?
+  fileType      String?
+  technicianId  String?
+  completedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor      Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@map("diagnostic_orders")
 }
