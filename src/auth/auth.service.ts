@@ -315,23 +315,6 @@ export class AuthService {
           }
         }
 
-        // DOCTOR staff onboarded via onboard/hospital-staff also get a
-        // matching Doctor row (same transaction) — surface its id/
-        // specialization so the frontend has the one ID that
-        // Appointment.doctorId / Prescription.doctorId actually reference.
-        let doctorFields: { doctorId?: string; specialization?: string } = {};
-        if (user.role === 'DOCTOR') {
-          const doctor = await this.prisma.doctor.findFirst({
-            where: { userId: user.id },
-          });
-          if (doctor) {
-            doctorFields = {
-              doctorId: doctor.id,
-              specialization: doctor.specialization,
-            };
-          }
-        }
-
         const tokens = await this.generateTokens(
           user.id,
           user.email,
@@ -340,6 +323,14 @@ export class AuthService {
           hospitalStaff.hospitalId,
         );
         await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+        let doctorProfile: { id: string; firstName: string | null; lastName: string | null; specialization: string } | null = null;
+        if (user.role === 'DOCTOR') {
+          doctorProfile = await this.prisma.doctor.findFirst({
+            where: { userId: user.id },
+            select: { id: true, firstName: true, lastName: true, specialization: true },
+          });
+        }
 
         return {
           user: {
@@ -352,7 +343,12 @@ export class AuthService {
             hospitalName: hospitalStaff.hospital.name,
             status: hospitalStaff.status,
             requiresPasswordChange: !!isUsingTempPassword,
-            ...doctorFields,
+            ...(doctorProfile && {
+              doctorId: doctorProfile.id,
+              firstName: doctorProfile.firstName,
+              lastName: doctorProfile.lastName,
+              specialization: doctorProfile.specialization,
+            }),
           },
           ...tokens,
         };
