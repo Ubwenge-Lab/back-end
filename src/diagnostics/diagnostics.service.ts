@@ -236,7 +236,8 @@ export class DiagnosticsService {
       );
     }
 
-    // Construct mock pre-signed S3 URL expiring in 15 minutes
+    // TODO: DO NOT USE IN PRODUCTION! This is a mock pre-signed S3 URL for testing.
+    // Replace with real AWS SDK call to generate pre-signed URL before deploying to production.
     const expiresSeconds = Math.round((Date.now() + 15 * 60 * 1000) / 1000);
     const mockS3Url = `https://e-vuze-medical-records.s3.amazonaws.com/diagnostics/${order.id}?AWSAccessKeyId=AKIAIOSFODNN7EXAMPLE&Signature=vjbyPxybdZaNmGa%2ByT272YEAiv4%3D&Expires=${expiresSeconds}`;
 
