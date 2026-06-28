@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { InventoryService } from '../inventory/inventory.service';
 import { CreateDiagnosticOrderDto, UpdateDiagnosticOrderFindingsDto } from './dto';
 import { DiagnosticStatus, DiagnosticType, NotificationType, UserRole } from '@prisma/client';
 
@@ -15,6 +16,7 @@ export class DiagnosticsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
+    private inventoryService: InventoryService,
   ) {}
 
   // 1. Doctor requests a diagnostic test
@@ -174,6 +176,15 @@ export class DiagnosticsService {
           title: 'Diagnostic Results Finalized',
           message: `The diagnostic order for ${order.testType} for patient ${order.patient.firstName} ${order.patient.lastName} has been finalized by the laboratory.`,
         });
+      }
+
+      // Auto-deduct inventory
+      try {
+        await this.inventoryService.deductConsumablesForDiagnostic(order.id);
+      } catch (err) {
+        // Log but don't fail the order completion if inventory deduction throws an exception (e.g., negative stock warning)
+        // Optionally, this could be handled differently depending on business logic
+        console.error('Failed to deduct inventory for diagnostic order:', err);
       }
     }
 

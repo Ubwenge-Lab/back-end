@@ -1470,6 +1470,50 @@ async function main() {
       });
       fakerHospitalStaffList.push(hStaff);
     }
+    // Receptionists
+    for (let j = 0; j < 2; j++) {
+      const recEmail = j === 0 && i === 0 ? 'receptionist@ubumwe.com' : `receptionist${i}_${j}@hospital.com`;
+      const recUserId = `00000000-0000-0000-0008-0000000000${i}${j}`;
+      const recStaffId = `80000000-0000-0000-0001-0000000000${i}${j}`;
+
+      const recUser = await prisma.user.upsert({
+        where: { email: recEmail },
+        update: {
+          role: UserRole.RECEPTIONIST,
+          isVerified: true,
+          isActive: true,
+          password: password,
+        },
+        create: {
+          id: recUserId,
+          email: recEmail,
+          role: UserRole.RECEPTIONIST,
+          isVerified: true,
+          password: password,
+          isActive: true,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+        },
+      });
+
+      const recStaff = await prisma.hospitalStaff.upsert({
+        where: { userId: recUser.id },
+        update: {
+          hospitalId: hospital.id,
+          status: StaffStatus.ACTIVE,
+        },
+        create: {
+          id: recStaffId,
+          userId: recUser.id,
+          hospitalId: hospital.id,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+          phone: '+250788' + faker.string.numeric(6),
+          status: StaffStatus.ACTIVE,
+        },
+      });
+      fakerHospitalStaffList.push(recStaff);
+    }
 
     // Doctors
     for (let j = 0; j < 5; j++) {

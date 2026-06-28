@@ -45,6 +45,7 @@ import { ReportsModule } from './reports/reports.module';
 import { PlatformBillingModule } from './platform-billing/platform-billing.module';
 import { InpatientModule } from './inpatient/inpatient.module';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
+import { InventoryModule } from './inventory/inventory.module';
 
 @Module({
   imports: [
@@ -94,6 +95,7 @@ import { DiagnosticsModule } from './diagnostics/diagnostics.module';
     PlatformBillingModule,
     InpatientModule,
     DiagnosticsModule,
+    InventoryModule,
   ],
   controllers: [AppController],
   providers: [
