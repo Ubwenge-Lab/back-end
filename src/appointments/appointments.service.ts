@@ -15,16 +15,12 @@ import {
 } from './dto';
 import { AppointmentStatus, AppointmentType } from '@prisma/client';
 import { TriageVitalsDto } from './dto/triage-vitals.dto';
-import { APP_EVENTS } from '../common/constants/events.constant';
-
-import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
-    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // ========================================
@@ -179,7 +175,7 @@ export class AppointmentsService {
   // ========================================
   // LIST APPOINTMENTS (role-scoped)
   // ========================================
-  async findAll(userId: string, role: string) {
+  async findAll(userId: string, role: string, from?: string, to?: string) {
     if (role === 'PATIENT') {
       const patient = await this.prisma.patient.findUnique({
         where: { userId },
@@ -197,8 +193,20 @@ export class AppointmentsService {
       const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
       if (!doctor) throw new ForbiddenException('Doctor profile not found');
 
+      // Build optional date filter when from/to are provided
+      const dateFilter: any = {};
+      if (from) dateFilter.gte = new Date(from);
+      if (to) {
+        const toDate = new Date(to);
+        toDate.setHours(23, 59, 59, 999);
+        dateFilter.lte = toDate;
+      }
+
       return this.prisma.appointment.findMany({
-        where: { doctorId: doctor.id },
+        where: {
+          doctorId: doctor.id,
+          ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {}),
+        },
         include: appointmentInclude,
         orderBy: { date: 'asc' },
       });
@@ -368,10 +376,6 @@ export class AppointmentsService {
     );
 
     try {
-      if (hasInsurance) {
-        this.eventEmitter.emit(APP_EVENTS.INVOICE_CREATED, { invoiceId: invoice.id });
-      }
-
       await this.notificationsService.create({
         userId: appointment.patient.userId,
         type: 'CONSULTATION_COMPLETED',
