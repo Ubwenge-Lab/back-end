@@ -15,12 +15,16 @@ import {
 } from './dto';
 import { AppointmentStatus, AppointmentType } from '@prisma/client';
 import { TriageVitalsDto } from './dto/triage-vitals.dto';
+import { APP_EVENTS } from '../common/constants/events.constant';
+
+import { EventEmitter2 } from '@nestjs/event-emitter';
 
 @Injectable()
 export class AppointmentsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly notificationsService: NotificationsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   // ========================================
@@ -364,6 +368,10 @@ export class AppointmentsService {
     );
 
     try {
+      if (hasInsurance) {
+        this.eventEmitter.emit(APP_EVENTS.INVOICE_CREATED, { invoiceId: invoice.id });
+      }
+
       await this.notificationsService.create({
         userId: appointment.patient.userId,
         type: 'CONSULTATION_COMPLETED',

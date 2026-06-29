@@ -141,10 +141,14 @@ model HospitalStaff {
   status             StaffStatus @default(ACTIVE)
   tempPasswordHash   String?
   tempPasswordExpiry DateTime?
-  createdAt          DateTime    @default(now())
-  updatedAt          DateTime    @updatedAt
-  hospital           Hospital    @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  user               User        @relation(fields: [userId], references: [id])
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+  hospital           Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  user               User              @relation(fields: [userId], references: [id])
+  vitalsRecorded     InpatientVitals[] @relation("VitalsNurse")
+  marAdministered    MARLog[]             @relation("MARNurse")
+  handoversGiven     NursingHandover[]    @relation("HandoverOutgoing")
+  handoversReceived  NursingHandover[]    @relation("HandoverIncoming")
 
   @@index([hospitalId])
   @@index([userId])
@@ -182,7 +186,7 @@ model Patient {
   prescriptions          Prescription[]
   medicalHistoryAccesses MedicalHistoryAccess[]
   medicalRecordLogs      MedicalRecordLog[]
-  inpatientAdmissions             InpatientAdmission[]
+  admissions             InpatientAdmission[]
 
   @@index([userId])
   @@map("patients")
@@ -1119,20 +1123,31 @@ model InpatientAdmission {
   id                 String              @id @default(uuid())
   patientId          String
   hospitalId         String
-  bedId              String
+  bedId              String?
   doctorId           String?
+  admittedByUserId   String
+  admittedByName     String
+  admittedByRole     String
+  wardName           String?
+  bedNumber          String?
+  reason             String
   status             AdmissionStatus     @default(ACTIVE)
   admissionDate      DateTime            @default(now())
+  admittedAt         DateTime            @default(now())
   dischargeDate      DateTime?
+  dischargedAt       DateTime?
   notes              String?
   createdAt          DateTime            @default(now())
   updatedAt          DateTime            @updatedAt
   patient            Patient             @relation(fields: [patientId], references: [id])
   hospital           Hospital            @relation(fields: [hospitalId], references: [id])
-  bed                Bed                 @relation(fields: [bedId], references: [id])
+  bed                Bed?                @relation(fields: [bedId], references: [id])
   doctor             Doctor?             @relation(fields: [doctorId], references: [id])
   supplyConsumptions SupplyConsumption[]
   hospitalInvoice    HospitalInvoice?
+  vitals             InpatientVitals[]
+  marLogs            MARLog[]
+  handovers          NursingHandover[]
 
   @@index([doctorId])
   @@index([patientId])
@@ -1155,4 +1170,69 @@ model SupplyConsumption {
 
   @@index([admissionId])
   @@map("supply_consumptions")
+}
+
+model InpatientVitals {
+  id          String   @id @default(uuid())
+  admissionId String
+  recordedById String
+  readings    Json
+  checklist   Json
+  nurseNotes  String?
+  recordedAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+
+  admission InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  nurse     HospitalStaff      @relation("VitalsNurse", fields: [recordedById], references: [id])
+
+  @@index([admissionId])
+  @@index([recordedAt])
+  @@map("inpatient_vitals")
+}
+
+model MARLog {
+  id                String   @id @default(uuid())
+  admissionId       String
+  administeredById  String
+  medicationName    String
+  dose              String
+  route             String?
+  prescriptionMedId String?
+  scheduledAt       DateTime?
+  administeredAt    DateTime
+  notes             String?
+  createdAt         DateTime @default(now())
+
+  admission InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  nurse     HospitalStaff      @relation("MARNurse", fields: [administeredById], references: [id])
+
+  @@index([admissionId])
+  @@index([administeredAt])
+  @@map("mar_logs")
+}
+
+model NursingHandover {
+  id             String    @id @default(uuid())
+  admissionId    String
+  handedOverById String
+  receivedById   String?
+  shiftType      ShiftType
+  checklist      Json
+  notes          String?
+  handedOverAt   DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  admission      InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  outgoingNurse  HospitalStaff      @relation("HandoverOutgoing", fields: [handedOverById], references: [id])
+  incomingNurse  HospitalStaff?     @relation("HandoverIncoming", fields: [receivedById], references: [id])
+
+  @@index([admissionId])
+  @@map("nursing_handovers")
+}
+
+enum ShiftType {
+  MORNING
+  AFTERNOON
+  NIGHT
 }

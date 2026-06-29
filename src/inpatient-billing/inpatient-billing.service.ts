@@ -24,6 +24,10 @@ export class InpatientBillingService {
 
     for (const admission of activeAdmissions) {
       try {
+        if (!admission.bed) {
+          this.logger.warn(`Admission ${admission.id} has no associated bed. Skipping bed charge.`);
+          continue;
+        }
         const bedCharge = admission.bed.ward.baseBedCharge;
         
         let invoice = admission.hospitalInvoice;
