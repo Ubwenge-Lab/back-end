@@ -1174,3 +1174,20 @@ enum ShiftType {
   AFTERNOON
   NIGHT
 }
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  tableName String
+  operation String
+  recordId  String?
+  userId    String?
+  userRole  String?
+  ipAddress String?
+  reason    String?
+  createdAt DateTime @default(now())
+
+  @@index([tableName])
+  @@index([userId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

@@ -44,6 +44,8 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ReportsModule } from './reports/reports.module';
 import { PlatformBillingModule } from './platform-billing/platform-billing.module';
 import { InpatientModule } from './inpatient/inpatient.module';
+import { AuditModule } from './audit/audit.module';
+import { AuditContextInterceptor } from './audit/audit-context.interceptor';
 
 @Module({
   imports: [
@@ -92,6 +94,7 @@ import { InpatientModule } from './inpatient/inpatient.module';
     ClaimsModule,
     PlatformBillingModule,
     InpatientModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [
@@ -100,6 +103,10 @@ import { InpatientModule } from './inpatient/inpatient.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditContextInterceptor,
     },
     // Bind ThrottlerGuard globally to apply rate limiting to all routes
     {
