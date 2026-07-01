@@ -17,6 +17,7 @@ export class CreateCheckoutSessionDto {
 
   @IsString()
   @IsOptional()
+  @IsPhoneNumber('RW')
   phoneNumber?: string;
 }
 

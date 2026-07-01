@@ -108,6 +108,7 @@ export class PaymentsController {
   }
 
   @Post('webhook/mock-callback')
+  @Public()
   @HttpCode(HttpStatus.OK)
   handleCallback(@Body() dto: MockWebhookDto) {
     return this.paymentsService.handleMockWebhookCallback(dto);
