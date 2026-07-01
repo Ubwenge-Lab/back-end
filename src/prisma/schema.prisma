@@ -36,21 +36,21 @@ model User {
 }
 
 model Hospital {
-  id                    String                        @id @default(uuid())
-  userId                String                        @unique
-  name                  String
-  representativeName    String?
-  address               String
-  phone                 String
-  latitude              Float?
-  longitude             Float?
-  dateOfIncorporation   DateTime?
-  rdbCertificate        String?
-  pharmacyLicense       String?
-  businessRegistration  String?
-  status                PharmacyStatus                @default(PENDING)
-  createdAt             DateTime                      @default(now())
-  updatedAt             DateTime                      @updatedAt
+  id                          String                        @id @default(uuid())
+  userId                      String                        @unique
+  name                        String
+  representativeName          String?
+  address                     String
+  phone                       String
+  latitude                    Float?
+  longitude                   Float?
+  dateOfIncorporation         DateTime?
+  rdbCertificate              String?
+  pharmacyLicense             String?
+  businessRegistration        String?
+  status                      PharmacyStatus                @default(PENDING)
+  createdAt                   DateTime                      @default(now())
+  updatedAt                   DateTime                      @updatedAt
   licenseNumber               String?
   platformBalance             Decimal                       @default(0) @db.Decimal(12, 2)
   appointments                Appointment[]
@@ -65,6 +65,10 @@ model Hospital {
   invoices                    Invoice[]
   prescriptions               Prescription[]
   admissions                  InpatientAdmission[]
+  referralWebhookUrl          String?
+  referralWebhookSecret       String?
+  outboundReferrals           Referral[]                    @relation("ReferralSource")
+  inboundReferrals            Referral[]                    @relation("ReferralTarget")
 
   @@index([userId])
   @@map("hospitals")
@@ -92,6 +96,7 @@ model Doctor {
   prescriptions          Prescription[]         @relation("DoctorToPrescription")
   medicalHistoryAccesses MedicalHistoryAccess[]
   medicalRecordLogs      MedicalRecordLog[]
+  authorizedReferrals    Referral[]
 
   @@index([hospitalId])
   @@index([specialization])
@@ -144,9 +149,9 @@ model HospitalStaff {
   hospital           Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
   user               User              @relation(fields: [userId], references: [id])
   vitalsRecorded     InpatientVitals[] @relation("VitalsNurse")
-  marAdministered    MARLog[]             @relation("MARNurse")
-  handoversGiven     NursingHandover[]    @relation("HandoverOutgoing")
-  handoversReceived  NursingHandover[]    @relation("HandoverIncoming")
+  marAdministered    MARLog[]          @relation("MARNurse")
+  handoversGiven     NursingHandover[] @relation("HandoverOutgoing")
+  handoversReceived  NursingHandover[] @relation("HandoverIncoming")
 
   @@index([hospitalId])
   @@index([userId])
@@ -185,6 +190,7 @@ model Patient {
   medicalHistoryAccesses MedicalHistoryAccess[]
   medicalRecordLogs      MedicalRecordLog[]
   admissions             InpatientAdmission[]
+  referrals              Referral[]
 
   @@index([userId])
   @@map("patients")
@@ -1105,14 +1111,14 @@ model InpatientAdmission {
 }
 
 model InpatientVitals {
-  id          String   @id @default(uuid())
-  admissionId String
+  id           String   @id @default(uuid())
+  admissionId  String
   recordedById String
-  readings    Json
-  checklist   Json
-  nurseNotes  String?
-  recordedAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
+  readings     Json
+  checklist    Json
+  nurseNotes   String?
+  recordedAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
 
   admission InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
   nurse     HospitalStaff      @relation("VitalsNurse", fields: [recordedById], references: [id])
@@ -1123,7 +1129,7 @@ model InpatientVitals {
 }
 
 model MARLog {
-  id                String   @id @default(uuid())
+  id                String    @id @default(uuid())
   admissionId       String
   administeredById  String
   medicationName    String
@@ -1133,7 +1139,7 @@ model MARLog {
   scheduledAt       DateTime?
   administeredAt    DateTime
   notes             String?
-  createdAt         DateTime @default(now())
+  createdAt         DateTime  @default(now())
 
   admission InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
   nurse     HospitalStaff      @relation("MARNurse", fields: [administeredById], references: [id])
@@ -1155,9 +1161,9 @@ model NursingHandover {
   createdAt      DateTime  @default(now())
   updatedAt      DateTime  @updatedAt
 
-  admission      InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
-  outgoingNurse  HospitalStaff      @relation("HandoverOutgoing", fields: [handedOverById], references: [id])
-  incomingNurse  HospitalStaff?     @relation("HandoverIncoming", fields: [receivedById], references: [id])
+  admission     InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  outgoingNurse HospitalStaff      @relation("HandoverOutgoing", fields: [handedOverById], references: [id])
+  incomingNurse HospitalStaff?     @relation("HandoverIncoming", fields: [receivedById], references: [id])
 
   @@index([admissionId])
   @@map("nursing_handovers")
@@ -1173,4 +1179,43 @@ enum ShiftType {
   MORNING
   AFTERNOON
   NIGHT
+}
+
+enum ReferralStatus {
+  PENDING
+  PACKAGED
+  SENT
+  FAILED
+}
+
+model Referral {
+  id                  String         @id @default(uuid())
+  patientId           String
+  sourceHospitalId    String
+  targetHospitalId    String
+  authorizingDoctorId String
+  reason              String
+  status              ReferralStatus @default(PENDING)
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+
+  emrJsonPayload Json?
+  emrPdfFileUrl  String?
+  exportedAt     DateTime?
+
+  webhookSignature   String?
+  webhookHttpStatus  Int?
+  webhookAttemptedAt DateTime?
+  webhookError       String?
+
+  patient           Patient  @relation(fields: [patientId], references: [id])
+  sourceHospital    Hospital @relation("ReferralSource", fields: [sourceHospitalId], references: [id])
+  targetHospital    Hospital @relation("ReferralTarget", fields: [targetHospitalId], references: [id])
+  authorizingDoctor Doctor   @relation(fields: [authorizingDoctorId], references: [id])
+
+  @@index([sourceHospitalId])
+  @@index([targetHospitalId])
+  @@index([patientId])
+  @@index([status])
+  @@map("referrals")
 }
