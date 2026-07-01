@@ -1140,6 +1140,48 @@ async function main() {
   }
 
   // ==========================================
+  // 7b. HOSPITAL DRUG STOCK
+  // ==========================================
+  console.log('💊 Seeding hospital drug stock...');
+  const stockDrugs = await prisma.medicationRegistry.findMany({ take: 12 });
+
+  const STOCK_ENTRIES = [
+    { qty: 150, reorder: 20, unitPrice: 2500, daysUntilExpiry: 540 },
+    { qty: 8,   reorder: 15, unitPrice: 4800, daysUntilExpiry: 45  }, // low-stock + expiring
+    { qty: 200, reorder: 30, unitPrice: 1200, daysUntilExpiry: 730 },
+    { qty: 0,   reorder: 10, unitPrice: 900,  daysUntilExpiry: -5  }, // low-stock + expired
+    { qty: 75,  reorder: 10, unitPrice: 6500, daysUntilExpiry: 400 },
+    { qty: 12,  reorder: 25, unitPrice: 3200, daysUntilExpiry: 55  }, // low-stock + expiring
+    { qty: 320, reorder: 50, unitPrice: 750,  daysUntilExpiry: 600 },
+    { qty: 5,   reorder: 10, unitPrice: 11000,daysUntilExpiry: 365 }, // low-stock
+    { qty: 90,  reorder: 15, unitPrice: 2100, daysUntilExpiry: 800 },
+    { qty: 45,  reorder: 20, unitPrice: 5500, daysUntilExpiry: 180 },
+    { qty: 18,  reorder: 30, unitPrice: 3800, daysUntilExpiry: 30  }, // expiring
+    { qty: 110, reorder: 10, unitPrice: 1600, daysUntilExpiry: 900 },
+  ];
+
+  for (let i = 0; i < stockDrugs.length; i++) {
+    const drug = stockDrugs[i];
+    const entry = STOCK_ENTRIES[i % STOCK_ENTRIES.length];
+    const expiryDate = new Date(Date.now() + entry.daysUntilExpiry * 24 * 60 * 60 * 1000);
+
+    for (const hospitalId of [kfhId, chukId]) {
+      await prisma.hospitalDrugStock.upsert({
+        where: { drugId_hospitalId: { drugId: drug.id, hospitalId } },
+        update: {},
+        create: {
+          drugId: drug.id,
+          hospitalId,
+          quantity: entry.qty,
+          reorderLevel: entry.reorder,
+          unitPrice: entry.unitPrice,
+          expiryDate,
+        },
+      });
+    }
+  }
+
+  // ==========================================
   // 8. ADDITIONAL FAKER-BASED SEEDING (Merged from seed-full.ts in Idempotent Mode)
   // ==========================================
   console.log(
