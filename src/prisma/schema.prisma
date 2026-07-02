@@ -36,21 +36,21 @@ model User {
 }
 
 model Hospital {
-  id                    String                        @id @default(uuid())
-  userId                String                        @unique
-  name                  String
-  representativeName    String?
-  address               String
-  phone                 String
-  latitude              Float?
-  longitude             Float?
-  dateOfIncorporation   DateTime?
-  rdbCertificate        String?
-  pharmacyLicense       String?
-  businessRegistration  String?
-  status                PharmacyStatus                @default(PENDING)
-  createdAt             DateTime                      @default(now())
-  updatedAt             DateTime                      @updatedAt
+  id                          String                        @id @default(uuid())
+  userId                      String                        @unique
+  name                        String
+  representativeName          String?
+  address                     String
+  phone                       String
+  latitude                    Float?
+  longitude                   Float?
+  dateOfIncorporation         DateTime?
+  rdbCertificate              String?
+  pharmacyLicense             String?
+  businessRegistration        String?
+  status                      PharmacyStatus                @default(PENDING)
+  createdAt                   DateTime                      @default(now())
+  updatedAt                   DateTime                      @updatedAt
   licenseNumber               String?
   platformBalance             Decimal                       @default(0) @db.Decimal(12, 2)
   appointments                Appointment[]
@@ -79,6 +79,7 @@ model Doctor {
   bio                    String?
   createdAt              DateTime               @default(now())
   isAvailable            Boolean                @default(true)
+  isDepartmentHead       Boolean                @default(false)
   rating                 Float                  @default(0)
   updatedAt              DateTime               @updatedAt
   firstName              String?
@@ -130,23 +131,25 @@ model DoctorLeave {
 }
 
 model HospitalStaff {
-  id                 String            @id @default(uuid())
-  userId             String            @unique
-  hospitalId         String
-  firstName          String
-  lastName           String
-  phone              String?
-  status             StaffStatus       @default(ACTIVE)
-  tempPasswordHash   String?
+  id               String      @id @default(uuid())
+  userId           String      @unique
+  hospitalId       String
+  firstName        String
+  lastName         String
+  phone            String?
+  status           StaffStatus @default(ACTIVE)
+  tempPasswordHash String?
+  department       String?
+
   tempPasswordExpiry DateTime?
   createdAt          DateTime          @default(now())
   updatedAt          DateTime          @updatedAt
   hospital           Hospital          @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
   user               User              @relation(fields: [userId], references: [id])
   vitalsRecorded     InpatientVitals[] @relation("VitalsNurse")
-  marAdministered    MARLog[]             @relation("MARNurse")
-  handoversGiven     NursingHandover[]    @relation("HandoverOutgoing")
-  handoversReceived  NursingHandover[]    @relation("HandoverIncoming")
+  marAdministered    MARLog[]          @relation("MARNurse")
+  handoversGiven     NursingHandover[] @relation("HandoverOutgoing")
+  handoversReceived  NursingHandover[] @relation("HandoverIncoming")
 
   @@index([hospitalId])
   @@index([userId])
@@ -853,6 +856,163 @@ model PlatformSubscriptionCharge {
   @@map("platform_subscription_charges")
 }
 
+model TelemedicineSessionLog {
+  id            String      @id @default(uuid())
+  appointmentId String
+  userId        String
+  role          String // 'DOCTOR' or 'PATIENT'
+  action        String // 'JOIN' or 'LEAVE'
+  timestamp     DateTime    @default(now())
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+
+  @@map("telemedicine_session_logs")
+}
+
+model MedicalHistoryAccess {
+  id        String   @id @default(uuid())
+  doctorId  String
+  patientId String
+  token     String   @unique @default(uuid())
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([patientId])
+  @@map("medical_history_access")
+}
+
+model MedicalRecordLog {
+  id         String   @id @default(uuid())
+  doctorId   String?
+  patientId  String
+  timestamp  DateTime @default(now())
+  accessType String // 'TREAT_DOCTOR', 'CONSENT_TOKEN', 'PATIENT_OWN', 'ADMIN'
+  reason     String?
+  doctor     Doctor?  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+
+  @@index([doctorId])
+  @@index([patientId])
+  @@map("medical_record_logs")
+}
+
+// =============================================
+// INPATIENT ADMISSIONS, VITALS, MAR, HANDOVER
+// =============================================
+
+model InpatientAdmission {
+  id               String          @id @default(uuid())
+  patientId        String
+  hospitalId       String
+  admittedByUserId String
+  admittedByName   String
+  admittedByRole   String
+  wardName         String?
+  bedNumber        String?
+  reason           String
+  status           AdmissionStatus @default(ACTIVE)
+  admittedAt       DateTime        @default(now())
+  dischargedAt     DateTime?
+  createdAt        DateTime        @default(now())
+  updatedAt        DateTime        @updatedAt
+
+  patient   Patient           @relation(fields: [patientId], references: [id])
+  hospital  Hospital          @relation(fields: [hospitalId], references: [id])
+  vitals    InpatientVitals[]
+  marLogs   MARLog[]
+  handovers NursingHandover[]
+
+  @@index([patientId])
+  @@index([hospitalId])
+  @@index([status])
+  @@map("inpatient_admissions")
+}
+
+model InpatientVitals {
+  id           String   @id @default(uuid())
+  admissionId  String
+  recordedById String
+  readings     Json
+  checklist    Json
+  nurseNotes   String?
+  recordedAt   DateTime @default(now())
+  createdAt    DateTime @default(now())
+
+  admission InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  nurse     HospitalStaff      @relation("VitalsNurse", fields: [recordedById], references: [id])
+
+  @@index([admissionId])
+  @@index([recordedAt])
+  @@map("inpatient_vitals")
+}
+
+model MARLog {
+  id                String    @id @default(uuid())
+  admissionId       String
+  administeredById  String
+  medicationName    String
+  dose              String
+  route             String?
+  prescriptionMedId String?
+  scheduledAt       DateTime?
+  administeredAt    DateTime
+  notes             String?
+  createdAt         DateTime  @default(now())
+
+  admission InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  nurse     HospitalStaff      @relation("MARNurse", fields: [administeredById], references: [id])
+
+  @@index([admissionId])
+  @@index([administeredAt])
+  @@map("mar_logs")
+}
+
+model NursingHandover {
+  id             String    @id @default(uuid())
+  admissionId    String
+  handedOverById String
+  receivedById   String?
+  shiftType      ShiftType
+  checklist      Json
+  notes          String?
+  handedOverAt   DateTime  @default(now())
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  admission     InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  outgoingNurse HospitalStaff      @relation("HandoverOutgoing", fields: [handedOverById], references: [id])
+  incomingNurse HospitalStaff?     @relation("HandoverIncoming", fields: [receivedById], references: [id])
+
+  @@index([admissionId])
+  @@map("nursing_handovers")
+}
+
+model AuditLog {
+  id         String  @id @default(uuid())
+  actorId    String?
+  actorRole  String?
+  actorEmail String?
+
+  targetId      String?
+  targetType    String?
+  action        String?
+  outcome       String   @default("SUCCESS")
+  ip            String?
+  userAgent     String?
+  correlationId String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetId])
+  @@index([action])
+  @@index([actorRole])
+  @@index([createdAt])
+}
+
 enum UserRole {
   SUPER_ADMIN
   PHARMACY
@@ -1027,140 +1187,6 @@ enum LeaveStatus {
   PENDING
   APPROVED
   REJECTED
-}
-
-model TelemedicineSessionLog {
-  id            String      @id @default(uuid())
-  appointmentId String
-  userId        String
-  role          String // 'DOCTOR' or 'PATIENT'
-  action        String // 'JOIN' or 'LEAVE'
-  timestamp     DateTime    @default(now())
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-
-  @@map("telemedicine_session_logs")
-}
-
-model MedicalHistoryAccess {
-  id        String   @id @default(uuid())
-  doctorId  String
-  patientId String
-  token     String   @unique @default(uuid())
-  expiresAt DateTime
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-  doctor    Doctor   @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  patient   Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-
-  @@index([doctorId])
-  @@index([patientId])
-  @@map("medical_history_access")
-}
-
-model MedicalRecordLog {
-  id         String   @id @default(uuid())
-  doctorId   String?
-  patientId  String
-  timestamp  DateTime @default(now())
-  accessType String // 'TREAT_DOCTOR', 'CONSENT_TOKEN', 'PATIENT_OWN', 'ADMIN'
-  reason     String?
-  doctor     Doctor?  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-
-  @@index([doctorId])
-  @@index([patientId])
-  @@map("medical_record_logs")
-}
-
-// =============================================
-// INPATIENT ADMISSIONS, VITALS, MAR, HANDOVER
-// =============================================
-
-model InpatientAdmission {
-  id               String          @id @default(uuid())
-  patientId        String
-  hospitalId       String
-  admittedByUserId String
-  admittedByName   String
-  admittedByRole   String
-  wardName         String?
-  bedNumber        String?
-  reason           String
-  status           AdmissionStatus @default(ACTIVE)
-  admittedAt       DateTime        @default(now())
-  dischargedAt     DateTime?
-  createdAt        DateTime        @default(now())
-  updatedAt        DateTime        @updatedAt
-
-  patient   Patient           @relation(fields: [patientId], references: [id])
-  hospital  Hospital          @relation(fields: [hospitalId], references: [id])
-  vitals    InpatientVitals[]
-  marLogs   MARLog[]
-  handovers NursingHandover[]
-
-  @@index([patientId])
-  @@index([hospitalId])
-  @@index([status])
-  @@map("inpatient_admissions")
-}
-
-model InpatientVitals {
-  id          String   @id @default(uuid())
-  admissionId String
-  recordedById String
-  readings    Json
-  checklist   Json
-  nurseNotes  String?
-  recordedAt  DateTime @default(now())
-  createdAt   DateTime @default(now())
-
-  admission InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
-  nurse     HospitalStaff      @relation("VitalsNurse", fields: [recordedById], references: [id])
-
-  @@index([admissionId])
-  @@index([recordedAt])
-  @@map("inpatient_vitals")
-}
-
-model MARLog {
-  id                String   @id @default(uuid())
-  admissionId       String
-  administeredById  String
-  medicationName    String
-  dose              String
-  route             String?
-  prescriptionMedId String?
-  scheduledAt       DateTime?
-  administeredAt    DateTime
-  notes             String?
-  createdAt         DateTime @default(now())
-
-  admission InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
-  nurse     HospitalStaff      @relation("MARNurse", fields: [administeredById], references: [id])
-
-  @@index([admissionId])
-  @@index([administeredAt])
-  @@map("mar_logs")
-}
-
-model NursingHandover {
-  id             String    @id @default(uuid())
-  admissionId    String
-  handedOverById String
-  receivedById   String?
-  shiftType      ShiftType
-  checklist      Json
-  notes          String?
-  handedOverAt   DateTime  @default(now())
-  createdAt      DateTime  @default(now())
-  updatedAt      DateTime  @updatedAt
-
-  admission      InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
-  outgoingNurse  HospitalStaff      @relation("HandoverOutgoing", fields: [handedOverById], references: [id])
-  incomingNurse  HospitalStaff?     @relation("HandoverIncoming", fields: [receivedById], references: [id])
-
-  @@index([admissionId])
-  @@map("nursing_handovers")
 }
 
 enum AdmissionStatus {

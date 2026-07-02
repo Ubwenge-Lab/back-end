@@ -44,9 +44,12 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { ReportsModule } from './reports/reports.module';
 import { PlatformBillingModule } from './platform-billing/platform-billing.module';
 import { InpatientModule } from './inpatient/inpatient.module';
+import { AuditModule } from './audit/audit.module';
+import { SentryModule } from '@sentry/nestjs/setup';
 
 @Module({
   imports: [
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -92,6 +95,7 @@ import { InpatientModule } from './inpatient/inpatient.module';
     ClaimsModule,
     PlatformBillingModule,
     InpatientModule,
+    AuditModule,
   ],
   controllers: [AppController],
   providers: [

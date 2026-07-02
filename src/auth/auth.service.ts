@@ -15,6 +15,8 @@ import { UsersService } from '../users/users.service';
 import { PatientsService } from '../patients/patients.service';
 import { PharmaciesService } from '../pharmacies/pharmacies.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditService } from '../audit/audit.service';
+import * as Sentry from '@sentry/nestjs';
 import {
   LoginDto,
   RegisterPatientDto,
@@ -44,7 +46,8 @@ export class AuthService {
     private patientsService: PatientsService,
     private pharmaciesService: PharmaciesService,
     private notificationsService: NotificationsService,
-  ) {}
+    private auditService: AuditService,
+  ) { }
 
   // ========================================
   // LOGIN (For ALL users including SUPER_ADMIN)
@@ -64,6 +67,14 @@ export class AuthService {
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordValid) {
+      void this.auditService.log({
+        actorEmail: dto.email,
+        targetType: 'User',
+        targetId: user.id,
+        action: 'LOGIN_FAILURE',
+        outcome: 'FAILURE',
+        metadata: { reason: 'Invalid password' },
+      })
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -84,9 +95,20 @@ export class AuthService {
         user.password,
       );
 
-      const tokens = await this.generateTokens(user.id, user.email, user.role);
+      // Example of custom performance tracing replacing Sentry.metrics
+      const tokens = await Sentry.startSpan({ name: "Generate Auth Tokens" }, async () => {
+        return await this.generateTokens(user.id, user.email, user.role);
+      });
+      
       await this.updateRefreshToken(user.id, tokens.refreshToken);
-
+      void this.auditService.log({
+        actorId: user.id,
+        actorEmail: user.email,
+        actorRole: user.role,
+        targetType: 'User',
+        targetId: user.id,
+        action: 'LOGIN_SUCCESS',
+      })
       return {
         user: {
           id: user.id,
@@ -116,7 +138,14 @@ export class AuthService {
         pharmacy.status,
       );
       await this.updateRefreshToken(user.id, tokens.refreshToken);
-
+      void this.auditService.log({
+        actorId: user.id,
+        actorEmail: user.email,
+        actorRole: user.role,
+        targetType: 'User',
+        targetId: user.id,
+        action: 'LOGIN_SUCCESS',
+      })
       return {
         user: {
           id: user.id,

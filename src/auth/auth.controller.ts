@@ -3,6 +3,7 @@
 import {
   Controller,
   Post,
+  Get,
   Body,
   UseGuards,
   Req,
@@ -37,7 +38,12 @@ import { Throttle, SkipThrottle } from '@nestjs/throttler';
 @Controller('auth')
 @Throttle({ default: { limit: 5, ttl: 60000 } }) // Limit to 5 requests per 1 minute for all routes in this controller
 export class AuthController {
-  constructor(private authService: AuthService) {}
+  constructor(private authService: AuthService) { }
+
+  @Get('crash')
+  testCrash() {
+    throw new Error('Sentry Test Crash from Backend!');
+  }
 
   @Post('login')
   @HttpCode(HttpStatus.OK)
