@@ -1,6 +1,7 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { LogSupplyDto } from './dto/log-supply.dto';
 
 @Injectable()
 export class InpatientBillingService {
@@ -73,7 +74,7 @@ export class InpatientBillingService {
   }
 
   // 2. Log bedside supply consumption
-  async logSupplyConsumption(admissionId: string, data: any, staffId: string) {
+  async logSupplyConsumption(admissionId: string, data: LogSupplyDto, staffId: string) {
     const admission = await this.prisma.inpatientAdmission.findUnique({
       where: { id: admissionId },
       include: { hospitalInvoice: true },
