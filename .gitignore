@@ -83,6 +83,10 @@ get_ids.ts
 test_checkout.ts
 .env.backup
 /test/manual/
+# User specific
+/screens/
+/documentations/
+/sprints/
 /test/temp/
 /sprints/
 

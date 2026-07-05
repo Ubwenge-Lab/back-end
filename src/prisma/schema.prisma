@@ -58,6 +58,7 @@ model Hospital {
   doctors                     Doctor[]
   config                      HospitalConfig?
   drugStock                   HospitalDrugStock[]
+  consumableStock             HospitalConsumableStock[]
   hospitalInvoices            HospitalInvoice[]
   hospitalRegistrations       HospitalPatientRegistration[]
   staff                       HospitalStaff[]
@@ -1309,7 +1310,36 @@ model DiagnosticOrder {
   doctor      Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
+  inventoryDeducted Boolean @default(false)
+
   @@map("diagnostic_orders")
+}
+
+model HospitalConsumableStock {
+  id                String   @id @default(uuid())
+  hospitalId        String
+  itemName          String
+  quantity          Int      @default(0)
+  criticalThreshold Int      @default(10)
+  lastUpdated       DateTime @default(now()) @updatedAt
+
+  hospital Hospital                  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  boms     DiagnosticConsumableBOM[]
+
+  @@unique([hospitalId, itemName])
+  @@map("hospital_consumable_stock")
+}
+
+model DiagnosticConsumableBOM {
+  id             String         @id @default(uuid())
+  diagnosticType DiagnosticType
+  consumableId   String
+  quantityUsed   Int
+
+  consumable HospitalConsumableStock @relation(fields: [consumableId], references: [id], onDelete: Cascade)
+
+  @@unique([diagnosticType, consumableId])
+  @@map("diagnostic_consumable_bom")
 }
 
 enum WardTier {

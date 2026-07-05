@@ -47,6 +47,7 @@ import { PlatformBillingModule } from './platform-billing/platform-billing.modul
 import { InpatientBillingModule } from './inpatient-billing/inpatient-billing.module';
 import { InpatientModule } from './inpatient/inpatient.module';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
+import { InventoryModule } from './inventory/inventory.module';
 
 @Module({
   imports: [
@@ -98,6 +99,7 @@ import { DiagnosticsModule } from './diagnostics/diagnostics.module';
     InpatientBillingModule,
     InpatientModule,
     DiagnosticsModule,
+    InventoryModule,
   ],
   controllers: [AppController],
   providers: [
