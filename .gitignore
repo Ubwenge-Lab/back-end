@@ -88,3 +88,5 @@ test_checkout.ts
 /documentations/
 /sprints/
 /test/temp/
+replace_ids.js
+scratch.ts
