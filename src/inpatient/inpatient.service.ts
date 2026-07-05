@@ -25,8 +25,17 @@ export class InpatientService {
   }
 
   /**
-   * Resolves the admitting party — works for both DOCTOR and hospital staff roles.
-   * Returns hospitalId, name, and role label for storing on the admission record.
+   * Resolves the admitting party — works for DOCTOR, HOSPITAL_ADMIN, and
+   * hospital staff roles. Returns hospitalId, name, and role label for
+   * storing on the admission record.
+   *
+   * NOTE: HOSPITAL_ADMIN is handled separately from resolveStaff() because
+   * admin accounts are not HospitalStaff rows (that table is for
+   * nurses/receptionists created under a hospital) — an admin's identity
+   * resolves via Hospital.userId, same as analytics.service.ts does for
+   * getHospitalMetrics(). Previously HOSPITAL_ADMIN fell through to
+   * resolveStaff() and always got a 403 ("You are not registered as
+   * hospital staff") despite being an allowed role on these routes.
    */
   private async resolveAdmitter(userId: string, role: string) {
     if (role === 'DOCTOR') {
@@ -34,6 +43,18 @@ export class InpatientService {
       if (!doctor) throw new ForbiddenException('Doctor profile not found');
       const name = [doctor.firstName, doctor.lastName].filter(Boolean).join(' ') || 'Doctor';
       return { hospitalId: doctor.hospitalId, name: `Dr. ${name}`, role: 'DOCTOR' };
+    }
+
+    if (role === 'HOSPITAL_ADMIN') {
+      const hospital = await this.prisma.hospital.findFirst({
+        where: { userId },
+      });
+      if (!hospital) throw new ForbiddenException('Hospital profile not found');
+      return {
+        hospitalId: hospital.id,
+        name: hospital.name,
+        role: 'HOSPITAL_ADMIN',
+      };
     }
 
     const staff = await this.resolveStaff(userId);
