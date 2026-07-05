@@ -38,6 +38,7 @@ model User {
 model Hospital {
   id                    String                        @id @default(uuid())
   userId                String                        @unique
+  user                  User                          @relation("HospitalOwner", fields: [userId], references: [id])
   name                  String
   representativeName    String?
   address               String
@@ -91,7 +92,7 @@ model Doctor {
   user                   User                   @relation(fields: [userId], references: [id], onDelete: Cascade)
   prescriptions          Prescription[]         @relation("DoctorToPrescription")
   medicalHistoryAccesses MedicalHistoryAccess[]
-  medicalRecordLogs      MedicalRecordLogs[]
+  medicalRecordLogs      MedicalRecordLog[]
   inpatientAdmissions    InpatientAdmission[]
 
   @@index([hospitalId])
@@ -777,7 +778,7 @@ model SupportTicket {
 
 model HospitalInvoice {
   id               String                @id @default(uuid())
-  appointmentId    String                @unique
+  appointmentId    String?               @unique
   admissionId      String?               @unique
   patientId        String
   hospitalId       String
@@ -788,7 +789,7 @@ model HospitalInvoice {
   createdAt        DateTime              @default(now())
   updatedAt        DateTime              @updatedAt
   items            HospitalInvoiceItem[]
-  appointment      Appointment           @relation(fields: [appointmentId], references: [id])
+  appointment      Appointment?          @relation(fields: [appointmentId], references: [id])
   inpatientAdmission InpatientAdmission?  @relation(fields: [admissionId], references: [id])
   hospital         Hospital              @relation(fields: [hospitalId], references: [id])
   patient          Patient               @relation(fields: [patientId], references: [id])
