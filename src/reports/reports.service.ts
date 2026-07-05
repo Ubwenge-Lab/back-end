@@ -7,6 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExportQueryDto } from './dto/export-query.dto';
+import { AnalyticsQueryDto } from './dto/analytics-query.dto';
 import { buildCsv, CsvColumn } from './utils/csv-builder.util';
 
 @Injectable()
@@ -25,7 +26,7 @@ export class ReportsService {
   private async resolveHospitalId(
     userId: string,
     role: string,
-    dto: ExportQueryDto,
+    dto: { hospitalId?: string },
   ): Promise<string> {
     if (role === 'HOSPITAL_ADMIN') {
       const hospital = await this.prisma.hospital.findFirst({
@@ -267,5 +268,77 @@ export class ReportsService {
     ];
 
     return buildCsv(columns, rows as unknown as Record<string, unknown>[]);
+  }
+
+  // FINANCIAL AGING (materialized view)
+
+  async getFinancialAging(
+    userId: string,
+    role: string,
+    dto: AnalyticsQueryDto,
+  ) {
+    const hospitalId = await this.resolveHospitalId(userId, role, dto);
+
+    const rows = await this.prisma.$queryRaw<
+      {
+        aging_bucket: string;
+        claim_count: bigint;
+        total_claim_amount: string;
+        total_settled_amount: string;
+        total_outstanding: string;
+      }[]
+    >`
+      SELECT aging_bucket, claim_count, total_claim_amount, total_settled_amount, total_outstanding
+      FROM mv_financial_aging
+      WHERE hospital_id = ${hospitalId}
+      ORDER BY aging_bucket
+    `;
+
+    return rows.map((r) => ({
+      agingBucket: r.aging_bucket,
+      claimCount: Number(r.claim_count),
+      totalClaimAmount: Number(r.total_claim_amount),
+      totalSettledAmount: Number(r.total_settled_amount),
+      totalOutstanding: Number(r.total_outstanding),
+    }));
+  }
+
+  // DEPARTMENT METRICS
+
+  async getDepartmentMetrics(
+    userId: string,
+    role: string,
+    dto: AnalyticsQueryDto,
+  ) {
+    const hospitalId = await this.resolveHospitalId(userId, role, dto);
+
+    const rows = await this.prisma.$queryRaw<
+      {
+        department: string;
+        metric_date: Date;
+        patient_throughput: bigint;
+        consultation_count: bigint;
+        total_revenue: string;
+        avg_wait_minutes_approx: string | null;
+      }[]
+    >`
+      SELECT department, metric_date, patient_throughput, consultation_count, total_revenue, avg_wait_minutes_approx
+      FROM mv_department_daily_metrics
+      WHERE hospital_id = ${hospitalId}
+      ORDER BY metric_date DESC, department ASC
+    `;
+
+    return rows.map((r) => ({
+      department: r.department,
+      metricDate: r.metric_date,
+      patientThroughput: Number(r.patient_throughput),
+      consultationCount: Number(r.consultation_count),
+      totalRevenue: Number(r.total_revenue),
+      // Approximate: scheduled-time → triage timestamp, not true check-in → seen-by-doctor wait.
+      avgWaitMinutesApprox:
+        r.avg_wait_minutes_approx !== null
+          ? Number(r.avg_wait_minutes_approx)
+          : null,
+    }));
   }
 }
