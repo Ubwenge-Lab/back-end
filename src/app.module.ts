@@ -47,6 +47,7 @@ import { PlatformBillingModule } from './platform-billing/platform-billing.modul
 import { InpatientBillingModule } from './inpatient-billing/inpatient-billing.module';
 import { InpatientModule } from './inpatient/inpatient.module';
 import { AuditModule } from './audit/audit.module';
+import { AuditContextInterceptor } from './audit/audit-context.interceptor';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { InventoryModule } from './inventory/inventory.module';
@@ -112,6 +113,10 @@ import { InventoryModule } from './inventory/inventory.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditContextInterceptor,
     },
     // Bind ThrottlerGuard globally to apply rate limiting to all routes
     {
