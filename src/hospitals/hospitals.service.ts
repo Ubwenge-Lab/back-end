@@ -13,10 +13,6 @@ import {
   UpdateLeaveStatusDto,
   LeaveAction,
 } from '../doctors/dto/update-leave-status.dto';
-import {
-  CreateSurgeryBookingDto,
-  LogPostOpReportDto,
-} from './dto/surgery-scheduling.dto';
 
 @Injectable()
 export class HospitalsService {
@@ -33,9 +29,17 @@ export class HospitalsService {
   }
 
   async findOne(id: string) {
-    const hospital = await this.prisma.hospital.findUnique({ where: { id } });
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id },
+      include: { user: { select: { email: true } } },
+    });
     if (!hospital) throw new NotFoundException('Hospital not found');
-    return hospital;
+    // HospitalDto documents an `email` field, but Hospital has no email
+    // column — it lives on the linked User row. Previously this method
+    // returned the raw Prisma record with no `email` key at all, silently
+    // breaking the documented contract.
+    const { user, ...rest } = hospital;
+    return { ...rest, email: user?.email ?? null };
   }
 
   async searchPatient(identifier: string) {
@@ -313,6 +317,27 @@ export class HospitalsService {
         revenue: lookup.get(key) ?? 0,
       };
     });
+  }
+
+  async updateProfile(
+    hospitalId: string,
+    userId: string,
+    dto: { name?: string; address?: string; phone?: string },
+  ) {
+    await this.validateHospitalAccess(hospitalId, userId);
+
+    const data: Record<string, unknown> = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.address !== undefined) data.address = dto.address;
+    if (dto.phone !== undefined) data.phone = dto.phone;
+
+    const updated = await this.prisma.hospital.update({
+      where: { id: hospitalId },
+      data,
+      include: { user: { select: { email: true } } },
+    });
+    const { user, ...rest } = updated;
+    return { ...rest, email: user?.email ?? null };
   }
 
   private async validateHospitalAccess(hospitalId: string, userId: string) {
@@ -753,189 +778,5 @@ export class HospitalsService {
         details: refundResults,
       },
     };
-  }
-  // ==========================================
-  // SURGERY BOOKINGS
-  // ==========================================
-
-  async scheduleSurgery(hospitalId: string, dto: CreateSurgeryBookingDto) {
-    const start = new Date(dto.startTime);
-    const end = new Date(dto.endTime);
-
-    if (start >= end) {
-      throw new BadRequestException(
-        'End time must be cleanly after start time.',
-      );
-    }
-
-    const conflictingTheaterBooking =
-      await this.prisma.surgeryBooking.findFirst({
-        where: {
-          theaterId: dto.theaterId,
-          status: 'SCHEDULED',
-          OR: [{ startTime: { lt: end }, endTime: { gt: start } }],
-        },
-      });
-
-    if (conflictingTheaterBooking) {
-      throw new ConflictException(
-        'The selected Operating Theater is already booked during this time window.',
-      );
-    }
-
-    if (dto.requiredEquipment && dto.requiredEquipment.length > 0) {
-      const overlappingEquipmentBookings =
-        await this.prisma.surgeryBooking.findMany({
-          where: {
-            hospitalId,
-            status: 'SCHEDULED',
-            startTime: { lt: end },
-            endTime: { gt: start },
-            requiredEquipment: { hasSome: dto.requiredEquipment },
-          },
-          select: { requiredEquipment: true },
-        });
-
-      if (overlappingEquipmentBookings.length > 0) {
-        const conflictedEquip = overlappingEquipmentBookings
-          .flatMap((b: any) => b.requiredEquipment as string[])
-          .filter((e: string) => dto.requiredEquipment?.includes(e));
-
-        throw new ConflictException(
-          `Critical equipment double-booking rejected: ${[...new Set(conflictedEquip)].join(', ')}`,
-        );
-      }
-    }
-
-    const collisionWarnings: Array<{
-      name: string;
-      role: string;
-      type: 'DOCTOR' | 'STAFF';
-    }> = [];
-
-    const doctorIds = dto.teamAssignments
-      .filter((t) => t.doctorId)
-      .map((t) => t.doctorId);
-    const staffIds = dto.teamAssignments
-      .filter((t) => t.hospitalStaffId)
-      .map((t) => t.hospitalStaffId);
-
-    if (doctorIds.length > 0) {
-      const doctorConflicts = await this.prisma.surgicalTeamAssignment.findMany(
-        {
-          where: {
-            doctorId: { in: doctorIds },
-            booking: {
-              status: 'SCHEDULED',
-              startTime: { lt: end },
-              endTime: { gt: start },
-            },
-          },
-          include: { doctor: true },
-        },
-      );
-
-      doctorConflicts.forEach((c: any) => {
-        if (c.doctor) {
-          collisionWarnings.push({
-            name: `Dr. ${c.doctor.firstName ?? ''} ${c.doctor.lastName ?? ''}`.trim(),
-            role: c.role,
-            type: 'DOCTOR',
-          });
-        }
-      });
-    }
-
-    if (staffIds.length > 0) {
-      const staffConflicts = await this.prisma.surgicalTeamAssignment.findMany({
-        where: {
-          hospitalStaffId: { in: staffIds },
-          booking: {
-            status: 'SCHEDULED',
-            startTime: { lt: end },
-            endTime: { gt: start },
-          },
-        },
-        include: { hospitalStaff: true },
-      });
-
-      staffConflicts.forEach((c: any) => {
-        if (c.hospitalStaff) {
-          collisionWarnings.push({
-            name: `${c.hospitalStaff.firstName} ${c.hospitalStaff.lastName}`,
-            role: c.role,
-            type: 'STAFF',
-          });
-        }
-      });
-    }
-
-    const booking = await this.prisma.surgeryBooking.create({
-      data: {
-        hospitalId,
-        theaterId: dto.theaterId,
-        patientId: dto.patientId,
-        procedureName: dto.procedureName,
-        startTime: start,
-        endTime: end,
-        requiredEquipment: dto.requiredEquipment ?? [],
-        teamAssignments: {
-          create: dto.teamAssignments.map((t) => ({
-            role: t.role,
-            doctorId: t.doctorId,
-            hospitalStaffId: t.hospitalStaffId,
-          })),
-        },
-      },
-      include: {
-        teamAssignments: true,
-        theater: true,
-      },
-    });
-
-    return {
-      message: 'Surgery successfully scheduled.',
-      booking,
-      hasCollisionWarnings: collisionWarnings.length > 0,
-      collisionWarnings,
-    };
-  }
-
-  async logPostOpReport(
-    bookingId: string,
-    userId: string,
-    dto: LogPostOpReportDto,
-  ) {
-    const booking = await this.prisma.surgeryBooking.findUnique({
-      where: { id: bookingId },
-      include: { teamAssignments: { include: { doctor: true } } },
-    });
-
-    if (!booking)
-      throw new NotFoundException('Surgical booking record not found');
-
-    const requestingDoctor = booking.teamAssignments.find(
-      (a: any) => a.doctor?.userId === userId,
-    );
-    if (!requestingDoctor) {
-      throw new ForbiddenException(
-        'You are not authorized to log a report for this surgery booking',
-      );
-    }
-
-    if (booking.status === 'COMPLETED') {
-      throw new ConflictException(
-        'A report has already been logged for this surgery booking',
-      );
-    }
-
-    return this.prisma.surgeryBooking.update({
-      where: { id: bookingId },
-      data: {
-        ...dto,
-        status: 'COMPLETED',
-        reportLoggedAt: new Date(),
-      },
-    });
   }
 }
