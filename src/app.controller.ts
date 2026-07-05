@@ -12,9 +12,4 @@ export class AppController {
   getHello(): string {
     return this.appService.getHello();
   }
-  //temporary test route
-  @Get('test-error')
-  triggerError() {
-    throw new Error('Database connection timed out! (Simulated Crash)');
-  }
 }

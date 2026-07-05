@@ -877,8 +877,8 @@ model TelemedicineSessionLog {
   id            String      @id @default(uuid())
   appointmentId String
   userId        String
-  role          String
-  action        String
+  role          String // 'DOCTOR' or 'PATIENT'
+  action        String // 'JOIN' or 'LEAVE'
   timestamp     DateTime    @default(now())
   appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
 
@@ -906,7 +906,7 @@ model MedicalRecordLog {
   doctorId   String?
   patientId  String
   timestamp  DateTime @default(now())
-  accessType String
+  accessType String // 'TREAT_DOCTOR', 'CONSENT_TOKEN', 'PATIENT_OWN', 'ADMIN'
   reason     String?
   doctor     Doctor?  @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   patient    Patient  @relation(fields: [patientId], references: [id], onDelete: Cascade)
@@ -1438,4 +1438,27 @@ model SupplyConsumption {
 
   @@index([admissionId])
   @@map("supply_consumptions")
+}
+
+model AuditLog {
+  id         String  @id @default(uuid())
+  actorId    String?
+  actorRole  String?
+  actorEmail String?
+
+  targetId      String?
+  targetType    String?
+  action        String?
+  outcome       String   @default("SUCCESS")
+  ip            String?
+  userAgent     String?
+  correlationId String?
+  metadata      Json?
+  createdAt     DateTime @default(now())
+
+  @@index([actorId])
+  @@index([targetId])
+  @@index([action])
+  @@index([actorRole])
+  @@index([createdAt])
 }

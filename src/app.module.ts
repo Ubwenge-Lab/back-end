@@ -46,11 +46,14 @@ import { ReportsModule } from './reports/reports.module';
 import { PlatformBillingModule } from './platform-billing/platform-billing.module';
 import { InpatientBillingModule } from './inpatient-billing/inpatient-billing.module';
 import { InpatientModule } from './inpatient/inpatient.module';
+import { AuditModule } from './audit/audit.module';
+import { SentryModule } from '@sentry/nestjs/setup';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { InventoryModule } from './inventory/inventory.module';
 
 @Module({
   imports: [
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -98,6 +101,7 @@ import { InventoryModule } from './inventory/inventory.module';
     PlatformBillingModule,
     InpatientBillingModule,
     InpatientModule,
+    AuditModule,
     DiagnosticsModule,
     InventoryModule,
   ],

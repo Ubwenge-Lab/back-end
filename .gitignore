@@ -88,7 +88,6 @@ test_checkout.ts
 /documentations/
 /sprints/
 /test/temp/
-/sprints/
 
 #prisma
 prisma/backup-data.ts
