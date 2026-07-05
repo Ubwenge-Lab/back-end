@@ -4,6 +4,8 @@ import { PrismaService } from '../prisma/prisma.service';
 
 const PLATFORM_SUBSCRIPTION_FEE = 50;
 
+import { SentryCron } from '@sentry/nestjs';
+
 @Injectable()
 export class PlatformBillingService {
   private readonly logger = new Logger(PlatformBillingService.name);
@@ -11,6 +13,9 @@ export class PlatformBillingService {
   constructor(private readonly prisma: PrismaService) {}
 
   // Runs on the 1st of every month at 00:00 UTC — ~30-day interval
+  @SentryCron('platform-monthly-subscription', {
+    schedule: { type: 'crontab', value: '0 0 1 * *' }
+  })
   @Cron('0 0 1 * *', { name: 'platform-monthly-subscription' })
   async runMonthlySubscriptionBilling(): Promise<void> {
     this.logger.log('Starting monthly platform subscription billing run');

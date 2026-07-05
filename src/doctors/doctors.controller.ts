@@ -34,6 +34,25 @@ import { Role } from '../common/constants/role.enum';
 export class DoctorsController {
   constructor(private readonly doctorsService: DoctorsService) {}
 
+  // ========================================
+  // GET /doctors/dashboard — doctor-scoped stats (Doctor only)
+  // Must be declared BEFORE :id to avoid route conflict
+  // ========================================
+
+  @Get('dashboard')
+  @Roles(Role.DOCTOR)
+  @ApiOperation({
+    summary:
+      'Get dashboard stats scoped to the calling doctor — today appointments, total patients, completed consults, weekly visits, status breakdown (Doctor only)',
+  })
+  getDoctorDashboard(@Req() req: any) {
+    return this.doctorsService.getDoctorDashboard(req.user.sub);
+  }
+
+  // ========================================
+  // LIST ALL DOCTORS
+  // ========================================
+
   @Get()
   @Roles(
     Role.SUPER_ADMIN,
@@ -52,6 +71,10 @@ export class DoctorsController {
     return this.doctorsService.findAll(filters);
   }
 
+  // ========================================
+  // GET SINGLE DOCTOR
+  // ========================================
+
   @Get(':id')
   @Roles(
     Role.SUPER_ADMIN,
@@ -66,6 +89,10 @@ export class DoctorsController {
   findOne(@Param('id') id: string) {
     return this.doctorsService.findOne(id);
   }
+
+  // ========================================
+  // UPDATE DOCTOR (Hospital Admin only)
+  // ========================================
 
   @Patch(':id')
   @Roles(Role.HOSPITAL_ADMIN)
@@ -82,6 +109,10 @@ export class DoctorsController {
     return this.doctorsService.update(req.user.sub, id, dto);
   }
 
+  // ========================================
+  // DELETE DOCTOR (Hospital Admin only)
+  // ========================================
+
   @Delete(':id')
   @Roles(Role.HOSPITAL_ADMIN)
   @HttpCode(HttpStatus.OK)
@@ -92,6 +123,10 @@ export class DoctorsController {
   remove(@Req() req: any, @Param('id') id: string) {
     return this.doctorsService.remove(req.user.sub, id);
   }
+
+  // ========================================
+  // REQUEST LEAVE (Doctor only)
+  // ========================================
 
   @Post('leave')
   @Roles(Role.DOCTOR)

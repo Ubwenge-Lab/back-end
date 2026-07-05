@@ -86,13 +86,13 @@ export const auditEncryptionExtension = Prisma.defineExtension((client) => {
             Promise.resolve().then(() => {
               (client as any).auditLog.create({
                 data: {
-                  tableName: model,
-                  operation: opType,
-                  recordId: (result && typeof result === 'object' && 'id' in result) ? String((result as any).id) : null,
-                  userId: store.userId,
-                  userRole: store.userRole || 'UNKNOWN',
-                  ipAddress: store.ipAddress || '0.0.0.0',
-                  reason: store.actionReason || 'Standard Clinical Access',
+                  targetType: model,
+                  action: opType,
+                  targetId: (result && typeof result === 'object' && 'id' in result) ? String((result as any).id) : null,
+                  actorId: store.userId,
+                  actorRole: store.userRole || 'UNKNOWN',
+                  ip: store.ipAddress || '0.0.0.0',
+                  metadata: { reason: store.actionReason || 'Standard Clinical Access' },
                 }
               }).catch((err: any) => console.error(`[Audit Log Failed]: ${err.message}`));
             });
