@@ -6,6 +6,7 @@ import {
   Put,
   Param,
   Body,
+  Query,
   Req,
   UseGuards,
   HttpCode,
@@ -16,6 +17,7 @@ import {
   ApiOperation,
   ApiBearerAuth,
   ApiParam,
+  ApiQuery,
   ApiResponse,
 } from '@nestjs/swagger';
 import { AppointmentsService } from './appointments.service';
@@ -57,8 +59,14 @@ export class AppointmentsController {
   @Get()
   @Roles(Role.PATIENT, Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN)
   @ApiOperation({ summary: "List appointments (scoped to the caller's role)" })
-  findAll(@Req() req: any) {
-    return this.appointmentsService.findAll(req.user.sub, req.user.role);
+  @ApiQuery({ name: 'from', required: false, example: '2026-06-02', description: 'Filter start date (ISO 8601). Applied to DOCTOR role.' })
+  @ApiQuery({ name: 'to',   required: false, example: '2026-06-08', description: 'Filter end date (ISO 8601). Applied to DOCTOR role.' })
+  findAll(
+    @Req() req: any,
+    @Query('from') from?: string,
+    @Query('to')   to?: string,
+  ) {
+    return this.appointmentsService.findAll(req.user.sub, req.user.role, from, to);
   }
 
   // ========================================

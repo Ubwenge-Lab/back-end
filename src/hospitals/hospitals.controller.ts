@@ -23,6 +23,10 @@ import { InvoicesService } from '../invoices/invoices.service';
 import { HospitalDto } from './dto/hospital.dto';
 import { UpdateDrugStockDto } from './dto/update-drug-stock.dto';
 import { UpdateLeaveStatusDto } from '../doctors/dto/update-leave-status.dto';
+import {
+  CreateSurgeryBookingDto,
+  LogPostOpReportDto,
+} from './dto/surgery-scheduling.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
@@ -175,6 +179,23 @@ export class HospitalsController {
     return this.hospitalsService.findDoctors(id, specialty, availableBool);
   }
 
+  @Get(':id/departments')
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.HOSPITAL_ADMIN,
+    Role.DOCTOR,
+    Role.NURSE,
+    Role.RECEPTIONIST,
+  )
+  @ApiOperation({
+    summary:
+      'List departments at a hospital, derived from doctor specializations',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getDepartments(@Param('id') id: string) {
+    return this.hospitalsService.getDepartments(id);
+  }
+
   @Get(':id/dashboard/stats')
   @Roles(Role.HOSPITAL_ADMIN)
   @ApiOperation({ summary: 'Get hospital dashboard stats' })
@@ -229,5 +250,35 @@ export class HospitalsController {
     @Body() dto: UpdateDrugStockDto,
   ) {
     return this.hospitalsService.updateDrugStock(id, drugId, dto);
+  }
+
+  // ==========================================
+  // SURGERY BOOKINGS
+  // ==========================================
+
+  @Post(':id/surgeries/schedule')
+  @Roles(Role.HOSPITAL_ADMIN, Role.RECEPTIONIST)
+  @ApiOperation({
+    summary:
+      'Schedule an operating theater slot with conflict & collision controls',
+  })
+  async scheduleTheaterSurgery(
+    @Param('id') hospitalId: string,
+    @Body() dto: CreateSurgeryBookingDto
+  ) {
+    return this.hospitalsService.scheduleSurgery(hospitalId, dto);
+  }
+
+  @Post('surgeries/:bookingId/post-op-report')
+  @Roles(Role.DOCTOR)
+  @ApiOperation({
+    summary: 'Vault-lock a post-operation tracking summary report',
+  })
+  async logPostOpSummary(
+    @Param('bookingId') bookingId: string,
+    @Req() req: any,
+    @Body() dto: LogPostOpReportDto
+  ) {
+    return this.hospitalsService.logPostOpReport(bookingId, req.user.sub, dto);
   }
 }

@@ -13,6 +13,10 @@ import {
   UpdateLeaveStatusDto,
   LeaveAction,
 } from '../doctors/dto/update-leave-status.dto';
+import {
+  CreateSurgeryBookingDto,
+  LogPostOpReportDto,
+} from './dto/surgery-scheduling.dto';
 
 @Injectable()
 export class HospitalsService {
@@ -119,6 +123,79 @@ export class HospitalsService {
     });
   }
 
+  // Aggregates doctors by specialization into a "department" view. There is
+  // no Department model on the backend — this mirrors the client-side
+  // derivation the frontend was doing in departments/page.tsx, just moved
+  // server-side so there's a real endpoint instead of none at all.
+  //
+  // nurseCount/head are sourced from HospitalStaff.department and
+  // Doctor.isDepartmentHead — both added in this migration (see
+  // src/docs/HOSPITAL_ADMIN_DASHBOARD_DEPARTMENTS_INTEGRATION.md, Gap 2/3).
+  // NOTE: this requires that migration to actually be applied to the
+  // database before it works at runtime — `prisma generate` only updates
+  // the TypeScript client, it doesn't touch the DB schema.
+  async getDepartments(hospitalId: string) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+    if (!hospital) throw new NotFoundException('Hospital not found');
+
+    const doctors = await this.prisma.doctor.findMany({
+      where: { hospitalId },
+      select: { specialization: true, isAvailable: true, isDepartmentHead: true, firstName: true, lastName: true },
+    });
+
+    const nurses = await this.prisma.hospitalStaff.findMany({
+      where: { hospitalId, department: { not: null } },
+      select: { department: true },
+    });
+
+    const departments = new Map<string, {
+      doctorCount: number;
+      nurseCount: number;
+      hasAvailableDoctor: boolean;
+      head: string | null;
+    }>();
+
+    for (const doctor of doctors) {
+      const entry = departments.get(doctor.specialization) ?? {
+        doctorCount: 0,
+        nurseCount: 0,
+        hasAvailableDoctor: false,
+        head: null,
+      };
+      entry.doctorCount += 1;
+      if (doctor.isAvailable) entry.hasAvailableDoctor = true;
+      if (doctor.isDepartmentHead) {
+        entry.head = `${doctor.firstName ?? ''} ${doctor.lastName ?? ''}`.trim() || null;
+      }
+      departments.set(doctor.specialization, entry);
+    }
+
+    for (const nurse of nurses) {
+      const department = nurse.department as string;
+      const entry = departments.get(department) ?? {
+        doctorCount: 0,
+        nurseCount: 0,
+        hasAvailableDoctor: false,
+        head: null,
+      };
+      entry.nurseCount += 1;
+      departments.set(department, entry);
+    }
+
+    return Array.from(departments.entries())
+      .map(([name, entry]) => ({
+        id: name.toLowerCase().replace(/\s+/g, '-'),
+        name,
+        doctorCount: entry.doctorCount,
+        nurseCount: entry.nurseCount,
+        status: entry.hasAvailableDoctor ? ('ACTIVE' as const) : ('INACTIVE' as const),
+        head: entry.head,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async getStats(hospitalId: string, userId: string) {
     await this.validateHospitalAccess(hospitalId, userId);
 
@@ -181,15 +258,26 @@ export class HospitalsService {
       CANCELLED: 0,
     };
 
+    // AppointmentStatus on the backend (SCHEDULED, COMPLETED, CANCELLED,
+    // NO_SHOW, ARRIVED, IN_TRIAGE, READY_FOR_DOCTOR) has no CONFIRMED value —
+    // there is no 1:1 mapping to the frontend's 4-bucket summary. ARRIVED/
+    // IN_TRIAGE/READY_FOR_DOCTOR all represent an appointment the patient
+    // has actually shown up for and is actively progressing through, which
+    // is the closest match to "confirmed" as opposed to merely SCHEDULED.
+    // NO_SHOW is bucketed with CANCELLED since neither resulted in a
+    // completed visit. Every status row now lands in a bucket instead of
+    // 4 of 7 being silently dropped.
     for (const row of statusRows) {
       const status = row.status;
       const count = Number(row.count);
       if (status === 'SCHEDULED') {
-        appointmentsByStatus.PENDING = count;
+        appointmentsByStatus.PENDING += count;
+      } else if (status === 'ARRIVED' || status === 'IN_TRIAGE' || status === 'READY_FOR_DOCTOR') {
+        appointmentsByStatus.CONFIRMED += count;
       } else if (status === 'COMPLETED') {
-        appointmentsByStatus.COMPLETED = count;
-      } else if (status === 'CANCELLED') {
-        appointmentsByStatus.CANCELLED = count;
+        appointmentsByStatus.COMPLETED += count;
+      } else if (status === 'CANCELLED' || status === 'NO_SHOW') {
+        appointmentsByStatus.CANCELLED += count;
       }
     }
 
@@ -749,5 +837,189 @@ export class HospitalsService {
         details: refundResults,
       },
     };
+  }
+  // ==========================================
+  // SURGERY BOOKINGS
+  // ==========================================
+
+  async scheduleSurgery(hospitalId: string, dto: CreateSurgeryBookingDto) {
+    const start = new Date(dto.startTime);
+    const end = new Date(dto.endTime);
+
+    if (start >= end) {
+      throw new BadRequestException(
+        'End time must be cleanly after start time.',
+      );
+    }
+
+    const conflictingTheaterBooking =
+      await this.prisma.surgeryBooking.findFirst({
+        where: {
+          theaterId: dto.theaterId,
+          status: 'SCHEDULED',
+          OR: [{ startTime: { lt: end }, endTime: { gt: start } }],
+        },
+      });
+
+    if (conflictingTheaterBooking) {
+      throw new ConflictException(
+        'The selected Operating Theater is already booked during this time window.',
+      );
+    }
+
+    if (dto.requiredEquipment && dto.requiredEquipment.length > 0) {
+      const overlappingEquipmentBookings =
+        await this.prisma.surgeryBooking.findMany({
+          where: {
+            hospitalId,
+            status: 'SCHEDULED',
+            startTime: { lt: end },
+            endTime: { gt: start },
+            requiredEquipment: { hasSome: dto.requiredEquipment },
+          },
+          select: { requiredEquipment: true },
+        });
+
+      if (overlappingEquipmentBookings.length > 0) {
+        const conflictedEquip = overlappingEquipmentBookings
+          .flatMap((b: any) => b.requiredEquipment as string[])
+          .filter((e: string) => dto.requiredEquipment?.includes(e));
+
+        throw new ConflictException(
+          `Critical equipment double-booking rejected: ${[...new Set(conflictedEquip)].join(', ')}`,
+        );
+      }
+    }
+
+    const collisionWarnings: Array<{
+      name: string;
+      role: string;
+      type: 'DOCTOR' | 'STAFF';
+    }> = [];
+
+    const doctorIds = dto.teamAssignments
+      .filter((t) => t.doctorId)
+      .map((t) => t.doctorId);
+    const staffIds = dto.teamAssignments
+      .filter((t) => t.hospitalStaffId)
+      .map((t) => t.hospitalStaffId);
+
+    if (doctorIds.length > 0) {
+      const doctorConflicts = await this.prisma.surgicalTeamAssignment.findMany(
+        {
+          where: {
+            doctorId: { in: doctorIds },
+            booking: {
+              status: 'SCHEDULED',
+              startTime: { lt: end },
+              endTime: { gt: start },
+            },
+          },
+          include: { doctor: true },
+        },
+      );
+
+      doctorConflicts.forEach((c: any) => {
+        if (c.doctor) {
+          collisionWarnings.push({
+            name: `Dr. ${c.doctor.firstName ?? ''} ${c.doctor.lastName ?? ''}`.trim(),
+            role: c.role,
+            type: 'DOCTOR',
+          });
+        }
+      });
+    }
+
+    if (staffIds.length > 0) {
+      const staffConflicts = await this.prisma.surgicalTeamAssignment.findMany({
+        where: {
+          hospitalStaffId: { in: staffIds },
+          booking: {
+            status: 'SCHEDULED',
+            startTime: { lt: end },
+            endTime: { gt: start },
+          },
+        },
+        include: { hospitalStaff: true },
+      });
+
+      staffConflicts.forEach((c: any) => {
+        if (c.hospitalStaff) {
+          collisionWarnings.push({
+            name: `${c.hospitalStaff.firstName} ${c.hospitalStaff.lastName}`,
+            role: c.role,
+            type: 'STAFF',
+          });
+        }
+      });
+    }
+
+    const booking = await this.prisma.surgeryBooking.create({
+      data: {
+        hospitalId,
+        theaterId: dto.theaterId,
+        patientId: dto.patientId,
+        procedureName: dto.procedureName,
+        startTime: start,
+        endTime: end,
+        requiredEquipment: dto.requiredEquipment ?? [],
+        teamAssignments: {
+          create: dto.teamAssignments.map((t) => ({
+            role: t.role,
+            doctorId: t.doctorId,
+            hospitalStaffId: t.hospitalStaffId,
+          })),
+        },
+      },
+      include: {
+        teamAssignments: true,
+        theater: true,
+      },
+    });
+
+    return {
+      message: 'Surgery successfully scheduled.',
+      booking,
+      hasCollisionWarnings: collisionWarnings.length > 0,
+      collisionWarnings,
+    };
+  }
+
+  async logPostOpReport(
+    bookingId: string,
+    userId: string,
+    dto: LogPostOpReportDto,
+  ) {
+    const booking = await this.prisma.surgeryBooking.findUnique({
+      where: { id: bookingId },
+      include: { teamAssignments: { include: { doctor: true } } },
+    });
+
+    if (!booking)
+      throw new NotFoundException('Surgical booking record not found');
+
+    const requestingDoctor = booking.teamAssignments.find(
+      (a: any) => a.doctor?.userId === userId,
+    );
+    if (!requestingDoctor) {
+      throw new ForbiddenException(
+        'You are not authorized to log a report for this surgery booking',
+      );
+    }
+
+    if (booking.status === 'COMPLETED') {
+      throw new ConflictException(
+        'A report has already been logged for this surgery booking',
+      );
+    }
+
+    return this.prisma.surgeryBooking.update({
+      where: { id: bookingId },
+      data: {
+        ...dto,
+        status: 'COMPLETED',
+        reportLoggedAt: new Date(),
+      },
+    });
   }
 }
