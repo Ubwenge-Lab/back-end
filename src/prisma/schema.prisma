@@ -187,8 +187,6 @@ model Patient {
   orders                 Order[]
   user                   User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
   prescriptions          Prescription[]
-  medicalHistoryAccesses MedicalHistoryAccess[]
-  medicalRecordLogs      MedicalRecordLog[]
   admissions             InpatientAdmission[]
   surgeryBookings        SurgeryBooking[]
 
