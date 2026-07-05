@@ -33,6 +33,7 @@ import { DoctorsModule } from './doctors/doctors.module';
 import { AvailabilityModule } from './doctors/availability/availability.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ClaimsModule } from './claims/claims.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import {
   LoggerModule,
   CorrelationIdMiddleware,
@@ -91,6 +92,7 @@ import { DiagnosticsModule } from './diagnostics/diagnostics.module';
     ReportsModule,
     DocumentsModule,
     ClaimsModule,
+    AnalyticsModule,
     PlatformBillingModule,
     InpatientModule,
     DiagnosticsModule,
