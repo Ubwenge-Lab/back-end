@@ -12,6 +12,7 @@ import { UsersModule } from '../users/users.module';
 import { PatientsModule } from '../patients/patients.module';
 import { PharmaciesModule } from '../pharmacies/pharmacies.module';
 import { NotificationsModule } from '../notifications/notifications.module';
+import { AuditModule } from '../audit/audit.module';
 import { Reflector } from '@nestjs/core';
 
 @Module({
@@ -28,9 +29,10 @@ import { Reflector } from '@nestjs/core';
     PatientsModule,
     PharmaciesModule,
     NotificationsModule,
+    AuditModule,
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy, JwtRefreshStrategy, Reflector],
   exports: [AuthService],
 })
-export class AuthModule {}
+export class AuthModule { }

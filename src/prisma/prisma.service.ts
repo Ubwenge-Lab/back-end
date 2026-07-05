@@ -3,6 +3,8 @@
 import { Injectable, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 
+import { auditEncryptionExtension } from './prisma.extension';
+
 @Injectable()
 export class PrismaService
   extends PrismaClient
@@ -10,13 +12,21 @@ export class PrismaService
 {
   constructor() {
     super({
-      // Under concurrent load, logging every query floods stdout and adds
-      // measurable latency. Log only errors and warnings in production;
-      // keep query logging for development environments.
       log:
         process.env.NODE_ENV === 'production'
           ? ['error', 'warn']
           : ['query', 'error', 'warn'],
+    });
+
+    const extended = this.$extends(auditEncryptionExtension) as any;
+
+    return new Proxy(this, {
+      get: (target, prop) => {
+        if (prop in extended) {
+          return extended[prop];
+        }
+        return (target as any)[prop];
+      },
     });
   }
 

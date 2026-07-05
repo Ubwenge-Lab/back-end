@@ -127,6 +127,79 @@ export class HospitalsService {
     });
   }
 
+  // Aggregates doctors by specialization into a "department" view. There is
+  // no Department model on the backend — this mirrors the client-side
+  // derivation the frontend was doing in departments/page.tsx, just moved
+  // server-side so there's a real endpoint instead of none at all.
+  //
+  // nurseCount/head are sourced from HospitalStaff.department and
+  // Doctor.isDepartmentHead — both added in this migration (see
+  // src/docs/HOSPITAL_ADMIN_DASHBOARD_DEPARTMENTS_INTEGRATION.md, Gap 2/3).
+  // NOTE: this requires that migration to actually be applied to the
+  // database before it works at runtime — `prisma generate` only updates
+  // the TypeScript client, it doesn't touch the DB schema.
+  async getDepartments(hospitalId: string) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+    if (!hospital) throw new NotFoundException('Hospital not found');
+
+    const doctors = await this.prisma.doctor.findMany({
+      where: { hospitalId },
+      select: { specialization: true, isAvailable: true, isDepartmentHead: true, firstName: true, lastName: true },
+    });
+
+    const nurses = await this.prisma.hospitalStaff.findMany({
+      where: { hospitalId, department: { not: null } },
+      select: { department: true },
+    });
+
+    const departments = new Map<string, {
+      doctorCount: number;
+      nurseCount: number;
+      hasAvailableDoctor: boolean;
+      head: string | null;
+    }>();
+
+    for (const doctor of doctors) {
+      const entry = departments.get(doctor.specialization) ?? {
+        doctorCount: 0,
+        nurseCount: 0,
+        hasAvailableDoctor: false,
+        head: null,
+      };
+      entry.doctorCount += 1;
+      if (doctor.isAvailable) entry.hasAvailableDoctor = true;
+      if (doctor.isDepartmentHead) {
+        entry.head = `${doctor.firstName ?? ''} ${doctor.lastName ?? ''}`.trim() || null;
+      }
+      departments.set(doctor.specialization, entry);
+    }
+
+    for (const nurse of nurses) {
+      const department = nurse.department as string;
+      const entry = departments.get(department) ?? {
+        doctorCount: 0,
+        nurseCount: 0,
+        hasAvailableDoctor: false,
+        head: null,
+      };
+      entry.nurseCount += 1;
+      departments.set(department, entry);
+    }
+
+    return Array.from(departments.entries())
+      .map(([name, entry]) => ({
+        id: name.toLowerCase().replace(/\s+/g, '-'),
+        name,
+        doctorCount: entry.doctorCount,
+        nurseCount: entry.nurseCount,
+        status: entry.hasAvailableDoctor ? ('ACTIVE' as const) : ('INACTIVE' as const),
+        head: entry.head,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async getStats(hospitalId: string, userId: string) {
     await this.validateHospitalAccess(hospitalId, userId);
 
@@ -189,15 +262,26 @@ export class HospitalsService {
       CANCELLED: 0,
     };
 
+    // AppointmentStatus on the backend (SCHEDULED, COMPLETED, CANCELLED,
+    // NO_SHOW, ARRIVED, IN_TRIAGE, READY_FOR_DOCTOR) has no CONFIRMED value —
+    // there is no 1:1 mapping to the frontend's 4-bucket summary. ARRIVED/
+    // IN_TRIAGE/READY_FOR_DOCTOR all represent an appointment the patient
+    // has actually shown up for and is actively progressing through, which
+    // is the closest match to "confirmed" as opposed to merely SCHEDULED.
+    // NO_SHOW is bucketed with CANCELLED since neither resulted in a
+    // completed visit. Every status row now lands in a bucket instead of
+    // 4 of 7 being silently dropped.
     for (const row of statusRows) {
       const status = row.status;
       const count = Number(row.count);
       if (status === 'SCHEDULED') {
-        appointmentsByStatus.PENDING = count;
+        appointmentsByStatus.PENDING += count;
+      } else if (status === 'ARRIVED' || status === 'IN_TRIAGE' || status === 'READY_FOR_DOCTOR') {
+        appointmentsByStatus.CONFIRMED += count;
       } else if (status === 'COMPLETED') {
-        appointmentsByStatus.COMPLETED = count;
-      } else if (status === 'CANCELLED') {
-        appointmentsByStatus.CANCELLED = count;
+        appointmentsByStatus.COMPLETED += count;
+      } else if (status === 'CANCELLED' || status === 'NO_SHOW') {
+        appointmentsByStatus.CANCELLED += count;
       }
     }
 

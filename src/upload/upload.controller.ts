@@ -19,6 +19,9 @@ import {
 } from '@nestjs/swagger';
 import { UploadService } from './upload.service';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
+import { RolesGuard } from '../auth/guards/roles.guard';
+import { Roles } from '../auth/decorators/roles.decorator';
+import { Role } from '../common/constants/role.enum';
 
 type MulterFile = {
   fieldname: string;
@@ -69,6 +72,20 @@ export class UploadController {
     return this.uploadService.uploadMedicationImage(file);
     // Returns { url, fileName, fileType, sizeKb }
     // Frontend: use url as imageUrl when creating/updating medication
+  }
+
+  // POST /upload/diagnostic-result
+  @Post('diagnostic-result')
+  @Roles(Role.TECHNICIAN, Role.NURSE, Role.DOCTOR, Role.HOSPITAL_ADMIN)
+  @UseGuards(RolesGuard)
+  @ApiOperation({
+    summary: 'Upload laboratory or radiology diagnostic result (PDF, DICOM, images) up to 20MB',
+  })
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(FileInterceptor('file'))
+  async uploadDiagnosticResult(@UploadedFile() file: MulterFile) {
+    if (!file) throw new BadRequestException('No file uploaded');
+    return this.uploadService.uploadDiagnosticResult(file);
   }
 
   // DELETE /upload/file
