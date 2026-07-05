@@ -97,3 +97,5 @@ prisma/check-tables.ts
 prisma/data-state-backup.json
 prisma/patch-enum.ts
 prisma/restore-data.ts
+replace_ids.js
+scratch.ts

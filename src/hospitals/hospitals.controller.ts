@@ -179,6 +179,23 @@ export class HospitalsController {
     return this.hospitalsService.findDoctors(id, specialty, availableBool);
   }
 
+  @Get(':id/departments')
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.HOSPITAL_ADMIN,
+    Role.DOCTOR,
+    Role.NURSE,
+    Role.RECEPTIONIST,
+  )
+  @ApiOperation({
+    summary:
+      'List departments at a hospital, derived from doctor specializations',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getDepartments(@Param('id') id: string) {
+    return this.hospitalsService.getDepartments(id);
+  }
+
   @Get(':id/dashboard/stats')
   @Roles(Role.HOSPITAL_ADMIN)
   @ApiOperation({ summary: 'Get hospital dashboard stats' })
