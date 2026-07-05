@@ -337,6 +337,8 @@ export class AuthService {
             id: user.id,
             email: user.email,
             role: user.role,
+            firstName: hospitalStaff.firstName,
+            lastName: hospitalStaff.lastName,
             hospitalId: hospitalStaff.hospitalId,
             hospitalName: hospitalStaff.hospital.name,
             status: hospitalStaff.status,
@@ -352,7 +354,9 @@ export class AuthService {
         };
       }
 
-      // Fallback for doctors who have no HospitalStaff row (standard case for seeded doctors)
+      // Fallback for a DOCTOR whose User has a Doctor record but no
+      // HospitalStaff row (e.g. seeded via prisma.doctor.create directly,
+      // bypassing the onboard/hospital-staff flow that creates both).
       if (user.role === 'DOCTOR') {
         const doctor = await this.prisma.doctor.findFirst({
           where: { userId: user.id },
@@ -374,11 +378,11 @@ export class AuthService {
               id: user.id,
               email: user.email,
               role: user.role,
+              firstName: doctor.firstName,
+              lastName: doctor.lastName,
               hospitalId: doctor.hospitalId,
               hospitalName: doctor.hospital.name,
               doctorId: doctor.id,
-              firstName: doctor.firstName,
-              lastName: doctor.lastName,
               specialization: doctor.specialization,
               requiresPasswordChange: false,
             },

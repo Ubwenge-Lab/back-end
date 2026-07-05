@@ -111,6 +111,33 @@ export class UploadService {
     };
   }
 
+  // ========================================
+  // UPLOAD DIAGNOSTIC RESULT (laboratory / radiology)
+  // PDF + DICOM + images, up to 20MB
+  // ========================================
+
+  async uploadDiagnosticResult(file: MulterFile): Promise<UploadResult> {
+    this.validate(
+      file,
+      [
+        'image/jpeg',
+        'image/jpg',
+        'image/png',
+        'application/pdf',
+        'application/dicom',
+        'application/octet-stream',
+        'image/x-dicom',
+      ],
+      20,
+    );
+    return {
+      url: this.toDataUri(file),
+      fileName: file.originalname,
+      fileType: file.mimetype,
+      sizeKb: Math.round(file.size / 1024),
+    };
+  }
+
   async deleteFile(_fileUrl: string): Promise<void> {
     return;
   }
