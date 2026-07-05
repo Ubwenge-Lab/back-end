@@ -5,6 +5,7 @@ import {
   NotFoundException,
   BadRequestException,
   ForbiddenException,
+  ConflictException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { FlutterwaveService } from './flutterwave.service';
@@ -23,7 +24,8 @@ import {
   HospitalPaymentWebhookStatus,
 } from './dto/hospital-payment-webhook.dto';
 import { CreateOrderDto } from '../orders/dto';
-import { Prisma } from '@prisma/client';
+import { Prisma, PaymentStatus, HospitalBillingStatus, InvoiceStatus } from '@prisma/client';
+import { CreateCheckoutSessionDto, MockWebhookDto } from './dto/payments.dto';
 
 @Injectable()
 export class PaymentsService {
@@ -753,7 +755,6 @@ export class PaymentsService {
   async processHospitalPaymentWebhook(dto: HospitalPaymentWebhookDto) {
     return this.prisma.$transaction(
       async (tx) => {
-        // Re-read inside the serializable transaction to prevent double-payment
         const invoice = await tx.hospitalInvoice.findUnique({
           where: { id: dto.invoiceId },
         });
@@ -762,7 +763,6 @@ export class PaymentsService {
           throw new NotFoundException(`Invoice ${dto.invoiceId} not found`);
         }
 
-        // Idempotency: already settled, safe to acknowledge
         if (invoice.paymentStatus === 'PAID') {
           return { status: 'success', message: 'Invoice already paid' };
         }
@@ -784,6 +784,117 @@ export class PaymentsService {
       },
       { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
     );
+  }
+
+  /**
+   * Generates a pending mock checkout session and locks out duplicate attempts
+   */
+  async createCheckoutSession(dto: CreateCheckoutSessionDto) {
+    return await this.prisma.$transaction(async (tx) => {
+      const hospitalInvoice = await tx.hospitalInvoice.findUnique({
+        where: { id: dto.invoiceId },
+      });
+
+      if (!hospitalInvoice) {
+        throw new NotFoundException(`Hospital invoice with ID ${dto.invoiceId} not found`);
+      }
+
+      if (hospitalInvoice.paymentStatus === HospitalBillingStatus.PAID) {
+        throw new BadRequestException('This invoice has already been fully paid');
+      }
+
+      const coreInvoice = await tx.invoice.findFirst({
+        where: { appointmentId: hospitalInvoice.appointmentId },
+      });
+
+      if (!coreInvoice) {
+        throw new NotFoundException(`Associated core Invoice mapping for appointment context not found`);
+      }
+
+      const existingPayment = await tx.hospitalPayment.findFirst({
+        where: {
+          invoiceId: coreInvoice.id,
+          status: { in: [PaymentStatus.PENDING, PaymentStatus.COMPLETED] },
+        },
+      });
+
+      if (existingPayment) {
+        throw new ConflictException('A checkout transaction is already active or completed for this invoice');
+      }
+
+      const loggedPayment = await tx.hospitalPayment.create({
+        data: {
+          invoice: { connect: { id: coreInvoice.id } },
+          patient: { connect: { id: hospitalInvoice.patientId } },
+          amount: dto.amount,
+          method: dto.method,
+          status: PaymentStatus.PENDING,
+          notes: `Sandbox session generated for phone number: ${dto.phoneNumber || 'N/A'}`,
+        },
+      });
+
+      return {
+        message: 'Mock checkout session initialized successfully',
+        transactionReference: loggedPayment.id,
+        amount: Number(loggedPayment.amount),
+        method: loggedPayment.method,
+        status: loggedPayment.status,
+      };
+    });
+  }
+
+  /**
+   * Simulated sandbox webhook callback processing workflow
+   */
+  async handleMockWebhookCallback(dto: MockWebhookDto) {
+    return await this.prisma.$transaction(async (tx) => {
+      const payment = await tx.hospitalPayment.findUnique({
+        where: { id: dto.transactionReference },
+      });
+
+      if (!payment) {
+        throw new NotFoundException(`Transaction record reference ${dto.transactionReference} not found`);
+      }
+
+      if (payment.status !== PaymentStatus.PENDING) {
+        throw new BadRequestException('This payment transaction has already been completed or handled');
+      }
+
+      const finalPaymentStatus = dto.status === 'SUCCESS' ? PaymentStatus.COMPLETED : PaymentStatus.FAILED;
+
+      const updatedPayment = await tx.hospitalPayment.update({
+        where: { id: payment.id },
+        data: {
+          status: finalPaymentStatus,
+          paidAt: dto.status === 'SUCCESS' ? new Date() : null,
+          notes: `Sandbox Webhook processed cleanly. Callback result: ${dto.status}`,
+        },
+      });
+
+      if (dto.status === 'SUCCESS') {
+        const associatedCoreInvoice = await tx.invoice.findUnique({
+          where: { id: payment.invoiceId },
+        });
+
+        if (associatedCoreInvoice && associatedCoreInvoice.appointmentId) {
+          await tx.hospitalInvoice.update({
+            where: { appointmentId: associatedCoreInvoice.appointmentId },
+            data: { paymentStatus: HospitalBillingStatus.PAID },
+          });
+
+          await tx.invoice.update({
+            where: { id: associatedCoreInvoice.id },
+            data: { status: InvoiceStatus.PAID },
+          });
+        }
+      }
+
+      return {
+        success: true,
+        message: `Webhook transaction synchronization finalized as ${finalPaymentStatus}`,
+        paymentId: updatedPayment.id,
+      };
+    });
   }
 
   private async resolveBranchForStaff(userId: string) {
