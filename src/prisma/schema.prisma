@@ -94,6 +94,7 @@ model Doctor {
   user                   User                     @relation(fields: [userId], references: [id], onDelete: Cascade)
   medicalHistoryAccesses MedicalHistoryAccess[]
   medicalRecordLogs      MedicalRecordLog[]
+  diagnosticOrders       DiagnosticOrder[]
   inpatientAdmissions    InpatientAdmission[]
   prescriptions          Prescription[]           @relation("DoctorToPrescription")
   surgeryAssignments     SurgicalTeamAssignment[]
@@ -190,6 +191,7 @@ model Patient {
   user                   User                          @relation(fields: [userId], references: [id], onDelete: Cascade)
   prescriptions          Prescription[]
   admissions             InpatientAdmission[]
+  diagnosticOrders       DiagnosticOrder[]
   surgeryBookings        SurgeryBooking[]
 
   @@index([userId])
@@ -450,6 +452,7 @@ model Appointment {
   invoice               Invoice?
   prescriptions         Prescription[]
   sessionLogs           TelemedicineSessionLog[]
+  diagnosticOrders      DiagnosticOrder[]
   triageVitals          TriageVitals?
 
   @@index([patientId])
@@ -915,6 +918,7 @@ enum UserRole {
   DOCTOR
   RECEPTIONIST
   NURSE
+  TECHNICIAN
 }
 
 enum PharmacyStatus {
@@ -1265,6 +1269,45 @@ enum ShiftType {
   MORNING
   AFTERNOON
   NIGHT
+}
+
+enum DiagnosticType {
+  BLOOD
+  URINE
+  XRAY
+  MRI
+}
+
+enum DiagnosticStatus {
+  PENDING
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+model DiagnosticOrder {
+  id            String           @id @default(uuid())
+  patientId     String
+  doctorId      String
+  appointmentId String?
+  testType      DiagnosticType
+  icd10Code     String
+  status        DiagnosticStatus @default(PENDING)
+  findings      String?
+  resultValue   String?
+  fileUrl       String?
+  fileName      String?
+  fileType      String?
+  technicianId  String?
+  completedAt   DateTime?
+  createdAt     DateTime         @default(now())
+  updatedAt     DateTime         @updatedAt
+
+  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor      Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+
+  @@map("diagnostic_orders")
 }
 
 enum WardTier {

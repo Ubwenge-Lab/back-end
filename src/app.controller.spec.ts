@@ -24,7 +24,7 @@ describe('AppController', () => {
   });
 
   describe('root', () => {
-    it('should return "Hello World!"', () => {
+    it('should return HTML status page', () => {
       expect(appController.getHello()).toContain('E-Vuze API');
     });
   });
