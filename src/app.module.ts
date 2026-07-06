@@ -33,7 +33,6 @@ import { DoctorsModule } from './doctors/doctors.module';
 import { AvailabilityModule } from './doctors/availability/availability.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ClaimsModule } from './claims/claims.module';
-import { AnalyticsModule } from './analytics/analytics.module';
 import {
   LoggerModule,
   CorrelationIdMiddleware,
@@ -44,6 +43,7 @@ import { EventEmitterModule } from '@nestjs/event-emitter';
 import { ScheduleModule } from '@nestjs/schedule';
 import { ReportsModule } from './reports/reports.module';
 import { PlatformBillingModule } from './platform-billing/platform-billing.module';
+import { InpatientBillingModule } from './inpatient-billing/inpatient-billing.module';
 import { InpatientModule } from './inpatient/inpatient.module';
 
 @Module({
@@ -91,8 +91,8 @@ import { InpatientModule } from './inpatient/inpatient.module';
     ReportsModule,
     DocumentsModule,
     ClaimsModule,
-    AnalyticsModule,
     PlatformBillingModule,
+    InpatientBillingModule,
     InpatientModule,
   ],
   controllers: [AppController],
