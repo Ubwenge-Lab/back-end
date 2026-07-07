@@ -353,14 +353,6 @@ export class AuthService {
         );
         await this.updateRefreshToken(user.id, tokens.refreshToken);
 
-        let doctorProfile: { id: string; firstName: string | null; lastName: string | null; specialization: string } | null = null;
-        if (user.role === 'DOCTOR') {
-          doctorProfile = await this.prisma.doctor.findFirst({
-            where: { userId: user.id },
-            select: { id: true, firstName: true, lastName: true, specialization: true },
-          });
-        }
-
         return {
           user: {
             id: user.id,
@@ -370,14 +362,16 @@ export class AuthService {
             lastName: hospitalStaff.lastName,
             hospitalId: hospitalStaff.hospitalId,
             hospitalName: hospitalStaff.hospital.name,
+            // Was missing entirely, even though HospitalStaff already has
+            // both fields on the record just fetched above — this is what
+            // caused the "Hello Receptionist" fallback greeting on the
+            // frontend, and it showed up on first login, not just after a
+            // cache expiry, since there was nowhere else these could come
+            // from (no GET /auth/me route exists).
+            firstName: hospitalStaff.firstName,
+            lastName: hospitalStaff.lastName,
             status: hospitalStaff.status,
             requiresPasswordChange: !!isUsingTempPassword,
-            ...(doctorProfile && {
-              doctorId: doctorProfile.id,
-              firstName: doctorProfile.firstName,
-              lastName: doctorProfile.lastName,
-              specialization: doctorProfile.specialization,
-            }),
           },
           ...tokens,
         };
