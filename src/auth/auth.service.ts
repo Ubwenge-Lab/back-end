@@ -34,6 +34,12 @@ import {
 } from './dto';
 import { randomInt, randomBytes } from 'crypto';
 
+// Small helper so `catch (error)` blocks can safely read a message off an
+// `unknown`-typed error without every call site needing its own type guard.
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -99,7 +105,7 @@ export class AuthService {
       const tokens = await Sentry.startSpan({ name: "Generate Auth Tokens" }, async () => {
         return await this.generateTokens(user.id, user.email, user.role);
       });
-      
+
       await this.updateRefreshToken(user.id, tokens.refreshToken);
       void this.auditService.log({
         actorId: user.id,
@@ -362,14 +368,6 @@ export class AuthService {
             lastName: hospitalStaff.lastName,
             hospitalId: hospitalStaff.hospitalId,
             hospitalName: hospitalStaff.hospital.name,
-            // Was missing entirely, even though HospitalStaff already has
-            // both fields on the record just fetched above — this is what
-            // caused the "Hello Receptionist" fallback greeting on the
-            // frontend, and it showed up on first login, not just after a
-            // cache expiry, since there was nowhere else these could come
-            // from (no GET /auth/me route exists).
-            firstName: hospitalStaff.firstName,
-            lastName: hospitalStaff.lastName,
             status: hospitalStaff.status,
             requiresPasswordChange: !!isUsingTempPassword,
           },
@@ -497,7 +495,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send patient verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -569,7 +567,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send pharmacy verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -638,7 +636,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send hospital verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -743,7 +741,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send hospital staff credentials email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -862,7 +860,7 @@ export class AuthService {
       } catch (error) {
         this.logger.error(
           'Failed to notify super admins about new hospital',
-          error?.message || error,
+          getErrorMessage(error),
         );
       }
     }
@@ -910,7 +908,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to resend verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -950,7 +948,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send password reset email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
