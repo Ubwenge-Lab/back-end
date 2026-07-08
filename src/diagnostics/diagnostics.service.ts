@@ -64,6 +64,7 @@ export class DiagnosticsService {
     });
   }
 
+
   // 2. Technicians view the queue of requests
   async getQueue(status?: DiagnosticStatus) {
     return this.prisma.diagnosticOrder.findMany({

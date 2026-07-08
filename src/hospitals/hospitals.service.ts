@@ -13,6 +13,9 @@ import {
   UpdateLeaveStatusDto,
   LeaveAction,
 } from '../doctors/dto/update-leave-status.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { LogPostOpReportDto } from './dto/surgery-scheduling.dto';
+import { SurgeryStatus } from '@prisma/client';
 
 @Injectable()
 export class HospitalsService {
@@ -20,6 +23,7 @@ export class HospitalsService {
     private readonly prisma: PrismaService,
     private readonly flutterwaveService: FlutterwaveService,
     private readonly notificationsService: NotificationsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async findAll() {
@@ -863,4 +867,57 @@ export class HospitalsService {
       },
     };
   }
+
+  // ========================================
+  // SURGERY MANAGEMENT (Post-Op & Inventory)
+  // ========================================
+
+  async logPostOpReport(
+    hospitalId: string,
+    userId: string,
+    bookingId: string,
+    dto: LogPostOpReportDto,
+  ) {
+    // 1. Validate the user actually belongs to this hospital
+    await this.validateHospitalAccess(hospitalId, userId);
+
+    const booking = await this.prisma.surgeryBooking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Surgery booking not found');
+    }
+
+    if (booking.hospitalId !== hospitalId) {
+      throw new ForbiddenException('This booking belongs to another hospital');
+    }
+
+    if (booking.status === SurgeryStatus.COMPLETED) {
+      throw new BadRequestException('Surgery is already marked as completed');
+    }
+
+    // 2. Update the database with the post-op report and mark as COMPLETED
+    const updatedBooking = await this.prisma.surgeryBooking.update({
+      where: { id: bookingId },
+      data: {
+        status: SurgeryStatus.COMPLETED,
+        durationMinutes: dto.durationMinutes,
+        anesthesiaDetails: dto.anesthesiaDetails,
+        operationNotes: dto.operationNotes,
+        complications: dto.complications,
+        outcome: dto.outcome,
+        reportLoggedAt: new Date(),
+      },
+    });
+
+    // 3. Emit the event so InventoryService can deduct the required BOM consumables safely in the background
+    this.eventEmitter.emit('surgery.completed', {
+      bookingId: updatedBooking.id,
+    });
+
+    return updatedBooking;
+  }
+
+
 }
