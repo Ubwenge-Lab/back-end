@@ -953,7 +953,7 @@ model SurgeryBooking {
   patient           Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   theater           OperatingTheater         @relation(fields: [theaterId], references: [id], onDelete: Cascade)
   teamAssignments   SurgicalTeamAssignment[]
-  inventoryDeducted Boolean @default(false)
+  inventoryDeducted Boolean                  @default(false)
 
   @@index([theaterId])
   @@index([startTime, endTime])
@@ -1146,10 +1146,9 @@ model DiagnosticConsumableBOM {
   @@map("diagnostic_consumable_bom")
 }
 
-
 model SurgeryConsumableBOM {
-  id            String   @id @default(uuid())
-  procedureName String   // Matches SurgeryBooking.procedureName
+  id            String @id @default(uuid())
+  procedureName String // Matches SurgeryBooking.procedureName
   consumableId  String
   quantityUsed  Int
 
@@ -1158,9 +1157,6 @@ model SurgeryConsumableBOM {
   @@unique([procedureName, consumableId])
   @@map("surgery_consumable_bom")
 }
-
-
-
 
 model Ward {
   id            String   @id @default(uuid())

@@ -24,4 +24,19 @@ export class InventoryListener {
       );
     }
   }
+
+  // We set async: true so it doesn't block the HTTP response of the surgery completion
+  @OnEvent('surgery.completed', { async: true })
+  async handleSurgeryCompletedEvent(payload: { bookingId: string }) {
+    this.logger.log(`Received surgery.completed event for booking ${payload.bookingId}`);
+    
+    try {
+      await this.inventoryService.deductConsumablesForSurgery(payload.bookingId);
+    } catch (error) {
+      this.logger.error(
+        `Failed to deduct inventory for surgery booking ${payload.bookingId}: ${error instanceof Error ? error.message : String(error)}`,
+        error instanceof Error ? error.stack : undefined,
+      );
+    }
+  }
 }
