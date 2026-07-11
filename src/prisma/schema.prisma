@@ -202,6 +202,7 @@ model Patient {
   referrals              Referral[]
   diagnosticOrders       DiagnosticOrder[]
   surgeryBookings        SurgeryBooking[]
+  mohSurveillanceLogs    MohSurveillanceLog[]
 
   @@index([userId])
   @@map("patients")
@@ -1356,6 +1357,7 @@ model DiagnosticOrder {
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
 
   inventoryDeducted Boolean @default(false)
+  mohSurveillanceLog MohSurveillanceLog?
 
   @@map("diagnostic_orders")
 }
@@ -1461,4 +1463,24 @@ model AuditLog {
   @@index([action])
   @@index([actorRole])
   @@index([createdAt])
+}
+
+
+model MohSurveillanceLog {
+  id                String          @id @default(uuid())
+  patientId         String
+  diagnosticOrderId String          @unique
+  icd10Code         String
+  diseaseCategory   String
+  reportedAt        DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  patient           Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  diagnosticOrder   DiagnosticOrder @relation(fields: [diagnosticOrderId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([diseaseCategory])
+  @@index([reportedAt])
+  @@map("moh_surveillance_logs")
 }
