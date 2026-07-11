@@ -51,6 +51,7 @@ import { AuditContextInterceptor } from './audit/audit-context.interceptor';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { NursesModule } from './nurses/nurses.module';
 
 @Module({
   imports: [
@@ -105,6 +106,7 @@ import { InventoryModule } from './inventory/inventory.module';
     AuditModule,
     DiagnosticsModule,
     InventoryModule,
+    NursesModule,
   ],
   controllers: [AppController],
   providers: [
