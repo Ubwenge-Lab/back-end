@@ -114,15 +114,6 @@ export class HospitalsService {
 
     return this.prisma.doctor.findMany({
       where,
-      include: {
-        user: {
-          include: {
-            hospitalStaff: {
-              select: { firstName: true, lastName: true, phone: true },
-            },
-          },
-        },
-      },
       orderBy: [{ rating: 'desc' }, { specialization: 'asc' }],
     });
   }
@@ -287,11 +278,12 @@ export class HospitalsService {
 
     // 5. Revenue counts (total vs monthly)
     const revenueStatsResult = await this.prisma.$queryRaw<any[]>`
-      SELECT 
+      SELECT
         COALESCE(SUM("totalAmount"), 0)::float AS total_revenue,
         COALESCE(SUM(CASE WHEN "issuedAt" >= ${startOfMonth} AND "issuedAt" <= ${endOfMonth} THEN "totalAmount" ELSE 0 END), 0)::float AS monthly_revenue
       FROM hospital_invoices
       WHERE "hospitalId" = ${hospitalId}
+        AND "paymentStatus" = 'PAID'
     `;
     const totalRevenue = Number(revenueStatsResult[0]?.total_revenue ?? 0);
     const monthlyRevenue = Number(revenueStatsResult[0]?.monthly_revenue ?? 0);
@@ -384,6 +376,7 @@ export class HospitalsService {
       FROM   hospital_invoices
       WHERE  "hospitalId" = ${hospitalId}
         AND  "issuedAt" >= ${oldestStart}
+        AND  "paymentStatus" = 'PAID'
       GROUP  BY DATE_TRUNC('week', "issuedAt")
       ORDER  BY week_start ASC
     `;
