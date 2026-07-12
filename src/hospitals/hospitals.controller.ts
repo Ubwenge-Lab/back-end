@@ -37,7 +37,7 @@ export class HospitalsController {
   constructor(
     private readonly hospitalsService: HospitalsService,
     private readonly invoicesService: InvoicesService,
-  ) {}
+  ) { }
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.PATIENT, Role.HOSPITAL_ADMIN, Role.DOCTOR)
@@ -103,6 +103,20 @@ export class HospitalsController {
     @Body() dto: UpdateHospitalDto,
   ) {
     return this.hospitalsService.updateProfile(id, req.user.sub, dto);
+  }
+
+  @Get(':id/patients')
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)
+  @ApiOperation({
+    summary: 'Get all patients registered at this hospital. Optionally filter by doctorId.',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiQuery({ name: 'doctorId', required: false, description: 'Doctor UUID to filter patients by appointments' })
+  getHospitalPatients(
+    @Param('id') id: string,
+    @Query('doctorId') doctorId?: string,
+  ) {
+    return this.hospitalsService.getHospitalPatients(id, doctorId);
   }
 
   @Post(':id/patients/search')

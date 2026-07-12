@@ -20,7 +20,7 @@ export class HospitalsService {
     private readonly prisma: PrismaService,
     private readonly flutterwaveService: FlutterwaveService,
     private readonly notificationsService: NotificationsService,
-  ) {}
+  ) { }
 
   async findAll() {
     return this.prisma.hospital.findMany({
@@ -95,6 +95,46 @@ export class HospitalsService {
         mrn: generateMRN(),
       },
     });
+  }
+
+  async getHospitalPatients(hospitalId: string, doctorId?: string) {
+    let doctorPatientIds: string[] | undefined;
+
+    if (doctorId) {
+      const appointments = await this.prisma.appointment.findMany({
+        where: { hospitalId, doctorId },
+        select: { patientId: true },
+        distinct: ['patientId'],
+      });
+      doctorPatientIds = appointments.map((appt) => appt.patientId);
+
+      if (doctorPatientIds.length === 0) {
+        return [];
+      }
+    }
+
+    const registrations = await this.prisma.hospitalPatientRegistration.findMany({
+      where: {
+        hospitalId,
+        ...(doctorPatientIds ? { patientId: { in: doctorPatientIds } } : {}),
+      },
+      include: {
+        patient: {
+          include: {
+            user: {
+              select: { email: true, isActive: true },
+            },
+          },
+        },
+      },
+      orderBy: { registeredAt: 'desc' },
+    });
+
+    return registrations.map((reg) => ({
+      ...reg.patient,
+      hospitalMrn: reg.mrn,
+      registeredAt: reg.registeredAt,
+    }));
   }
 
   async findDoctors(
@@ -563,9 +603,9 @@ export class HospitalsService {
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
