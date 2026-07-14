@@ -149,6 +149,7 @@ model HospitalStaff {
   lastName           String
   phone              String?
   department         String?
+  technicianSpecialization TechnicianSpecialization?
   status             StaffStatus              @default(ACTIVE)
   tempPasswordHash   String?
   tempPasswordExpiry DateTime?
@@ -930,6 +931,11 @@ enum UserRole {
   TECHNICIAN
 }
 
+enum TechnicianSpecialization {
+  LAB
+  RADIOLOGY
+}
+
 enum PharmacyStatus {
   PENDING
   APPROVED
@@ -986,6 +992,8 @@ enum NotificationType {
   CONSULTATION_COMPLETED
   PRESCRIPTION_DISPATCHED
   INVOICE_GENERATED
+  LAB_RESULT_READY
+  LAB_ORDER_REJECTED
 }
 
 enum PrescriptionStatus {
@@ -1328,36 +1336,63 @@ enum DiagnosticType {
 
 enum DiagnosticStatus {
   PENDING
+  COLLECTED
+  IN_PROGRESS
   PROCESSING
   COMPLETED
+  REJECTED
   CANCELLED
 }
 
 model DiagnosticOrder {
-  id            String           @id @default(uuid())
-  patientId     String
-  doctorId      String
-  appointmentId String?
-  testType      DiagnosticType
-  icd10Code     String
-  status        DiagnosticStatus @default(PENDING)
-  findings      String?
-  resultValue   String?
-  fileUrl       String?
-  fileName      String?
-  fileType      String?
-  technicianId  String?
-  completedAt   DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id               String           @id @default(uuid())
+  patientId        String
+  doctorId         String
+  appointmentId    String?
+  testType         DiagnosticType
+  icd10Code        String
+  status           DiagnosticStatus @default(PENDING)
+  findings         String?
+  resultValue      String?
+  structuredResult Json?
+  fileUrl          String?
+  fileName         String?
+  fileType         String?
+  technicianId     String?
+  rejectedById     String?
+  rejectionReason  String?
+  rejectedAt       DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor      Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  revisions   LabResultRevision[]
 
   inventoryDeducted Boolean @default(false)
 
   @@map("diagnostic_orders")
+}
+
+model LabResultRevision {
+  id                String   @id @default(uuid())
+  diagnosticOrderId String
+  fileUrl           String?
+  fileName          String?
+  fileType          String?
+  findings          String?
+  resultValue       String?
+  structuredResult  Json?
+  correctedById     String
+  correctionReason  String
+  createdAt         DateTime @default(now())
+
+  diagnosticOrder DiagnosticOrder @relation(fields: [diagnosticOrderId], references: [id], onDelete: Cascade)
+
+  @@index([diagnosticOrderId])
+  @@map("lab_result_revisions")
 }
 
 model HospitalConsumableStock {

@@ -251,7 +251,7 @@ export class AuthService {
     }
 
     if (
-      ['PHARMACIST', 'CASHIER', 'NURSE', 'DOCTOR', 'RECEPTIONIST'].includes(
+      ['PHARMACIST', 'CASHIER', 'NURSE', 'DOCTOR', 'RECEPTIONIST', 'TECHNICIAN'].includes(
         user.role,
       )
     ) {
@@ -350,6 +350,7 @@ export class AuthService {
           user.role,
           undefined,
           hospitalStaff.hospitalId,
+          hospitalStaff.technicianSpecialization ?? undefined,
         );
         await this.updateRefreshToken(user.id, tokens.refreshToken);
 
@@ -372,6 +373,9 @@ export class AuthService {
             hospitalName: hospitalStaff.hospital.name,
             status: hospitalStaff.status,
             requiresPasswordChange: !!isUsingTempPassword,
+            ...(hospitalStaff.technicianSpecialization && {
+              specialization: hospitalStaff.technicianSpecialization,
+            }),
             ...(doctorProfile && {
               doctorId: doctorProfile.id,
               firstName: doctorProfile.firstName,
@@ -687,6 +691,12 @@ export class AuthService {
       }
     }
 
+    if (dto.role === 'TECHNICIAN' && !dto.technicianSpecialization) {
+      throw new BadRequestException(
+        'technicianSpecialization (LAB or RADIOLOGY) is required when onboarding a Technician',
+      );
+    }
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -719,6 +729,9 @@ export class AuthService {
           status: 'ACTIVE',
           tempPasswordHash: hashedPassword,
           tempPasswordExpiry,
+          ...(dto.role === 'TECHNICIAN' && {
+            technicianSpecialization: dto.technicianSpecialization,
+          }),
         },
       });
 
@@ -1193,10 +1206,12 @@ export class AuthService {
     role: string,
     status?: string,
     hospitalId?: string,
+    specialization?: string,
   ) {
     const payload: Record<string, any> = { sub: userId, email, role };
     if (status !== undefined) payload.status = status;
     if (hospitalId) payload.hospitalId = hospitalId;
+    if (specialization) payload.specialization = specialization;
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get('JWT_SECRET'),
