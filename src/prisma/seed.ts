@@ -719,8 +719,8 @@ async function main() {
   const robertUserId = await getUserId('robert@chuk.com');
   const ericUserId = await getUserId('eric@kingfaisal.com');
 
-  const robertDocId = '60000000-0000-0000-0000-000000000001';
-  const ericDocId = '60000000-0000-0000-0000-000000000002';
+  const robertDocId = '60000000-0000-4000-8000-000000000001';
+  const ericDocId = '60000000-0000-4000-8000-000000000002';
 
   if (robertUserId) {
     await prisma.doctor.upsert({
