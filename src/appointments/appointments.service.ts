@@ -232,6 +232,32 @@ export class AppointmentsService {
       });
     }
 
+    // Receptionists are scoped to today's appointments at their own hospital
+    // only — unlike HOSPITAL_ADMIN, who sees the full history, a receptionist
+    // is working a front-desk queue and doesn't need appointments from other
+    // days or other hospitals.
+    if (role === 'RECEPTIONIST') {
+      const staff = await this.prisma.hospitalStaff.findFirst({
+        where: { userId },
+      });
+      if (!staff)
+        throw new ForbiddenException('Receptionist profile not found');
+
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+
+      return this.prisma.appointment.findMany({
+        where: {
+          hospitalId: staff.hospitalId,
+          date: { gte: startOfDay, lte: endOfDay },
+        },
+        include: appointmentInclude,
+        orderBy: { date: 'asc' },
+      });
+    }
+
     throw new ForbiddenException('Access denied');
   }
 
