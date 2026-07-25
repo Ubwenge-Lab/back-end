@@ -38,7 +38,7 @@ export class HospitalsController {
   constructor(
     private readonly hospitalsService: HospitalsService,
     private readonly invoicesService: InvoicesService,
-  ) {}
+  ) { }
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.PATIENT, Role.HOSPITAL_ADMIN, Role.DOCTOR)
@@ -104,6 +104,21 @@ export class HospitalsController {
     @Body() dto: UpdateHospitalDto,
   ) {
     return this.hospitalsService.updateProfile(id, req.user.sub, dto);
+  }
+
+  @Get(':id/patients')
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST)
+  @ApiOperation({
+    summary: 'Get all patients registered at this hospital. Optionally filter by doctorId.',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiQuery({ name: 'doctorId', required: false, description: 'Doctor UUID to filter patients by appointments' })
+  getHospitalPatients(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Query('doctorId') doctorId?: string,
+  ) {
+    return this.hospitalsService.getHospitalPatients(id, req.user.sub, doctorId);
   }
 
   @Post(':id/patients/search')
@@ -237,13 +252,7 @@ export class HospitalsController {
     return this.hospitalsService.getWeeklyRevenue(id, req.user.sub);
   }
 
-  @Get(':id/patients')
-  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST)
-  @ApiOperation({ summary: 'Get all patients registered at this hospital' })
-  @ApiParam({ name: 'id', description: 'Hospital UUID' })
-  getHospitalPatients(@Param('id') id: string, @Req() req: any) {
-    return this.hospitalsService.getHospitalPatients(id, req.user.sub);
-  }
+
 
   @Post(':id/surgery-bookings/:bookingId/post-op')
   @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)

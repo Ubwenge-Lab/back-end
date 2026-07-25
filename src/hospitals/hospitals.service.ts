@@ -101,6 +101,50 @@ export class HospitalsService {
     });
   }
 
+  async getHospitalPatients(hospitalId: string, userId: string, doctorId?: string) {
+    // Ensure the user actually belongs to this hospital (Security check)
+    await this.validateHospitalAccess(hospitalId, userId);
+
+    let doctorPatientIds: string[] | undefined;
+
+    if (doctorId) {
+      const appointments = await this.prisma.appointment.findMany({
+        where: { hospitalId, doctorId },
+        select: { patientId: true },
+        distinct: ['patientId'],
+      });
+      doctorPatientIds = appointments.map((appt) => appt.patientId);
+
+      if (doctorPatientIds.length === 0) {
+        return [];
+      }
+    }
+
+    const registrations = await this.prisma.hospitalPatientRegistration.findMany({
+      where: {
+        hospitalId,
+        ...(doctorPatientIds ? { patientId: { in: doctorPatientIds } } : {}),
+      },
+      include: {
+        patient: {
+          include: {
+            user: {
+              select: { email: true, isActive: true },
+            },
+          },
+        },
+      },
+      orderBy: { registeredAt: 'desc' },
+    });
+
+    return registrations.map((reg) => ({
+      ...reg.patient,
+      mrn: reg.mrn, // for the nurse UI compatibility
+      hospitalMrn: reg.mrn, // for the doctor UI compatibility
+      registeredAt: reg.registeredAt,
+    }));
+  }
+
   async findDoctors(
     hospitalId: string,
     specialty?: string,
@@ -600,9 +644,9 @@ export class HospitalsService {
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
@@ -901,39 +945,7 @@ export class HospitalsService {
     };
   }
 
-  // ========================================
-  // GET HOSPITAL PATIENTS
-  // ========================================
-  async getHospitalPatients(hospitalId: string, userId: string) {
-    // Ensure the user actually belongs to this hospital (Security check)
-    await this.validateHospitalAccess(hospitalId, userId);
 
-    const registrations = await this.prisma.hospitalPatientRegistration.findMany({
-      where: { hospitalId },
-      include: {
-        patient: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            dateOfBirth: true,
-            gender: true,
-            phone: true,
-            address: true,
-            createdAt: true,
-          }
-        }
-      },
-      orderBy: { registeredAt: 'desc' },
-    });
-
-    // Flatten the response so the frontend gets a clean array of patients
-    return registrations.map(reg => ({
-      mrn: reg.mrn,
-      registeredAt: reg.registeredAt,
-      ...reg.patient
-    }));
-  }
 
   // ========================================
   // SURGERY MANAGEMENT (Post-Op & Inventory)

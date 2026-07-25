@@ -1,0 +1,279 @@
+{
+	"info": {
+		"_postman_id": "a1b2c3d4-e5f6-7g8h-9i0j-k1l2m3n4o5p6",
+		"name": "Ubwenge Patient Journey (Smoke Test)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Login as Patient",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"pm.collectionVariables.set(\"patientAccessToken\", jsonData.accessToken);"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"{{patientEmail}}\",\n    \"password\": \"{{patientPassword}}\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/auth/login",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"auth",
+						"login"
+					]
+				}
+			}
+		},
+		{
+			"name": "2. Queue: Book Appointment",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"pm.collectionVariables.set(\"appointmentId\", jsonData.appointment.id);"
+						],
+						"type": "text/javascript"
+					}
+				},
+				{
+					"listen": "prerequest",
+					"script": {
+						"exec": [
+							"var tomorrow = new Date();",
+							"tomorrow.setDate(tomorrow.getDate() + 1);",
+							"pm.collectionVariables.set(\"appointmentDate\", tomorrow.toISOString());"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{patientAccessToken}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"doctorId\": \"{{doctorId}}\",\n    \"date\": \"{{appointmentDate}}\",\n    \"reason\": \"Postman E2E Chest Pain\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/appointments/book",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"appointments",
+						"book"
+					]
+				}
+			}
+		},
+		{
+			"name": "3. Login as Doctor",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"var jsonData = pm.response.json();",
+							"pm.collectionVariables.set(\"doctorAccessToken\", jsonData.accessToken);"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"email\": \"{{doctorEmail}}\",\n    \"password\": \"{{doctorPassword}}\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/auth/login",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"auth",
+						"login"
+					]
+				}
+			}
+		},
+		{
+			"name": "4. Consultation: Complete & Bill",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{doctorAccessToken}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"items\": [\n        {\n            \"description\": \"General Checkup Fee (Postman E2E)\",\n            \"quantity\": 1,\n            \"unitCost\": 15000\n        }\n    ],\n    \"diagnosisSummary\": \"Patient is healthy\",\n    \"notes\": \"Routine clearance\"\n}"
+				},
+				"url": {
+					"raw": "{{baseUrl}}/api/appointments/{{appointmentId}}/consult",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"appointments",
+						"{{appointmentId}}",
+						"consult"
+					]
+				}
+			}
+		},
+		{
+			"name": "5. Doctor Views Live Dashboard",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{doctorAccessToken}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/doctors/dashboard",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"doctors",
+						"dashboard"
+					]
+				}
+			}
+		},
+		{
+			"name": "6. Doctor Views Scoped Patient List",
+			"request": {
+				"auth": {
+					"type": "bearer",
+					"bearer": [
+						{
+							"key": "token",
+							"value": "{{doctorAccessToken}}",
+							"type": "string"
+						}
+					]
+				},
+				"method": "GET",
+				"header": [],
+				"url": {
+					"raw": "{{baseUrl}}/api/hospitals/{{hospitalId}}/patients",
+					"host": [
+						"{{baseUrl}}"
+					],
+					"path": [
+						"api",
+						"hospitals",
+						"{{hospitalId}}",
+						"patients"
+					]
+				}
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "baseUrl",
+			"value": "http://localhost:4000",
+			"type": "string"
+		},
+		{
+			"key": "patientEmail",
+			"value": "alice@patient.com",
+			"type": "string"
+		},
+		{
+			"key": "patientPassword",
+			"value": "Test@1234",
+			"type": "string"
+		},
+		{
+			"key": "doctorEmail",
+			"value": "robert@chuk.com",
+			"type": "string"
+		},
+		{
+			"key": "doctorPassword",
+			"value": "Test@1234",
+			"type": "string"
+		},
+		{
+			"key": "doctorId",
+			"value": "60000000-0000-4000-8000-000000000001",
+			"type": "string"
+		},
+		{
+			"key": "hospitalId",
+			"value": "50000000-0000-0000-0000-000000000002",
+			"type": "string"
+		}
+	]
+}
