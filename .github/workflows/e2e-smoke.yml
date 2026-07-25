@@ -34,6 +34,9 @@ jobs:
       JWT_REFRESH_SECRET: ci-test-refresh-secret
       JWT_EXPIRATION: 15m
       JWT_REFRESH_EXPIRATION: 7d
+      FLW_SECRET_KEY: FLWSECK_TEST-dummy
+      FLW_PUBLIC_KEY: FLWPUBK_TEST-dummy
+      FLW_ENCRYPTION_KEY: FLWENCC_TEST-dummy
 
     steps:
       - uses: actions/checkout@v4
@@ -46,8 +49,8 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Run Prisma migrations
-        run: npx prisma migrate deploy
+      - name: Run Prisma db push
+        run: npx prisma db push --accept-data-loss
 
       - name: "Flush stale test data (safe: NODE_ENV=test, fresh CI database)"
         run: npx ts-node scripts/cleanup-staging.ts --confirm
