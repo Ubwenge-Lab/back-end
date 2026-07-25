@@ -30,6 +30,8 @@ model User {
   pharmacy               Pharmacy?       @relation("PharmacyOwner")
   staff                  Staff?
   SupportTickets         SupportTicket[]
+  sentMessages           ChatMessage[]   @relation("SentMessages")
+  receivedMessages       ChatMessage[]   @relation("ReceivedMessages")
 
   @@index([email])
   @@map("users")
@@ -463,6 +465,7 @@ model Appointment {
   sessionLogs           TelemedicineSessionLog[]
   diagnosticOrders      DiagnosticOrder[]
   triageVitals          TriageVitals?
+  chatMessages          ChatMessage[]
 
   @@index([patientId])
   @@index([hospitalId])
@@ -986,6 +989,7 @@ enum NotificationType {
   CONSULTATION_COMPLETED
   PRESCRIPTION_DISPATCHED
   INVOICE_GENERATED
+  NEW_CHAT_MESSAGE
 }
 
 enum PrescriptionStatus {
@@ -1475,4 +1479,24 @@ model AuditLog {
   @@index([action])
   @@index([actorRole])
   @@index([createdAt])
+}
+
+model ChatMessage {
+  id            String      @id @default(uuid())
+  appointmentId String
+  senderId      String
+  receiverId    String
+  content       String      @db.Text
+  isRead        Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  sender        User        @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver      User        @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+  @@map("chat_messages")
 }
