@@ -1189,6 +1189,28 @@ export class AuthService {
     const payload: Record<string, any> = { sub: userId, email, role };
     if (status !== undefined) payload.status = status;
     if (hospitalId) payload.hospitalId = hospitalId;
+
+    if (role === 'DOCTOR') {
+      const doctor = await this.prisma.doctor.findUnique({
+        where: { userId },
+        select: { firstName: true, lastName: true }
+      });
+      if (doctor) {
+        payload.firstName = doctor.firstName;
+        payload.lastName = doctor.lastName;
+      }
+    }
+    else if (role === 'HOSPITAL_ADMIN') {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { firstName: true, lastName: true }
+      });
+      if (user) {
+        payload.firstName = user.firstName;
+        payload.lastName = user.lastName;
+      }
+    }
+
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get('JWT_SECRET'),
