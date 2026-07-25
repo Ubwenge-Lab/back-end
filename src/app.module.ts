@@ -52,6 +52,7 @@ import { AuditContextInterceptor } from './audit/audit-context.interceptor';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { InventoryModule } from './inventory/inventory.module';
+import { NursesModule } from './nurses/nurses.module';
 import { ChatModule } from './chat/chat.module';
 
 @Module({
@@ -108,6 +109,7 @@ import { ChatModule } from './chat/chat.module';
     AuditModule,
     DiagnosticsModule,
     InventoryModule,
+    NursesModule,
     ChatModule,
   ],
   controllers: [AppController],
