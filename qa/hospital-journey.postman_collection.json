@@ -1,0 +1,625 @@
+{
+  "info": {
+    "name": "Hospital Patient Journey — Smoke Suite",
+    "description": "Covers the full clinical workflow: Book → Check-in → Triage → Labs → Consultation → Billing → Prescription.\n\nRun order: execute folders top-to-bottom. Each request captures its output into collection variables so subsequent steps stay in sync automatically.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_postman_id": "hospital-journey-smoke-v1"
+  },
+  "variable": [
+    { "key": "baseUrl",        "value": "http://localhost:4000",           "type": "string" },
+    { "key": "patientToken",   "value": "",                                 "type": "string" },
+    { "key": "doctorToken",    "value": "",                                 "type": "string" },
+    { "key": "nurseToken",     "value": "",                                 "type": "string" },
+    { "key": "receptionistToken", "value": "",                              "type": "string" },
+    { "key": "technicianToken","value": "",                                 "type": "string" },
+    { "key": "adminToken",     "value": "",                                 "type": "string" },
+    { "key": "doctorId",       "value": "",                                 "type": "string" },
+    { "key": "patientId",      "value": "",                                 "type": "string" },
+    { "key": "hospitalId",     "value": "",                                 "type": "string" },
+    { "key": "appointmentId",  "value": "",                                 "type": "string" },
+    { "key": "diagnosticOrderId", "value": "",                              "type": "string" },
+    { "key": "invoiceId",      "value": "",                                 "type": "string" },
+    { "key": "prescriptionId", "value": "",                                 "type": "string" }
+  ],
+  "item": [
+    {
+      "name": "0. Auth — obtain tokens",
+      "description": "Login as each role and store tokens in collection variables. Run all requests in this folder before the journey steps.",
+      "item": [
+        {
+          "name": "Login as Patient",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"patient@staging.test\",\n  \"password\": \"StagePass@1234\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.collectionVariables.set('patientToken', b.accessToken);",
+                "pm.collectionVariables.set('patientId',   b.user?.patientProfile?.id ?? '');"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Login as Doctor",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"doctor@staging.test\",\n  \"password\": \"StagePass@1234\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.collectionVariables.set('doctorToken', b.accessToken);",
+                "pm.collectionVariables.set('doctorId',   b.user?.doctorProfile?.id ?? '');"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Login as Nurse",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"nurse@staging.test\",\n  \"password\": \"StagePass@1234\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.collectionVariables.set('nurseToken', pm.response.json().accessToken);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Login as Receptionist",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"receptionist@staging.test\",\n  \"password\": \"StagePass@1234\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.collectionVariables.set('receptionistToken', pm.response.json().accessToken);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Login as Technician",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"technician@staging.test\",\n  \"password\": \"StagePass@1234\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "pm.collectionVariables.set('technicianToken', pm.response.json().accessToken);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "Login as Hospital Admin",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/auth/login", "host": ["{{baseUrl}}"], "path": ["auth", "login"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"hospital_admin@staging.test\",\n  \"password\": \"StagePass@1234\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('Status 200', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.collectionVariables.set('adminToken',  b.accessToken);",
+                "pm.collectionVariables.set('hospitalId', b.user?.hospital?.id ?? '');"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "1. Book appointment",
+      "item": [
+        {
+          "name": "POST /appointments/book",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{patientToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/appointments/book", "host": ["{{baseUrl}}"], "path": ["appointments", "book"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctorId\": \"{{doctorId}}\",\n  \"date\": \"{{$isoTimestamp}}\",\n  \"reason\": \"Postman smoke test — chest pain\",\n  \"type\": \"IN_PERSON\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('201 Created',  () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('Status is SCHEDULED', () => pm.expect(b.status).to.eql('SCHEDULED'));",
+                "pm.test('Has appointment id', () => pm.expect(b.id).to.be.a('string'));",
+                "pm.collectionVariables.set('appointmentId', b.id);"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "2. Check-in patient",
+      "item": [
+        {
+          "name": "PUT /appointments/:id/check-in",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{receptionistToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/{{appointmentId}}/check-in",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointments", "{{appointmentId}}", "check-in"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                "pm.test('Status is ARRIVED', () => pm.expect(pm.response.json().status).to.eql('ARRIVED'));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "3. Triage vitals",
+      "item": [
+        {
+          "name": "POST /appointments/:id/triage",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{nurseToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/{{appointmentId}}/triage",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointments", "{{appointmentId}}", "triage"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bloodPressure\": \"120/80\",\n  \"temperature\": 36.6,\n  \"weight\": 70.0,\n  \"heartRate\": 72,\n  \"oxygenSaturation\": 98,\n  \"notes\": \"Patient calm and cooperative.\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('Has triage id or appointment id', () => pm.expect(b).to.have.any.keys(['id', 'appointmentId']));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "4. Lab — order diagnostic test",
+      "item": [
+        {
+          "name": "POST /diagnostics/orders",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{doctorToken}}" }
+            ],
+            "url": { "raw": "{{baseUrl}}/diagnostics/orders", "host": ["{{baseUrl}}"], "path": ["diagnostics", "orders"] },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patientId}}\",\n  \"appointmentId\": \"{{appointmentId}}\",\n  \"testType\": \"BLOOD\",\n  \"icd10Code\": \"Z00.00\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "pm.test('Status PENDING',  () => pm.expect(b.status).to.eql('PENDING'));",
+                "pm.collectionVariables.set('diagnosticOrderId', b.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "GET /diagnostics/queue",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{technicianToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/queue",
+              "host": ["{{baseUrl}}"],
+              "path": ["diagnostics", "queue"],
+              "query": [{ "key": "status", "value": "PENDING" }]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK',         () => pm.response.to.have.status(200));",
+                "pm.test('Returns array',  () => pm.expect(pm.response.json()).to.be.an('array'));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "5. Lab — technician reports findings",
+      "item": [
+        {
+          "name": "PUT /diagnostics/orders/:id/findings",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{technicianToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/orders/{{diagnosticOrderId}}/findings",
+              "host": ["{{baseUrl}}"],
+              "path": ["diagnostics", "orders", "{{diagnosticOrderId}}", "findings"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\",\n  \"findings\": \"WBC normal. No abnormalities detected.\",\n  \"resultValue\": \"WBC 7.2 × 10⁹/L\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK',          () => pm.response.to.have.status(200));",
+                "pm.test('Status COMPLETED', () => pm.expect(pm.response.json().status).to.eql('COMPLETED'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "GET /diagnostics/patient/:patientId",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{doctorToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/patient/{{patientId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["diagnostics", "patient", "{{patientId}}"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK',        () => pm.response.to.have.status(200));",
+                "pm.test('Returns array', () => pm.expect(pm.response.json()).to.be.an('array'));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "6. Consultation — doctor completes encounter",
+      "item": [
+        {
+          "name": "GET /appointments/:id/patient-chart",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{doctorToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/{{appointmentId}}/patient-chart",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointments", "{{appointmentId}}", "patient-chart"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK', () => pm.response.to.have.status(200));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "POST /appointments/:id/consult",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{doctorToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/{{appointmentId}}/consult",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointments", "{{appointmentId}}", "consult"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diagnosisSummary\": \"Acute upper respiratory tract infection\",\n  \"doctorRecommendations\": \"Rest and fluids for 5 days.\",\n  \"items\": [\n    { \"description\": \"Nebulisation therapy\", \"quantity\": 1, \"unitCost\": 3000 }\n  ],\n  \"notes\": \"Patient responded well during consultation.\"\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                "const b = pm.response.json();",
+                "pm.test('Invoice generated', () => pm.expect(b).to.have.any.keys(['invoice', 'invoiceId']));",
+                "const invoiceId = b.invoice?.id ?? b.invoiceId;",
+                "if (invoiceId) pm.collectionVariables.set('invoiceId', invoiceId);"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "7. Billing — view and pay invoice",
+      "item": [
+        {
+          "name": "GET /invoices/:id (patient)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{patientToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK',       () => pm.response.to.have.status(200));",
+                "pm.test('Has totalAmount', () => pm.expect(pm.response.json()).to.have.property('totalAmount'));"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "PATCH /invoices/:id/pay (admin)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "pay"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK',    () => pm.response.to.have.status(200));",
+                "pm.test('PAID status', () => pm.expect(pm.response.json().paymentStatus).to.eql('PAID'));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "8. Pharmacy checkout — issue hospital prescription",
+      "item": [
+        {
+          "name": "POST /prescriptions/hospital-issue",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{doctorToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/prescriptions/hospital-issue",
+              "host": ["{{baseUrl}}"],
+              "path": ["prescriptions", "hospital-issue"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\":     \"{{patientId}}\",\n  \"hospitalId\":    \"{{hospitalId}}\",\n  \"appointmentId\": \"{{appointmentId}}\",\n  \"medications\": [\n    {\n      \"name\":      \"Amoxicillin 500mg\",\n      \"dosage\":    \"1 capsule\",\n      \"frequency\": \"3 times daily\",\n      \"duration\":  \"7 days\",\n      \"quantity\":  21\n    },\n    {\n      \"name\":      \"Paracetamol 500mg\",\n      \"dosage\":    \"1–2 tablets\",\n      \"frequency\": \"Every 6 hours as needed\",\n      \"duration\":  \"5 days\",\n      \"quantity\":  20\n    }\n  ],\n  \"refillsAllowed\": 0\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                "const b = pm.response.json();",
+                "const presc = b.prescription ?? b;",
+                "pm.test('Status APPROVED', () => pm.expect(presc.status).to.eql('APPROVED'));",
+                "pm.collectionVariables.set('prescriptionId', presc.id);"
+              ]
+            }
+          }]
+        },
+        {
+          "name": "GET /prescriptions/:id",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{doctorToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/prescriptions/{{prescriptionId}}",
+              "host": ["{{baseUrl}}"],
+              "path": ["prescriptions", "{{prescriptionId}}"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": [
+                "pm.test('200 OK',    () => pm.response.to.have.status(200));",
+                "pm.test('ID matches', () => pm.expect(pm.response.json().id).to.eql(pm.collectionVariables.get('prescriptionId')));"
+              ]
+            }
+          }]
+        }
+      ]
+    },
+    {
+      "name": "9. Guard smoke checks (negative path)",
+      "item": [
+        {
+          "name": "Book without token → 401",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "url": { "raw": "{{baseUrl}}/appointments/book", "host": ["{{baseUrl}}"], "path": ["appointments", "book"] },
+            "body": { "mode": "raw", "raw": "{}" }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"]
+            }
+          }]
+        },
+        {
+          "name": "Triage with Doctor token → 403",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Content-Type",  "value": "application/json" },
+              { "key": "Authorization", "value": "Bearer {{doctorToken}}" }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/{{appointmentId}}/triage",
+              "host": ["{{baseUrl}}"],
+              "path": ["appointments", "{{appointmentId}}", "triage"]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bloodPressure\": \"115/75\",\n  \"temperature\": 36.5,\n  \"weight\": 68,\n  \"heartRate\": 70,\n  \"oxygenSaturation\": 99\n}"
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('403 Forbidden', () => pm.response.to.have.status(403));"]
+            }
+          }]
+        },
+        {
+          "name": "Diagnostics queue with Patient token → 403",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{patientToken}}" }],
+            "url": { "raw": "{{baseUrl}}/diagnostics/queue", "host": ["{{baseUrl}}"], "path": ["diagnostics", "queue"] }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('403 Forbidden', () => pm.response.to.have.status(403));"]
+            }
+          }]
+        },
+        {
+          "name": "Pay invoice with Patient token → 403",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Authorization", "value": "Bearer {{patientToken}}" }],
+            "url": {
+              "raw": "{{baseUrl}}/invoices/{{invoiceId}}/pay",
+              "host": ["{{baseUrl}}"],
+              "path": ["invoices", "{{invoiceId}}", "pay"]
+            }
+          },
+          "event": [{
+            "listen": "test",
+            "script": {
+              "type": "text/javascript",
+              "exec": ["pm.test('403 Forbidden', () => pm.response.to.have.status(403));"]
+            }
+          }]
+        }
+      ]
+    }
+  ]
+}
