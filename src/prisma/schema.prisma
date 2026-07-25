@@ -30,6 +30,8 @@ model User {
   pharmacy               Pharmacy?       @relation("PharmacyOwner")
   staff                  Staff?
   SupportTickets         SupportTicket[]
+  sentMessages           ChatMessage[]   @relation("SentMessages")
+  receivedMessages       ChatMessage[]   @relation("ReceivedMessages")
 
   @@index([email])
   @@map("users")
@@ -464,6 +466,7 @@ model Appointment {
   sessionLogs           TelemedicineSessionLog[]
   diagnosticOrders      DiagnosticOrder[]
   triageVitals          TriageVitals?
+  chatMessages          ChatMessage[]
 
   @@index([patientId])
   @@index([hospitalId])
@@ -994,6 +997,7 @@ enum NotificationType {
   INVOICE_GENERATED
   LAB_RESULT_READY
   LAB_ORDER_REJECTED
+  NEW_CHAT_MESSAGE
 }
 
 enum PrescriptionStatus {
@@ -1140,6 +1144,7 @@ model SurgeryBooking {
   theater         OperatingTheater         @relation(fields: [theaterId], references: [id], onDelete: Cascade)
   patient         Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   teamAssignments SurgicalTeamAssignment[]
+  inventoryDeducted Boolean @default(false)
 
   @@index([theaterId])
   @@index([startTime, endTime])
@@ -1405,6 +1410,7 @@ model HospitalConsumableStock {
 
   hospital Hospital                  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
   boms     DiagnosticConsumableBOM[]
+  surgeryBoms SurgeryConsumableBOM[]
 
   @@unique([hospitalId, itemName])
   @@map("hospital_consumable_stock")
@@ -1420,6 +1426,18 @@ model DiagnosticConsumableBOM {
 
   @@unique([diagnosticType, consumableId])
   @@map("diagnostic_consumable_bom")
+}
+
+model SurgeryConsumableBOM {
+  id            String   @id @default(uuid())
+  procedureName String   // Matches SurgeryBooking.procedureName
+  consumableId  String
+  quantityUsed  Int
+
+  consumable HospitalConsumableStock @relation(fields: [consumableId], references: [id], onDelete: Cascade)
+
+  @@unique([procedureName, consumableId])
+  @@map("surgery_consumable_bom")
 }
 
 enum WardTier {
@@ -1496,4 +1514,24 @@ model AuditLog {
   @@index([action])
   @@index([actorRole])
   @@index([createdAt])
+}
+
+model ChatMessage {
+  id            String      @id @default(uuid())
+  appointmentId String
+  senderId      String
+  receiverId    String
+  content       String      @db.Text
+  isRead        Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  sender        User        @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver      User        @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+  @@map("chat_messages")
 }

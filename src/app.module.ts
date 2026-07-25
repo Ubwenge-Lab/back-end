@@ -46,12 +46,14 @@ import { ReportsModule } from './reports/reports.module';
 import { PlatformBillingModule } from './platform-billing/platform-billing.module';
 import { InpatientBillingModule } from './inpatient-billing/inpatient-billing.module';
 import { InpatientModule } from './inpatient/inpatient.module';
+import { ReferralsModule } from './referrals/referrals.module';
 import { AuditModule } from './audit/audit.module';
 import { AuditContextInterceptor } from './audit/audit-context.interceptor';
 import { SentryModule } from '@sentry/nestjs/setup';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { LabResultsModule } from './lab-results/lab-results.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
@@ -103,10 +105,12 @@ import { LabResultsModule } from './lab-results/lab-results.module';
     PlatformBillingModule,
     InpatientBillingModule,
     InpatientModule,
+    ReferralsModule,
     AuditModule,
     DiagnosticsModule,
     InventoryModule,
     LabResultsModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [
