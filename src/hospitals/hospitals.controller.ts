@@ -237,6 +237,14 @@ export class HospitalsController {
     return this.hospitalsService.getWeeklyRevenue(id, req.user.sub);
   }
 
+  @Get(':id/patients')
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST)
+  @ApiOperation({ summary: 'Get all patients registered at this hospital' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getHospitalPatients(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getHospitalPatients(id, req.user.sub);
+  }
+
   @Post(':id/surgery-bookings/:bookingId/post-op')
   @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)
   @ApiOperation({

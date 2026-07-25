@@ -53,6 +53,7 @@ import { SentryModule } from '@sentry/nestjs/setup';
 import { DiagnosticsModule } from './diagnostics/diagnostics.module';
 import { InventoryModule } from './inventory/inventory.module';
 import { LabResultsModule } from './lab-results/lab-results.module';
+import { NursesModule } from './nurses/nurses.module';
 import { ChatModule } from './chat/chat.module';
 
 @Module({
@@ -110,6 +111,7 @@ import { ChatModule } from './chat/chat.module';
     DiagnosticsModule,
     InventoryModule,
     LabResultsModule,
+    NursesModule,
     ChatModule,
   ],
   controllers: [AppController],

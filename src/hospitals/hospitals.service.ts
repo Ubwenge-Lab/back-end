@@ -297,11 +297,12 @@ export class HospitalsService {
 
     // 5. Revenue counts (total vs monthly)
     const revenueStatsResult = await this.prisma.$queryRaw<any[]>`
-      SELECT 
+      SELECT
         COALESCE(SUM("totalAmount"), 0)::float AS total_revenue,
         COALESCE(SUM(CASE WHEN "issuedAt" >= ${startOfMonth} AND "issuedAt" <= ${endOfMonth} THEN "totalAmount" ELSE 0 END), 0)::float AS monthly_revenue
       FROM hospital_invoices
       WHERE "hospitalId" = ${hospitalId}
+        AND "paymentStatus" = 'PAID'
     `;
     const totalRevenue = Number(revenueStatsResult[0]?.total_revenue ?? 0);
     const monthlyRevenue = Number(revenueStatsResult[0]?.monthly_revenue ?? 0);
@@ -394,6 +395,7 @@ export class HospitalsService {
       FROM   hospital_invoices
       WHERE  "hospitalId" = ${hospitalId}
         AND  "issuedAt" >= ${oldestStart}
+        AND  "paymentStatus" = 'PAID'
       GROUP  BY DATE_TRUNC('week', "issuedAt")
       ORDER  BY week_start ASC
     `;
@@ -900,6 +902,40 @@ export class HospitalsService {
   }
 
   // ========================================
+  // GET HOSPITAL PATIENTS
+  // ========================================
+  async getHospitalPatients(hospitalId: string, userId: string) {
+    // Ensure the user actually belongs to this hospital (Security check)
+    await this.validateHospitalAccess(hospitalId, userId);
+
+    const registrations = await this.prisma.hospitalPatientRegistration.findMany({
+      where: { hospitalId },
+      include: {
+        patient: {
+          select: {
+            id: true,
+            firstName: true,
+            lastName: true,
+            dateOfBirth: true,
+            gender: true,
+            phone: true,
+            address: true,
+            createdAt: true,
+          }
+        }
+      },
+      orderBy: { registeredAt: 'desc' },
+    });
+
+    // Flatten the response so the frontend gets a clean array of patients
+    return registrations.map(reg => ({
+      mrn: reg.mrn,
+      registeredAt: reg.registeredAt,
+      ...reg.patient
+    }));
+  }
+
+  // ========================================
   // SURGERY MANAGEMENT (Post-Op & Inventory)
   // ========================================
 
@@ -949,6 +985,4 @@ export class HospitalsService {
 
     return updatedBooking;
   }
-
-
 }

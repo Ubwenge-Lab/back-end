@@ -4,6 +4,7 @@ import {
   Injectable,
   ForbiddenException,
   BadRequestException,
+  Logger,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { ExportQueryDto } from './dto/export-query.dto';
@@ -12,6 +13,7 @@ import { buildCsv, CsvColumn } from './utils/csv-builder.util';
 
 @Injectable()
 export class ReportsService {
+  private readonly logger = new Logger(ReportsService.name);
   constructor(private readonly prisma: PrismaService) {}
 
   // ========================================
@@ -340,5 +342,89 @@ export class ReportsService {
           ? Number(r.avg_wait_minutes_approx)
           : null,
     }));
+  }
+
+
+  /**
+   * Generates weekly Ministry of Health statutory disease statistics.
+   * Aggregates by Region, Disease Category, Gender, and Age Group.
+   */
+  async getWeeklyMohStats() {
+    this.logger.log('Aggregating weekly MOH statutory statistics...');
+
+    // 1. Define the 7-day window
+    const endDate = new Date();
+    const startDate = new Date();
+    startDate.setDate(startDate.getDate() - 7);
+
+    // 2. Fetch the raw logs with patient demographics
+    const logs = await this.prisma.mohSurveillanceLog.findMany({
+      where: {
+        reportedAt: {
+          gte: startDate,
+          lte: endDate,
+        },
+      },
+      include: {
+        patient: {
+          select: {
+            dateOfBirth: true,
+            gender: true,
+            address: true,
+          },
+        },
+      },
+    });
+
+    // 3. Setup our aggregation map
+    // Key format: "Region|Disease|Gender|AgeGroup"
+    const aggregation = new Map<string, number>();
+
+    logs.forEach((log) => {
+      // Safely calculate age
+      let ageGroup = 'Unknown';
+      if (log.patient.dateOfBirth) {
+        const age = endDate.getFullYear() - log.patient.dateOfBirth.getFullYear();
+        if (age < 5) ageGroup = '0-4 years';
+        else if (age < 15) ageGroup = '5-14 years';
+        else if (age < 50) ageGroup = '15-49 years';
+        else ageGroup = '50+ years';
+      }
+
+      // Default demographics if missing
+      const gender = log.patient.gender || 'Unknown';
+      const region = log.patient.address 
+        ? log.patient.address.split(',')[0].trim() // Assumes address format like "Kigali, Gasabo"
+        : 'Unknown Region';
+
+      const disease = log.diseaseCategory;
+
+      // Create a unique composite key for this specific grouping
+      const key = `${region}|${disease}|${gender}|${ageGroup}`;
+      
+      // Increment the count
+      const currentCount = aggregation.get(key) || 0;
+      aggregation.set(key, currentCount + 1);
+    });
+
+    // 4. Format the map back into a clean JSON array for the Excel builder
+    const reportData = Array.from(aggregation.entries()).map(([key, count]) => {
+      const [region, diseaseCategory, gender, ageGroup] = key.split('|');
+      return {
+        region,
+        diseaseCategory,
+        gender,
+        ageGroup,
+        cases: count,
+      };
+    });
+
+    // Sort alphabetically by Region, then Disease
+    return reportData.sort((a, b) => {
+      if (a.region === b.region) {
+        return a.diseaseCategory.localeCompare(b.diseaseCategory);
+      }
+      return a.region.localeCompare(b.region);
+    });
   }
 }

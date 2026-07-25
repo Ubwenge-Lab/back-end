@@ -54,6 +54,7 @@
     "class-validator": "^0.14.3",
     "compression": "^1.8.1",
     "date-fns": "^4.2.1",
+    "exceljs": "^4.4.0",
     "helmet": "^8.1.0",
     "multer": "^2.1.1",
     "nest-winston": "^1.10.2",
