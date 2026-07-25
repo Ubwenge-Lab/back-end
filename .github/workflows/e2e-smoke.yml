@@ -1,0 +1,63 @@
+name: E2E Smoke Suite
+
+on:
+  pull_request:
+    branches: [dev, main]
+  push:
+    branches: [dev]
+
+jobs:
+  smoke:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:15
+        env:
+          POSTGRES_USER: evuze
+          POSTGRES_PASSWORD: evuze
+          POSTGRES_DB: evuze_staging
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://evuze:evuze@localhost:5432/evuze_staging?schema=public
+      DIRECT_URL: postgresql://evuze:evuze@localhost:5432/evuze_staging?schema=public
+      JWT_SECRET: ci-test-secret
+      JWT_REFRESH_SECRET: ci-test-refresh-secret
+      JWT_EXPIRATION: 15m
+      JWT_REFRESH_EXPIRATION: 7d
+      FLW_SECRET_KEY: FLWSECK_TEST-dummy
+      FLW_PUBLIC_KEY: FLWPUBK_TEST-dummy
+      FLW_ENCRYPTION_KEY: FLWENCC_TEST-dummy
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Prisma db push
+        run: npx prisma db push --accept-data-loss
+
+      - name: "Flush stale test data (safe: NODE_ENV=test, fresh CI database)"
+        run: npx ts-node scripts/cleanup-staging.ts --confirm
+
+      - name: Run full E2E smoke suite
+        run: npm run test:e2e -- hospital-smoke-journey.e2e-spec.ts cleanup-staging-safety.e2e-spec.ts
+
+      - name: Flush test data created by this run
+        if: always()
+        run: npx ts-node scripts/cleanup-staging.ts --confirm

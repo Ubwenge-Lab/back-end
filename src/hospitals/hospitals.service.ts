@@ -115,8 +115,14 @@ export class HospitalsService {
     return this.prisma.doctor.findMany({
       where,
       include: {
+        // SECURITY FIX: this previously used `include` with no `select` on
+        // `user`, which returns every column on User — password hash,
+        // refreshToken, verificationCode — to any caller of this endpoint,
+        // including Role.PATIENT. Scoped to just `email` now, the only User
+        // field anything downstream actually reads.
         user: {
-          include: {
+          select: {
+            email: true,
             hospitalStaff: {
               select: { firstName: true, lastName: true, phone: true },
             },
@@ -201,7 +207,7 @@ export class HospitalsService {
   }
 
   async getStats(hospitalId: string, userId: string) {
-    await this.validateHospitalAccess(hospitalId, userId);
+    await this.validateHospitalReadAccess(hospitalId, userId);
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -353,7 +359,7 @@ export class HospitalsService {
   }
 
   async getWeeklyRevenue(hospitalId: string, userId: string) {
-    await this.validateHospitalAccess(hospitalId, userId);
+    await this.validateHospitalReadAccess(hospitalId, userId);
 
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -435,6 +441,31 @@ export class HospitalsService {
       throw new ForbiddenException('You do not have access to this hospital');
     }
     return hospital;
+  }
+
+  /**
+   * Read-only variant of validateHospitalAccess for endpoints a hospital's
+   * own doctors should also be able to read (dashboard stats, weekly
+   * revenue), not just the hospital admin who owns the account. Deliberately
+   * NOT used for write endpoints (updateProfile, updateDrugStock) — a doctor
+   * belonging to a hospital should be able to see its stats, not edit its
+   * profile or stock.
+   */
+  private async validateHospitalReadAccess(hospitalId: string, userId: string) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+    if (!hospital) {
+      throw new NotFoundException('Hospital not found');
+    }
+    if (hospital.userId === userId) return hospital;
+
+    const doctor = await this.prisma.doctor.findFirst({
+      where: { userId, hospitalId },
+    });
+    if (doctor) return hospital;
+
+    throw new ForbiddenException('You do not have access to this hospital');
   }
 
   // ========================================

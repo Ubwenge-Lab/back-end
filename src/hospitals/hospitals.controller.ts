@@ -211,7 +211,7 @@ export class HospitalsController {
   }
 
   @Get(':id/dashboard/stats')
-  @Roles(Role.HOSPITAL_ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)
   @ApiOperation({ summary: 'Get hospital dashboard stats' })
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
   getStats(@Param('id') id: string, @Req() req: any) {
@@ -229,7 +229,7 @@ export class HospitalsController {
   }
 
   @Get(':id/dashboard/weekly-revenue')
-  @Roles(Role.HOSPITAL_ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)
   @ApiOperation({ summary: 'Get hospital weekly revenue for the last 4 weeks' })
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
   getWeeklyRevenue(@Param('id') id: string, @Req() req: any) {
