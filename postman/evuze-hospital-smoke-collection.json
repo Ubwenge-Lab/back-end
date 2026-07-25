@@ -1,0 +1,962 @@
+{
+  "info": {
+    "name": "Hospital Smoke Journey",
+    "description": "Patient journey through Queue, Consultation, Labs, Billing, and Pharmacy Checkout. Requires the TEST_SMOKE_* fixture users to exist in the target environment. Records created here are prefixed TEST_SMOKE_/test_smoke_ so cleanup-staging.ts can remove them.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "doctorEmail",
+      "value": "test_smoke_doctor@hospital.com",
+      "type": "string"
+    },
+    {
+      "key": "doctorPassword",
+      "value": "hashedpassword",
+      "type": "string"
+    },
+    {
+      "key": "receptionistEmail",
+      "value": "test_smoke_receptionist@hospital.com",
+      "type": "string"
+    },
+    {
+      "key": "receptionistPassword",
+      "value": "hashedpassword",
+      "type": "string"
+    },
+    {
+      "key": "nurseEmail",
+      "value": "test_smoke_nurse@hospital.com",
+      "type": "string"
+    },
+    {
+      "key": "nursePassword",
+      "value": "hashedpassword",
+      "type": "string"
+    },
+    {
+      "key": "technicianEmail",
+      "value": "test_smoke_technician@hospital.com",
+      "type": "string"
+    },
+    {
+      "key": "technicianPassword",
+      "value": "hashedpassword",
+      "type": "string"
+    },
+    {
+      "key": "patientEmail",
+      "value": "test_smoke_patient@patient.com",
+      "type": "string"
+    },
+    {
+      "key": "patientPassword",
+      "value": "hashedpassword",
+      "type": "string"
+    },
+    {
+      "key": "cashierEmail",
+      "value": "test_smoke_branchmanager@pharmacy.com",
+      "type": "string"
+    },
+    {
+      "key": "cashierPassword",
+      "value": "hashedpassword",
+      "type": "string"
+    },
+    {
+      "key": "doctorToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "receptionistToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "nurseToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "technicianToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "patientToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "cashierToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "doctorId",
+      "value": "",
+      "type": "string",
+      "description": "Set manually or via a lookup request; matches TEST-SMOKE-LIC-1 fixture doctor"
+    },
+    {
+      "key": "pharmacyId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "branchId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "medicationId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "appointmentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "hospitalInvoiceId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "labOrderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "orderId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "paymentId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "patientId",
+      "value": "",
+      "type": "string",
+      "description": "DB id of the TEST_SMOKE_ patient fixture; set manually or via a lookup request"
+    },
+    {
+      "key": "amountReceived",
+      "value": "",
+      "type": "string",
+      "description": "Set to the order patientPayment/total before running \"Cashier records payment\" \u2014 e.g. via a prior GET /orders/:id request"
+    }
+  ],
+  "item": [
+    {
+      "name": "Setup / Login",
+      "description": "Logs in as each fixture actor and stores the access token as a collection variable for the requests that follow. Fixture users must already exist in the target environment (TEST_SMOKE_ prefix, same as the Jest suite's beforeAll).",
+      "item": [
+        {
+          "name": "Login - Doctor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{doctorEmail}}\",\n  \"password\": \"{{doctorPassword}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login - Doctor - status 200/201', function () {",
+                  "    pm.expect([200,201]).to.include(pm.response.code);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.test('Login - Doctor - accessToken present', function () {",
+                  "    pm.expect(data.accessToken).to.be.a('string');",
+                  "});",
+                  "if (data.accessToken) { pm.collectionVariables.set('doctorToken', data.accessToken); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Receptionist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{receptionistEmail}}\",\n  \"password\": \"{{receptionistPassword}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login - Receptionist - status 200/201', function () {",
+                  "    pm.expect([200,201]).to.include(pm.response.code);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.test('Login - Receptionist - accessToken present', function () {",
+                  "    pm.expect(data.accessToken).to.be.a('string');",
+                  "});",
+                  "if (data.accessToken) { pm.collectionVariables.set('receptionistToken', data.accessToken); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Nurse",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{nurseEmail}}\",\n  \"password\": \"{{nursePassword}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login - Nurse - status 200/201', function () {",
+                  "    pm.expect([200,201]).to.include(pm.response.code);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.test('Login - Nurse - accessToken present', function () {",
+                  "    pm.expect(data.accessToken).to.be.a('string');",
+                  "});",
+                  "if (data.accessToken) { pm.collectionVariables.set('nurseToken', data.accessToken); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Technician",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{technicianEmail}}\",\n  \"password\": \"{{technicianPassword}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login - Technician - status 200/201', function () {",
+                  "    pm.expect([200,201]).to.include(pm.response.code);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.test('Login - Technician - accessToken present', function () {",
+                  "    pm.expect(data.accessToken).to.be.a('string');",
+                  "});",
+                  "if (data.accessToken) { pm.collectionVariables.set('technicianToken', data.accessToken); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Patient",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{patientEmail}}\",\n  \"password\": \"{{patientPassword}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login - Patient - status 200/201', function () {",
+                  "    pm.expect([200,201]).to.include(pm.response.code);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.test('Login - Patient - accessToken present', function () {",
+                  "    pm.expect(data.accessToken).to.be.a('string');",
+                  "});",
+                  "if (data.accessToken) { pm.collectionVariables.set('patientToken', data.accessToken); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login - Cashier (Branch Manager)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "auth",
+                "login"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{cashierEmail}}\",\n  \"password\": \"{{cashierPassword}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Login - Cashier (Branch Manager) - status 200/201', function () {",
+                  "    pm.expect([200,201]).to.include(pm.response.code);",
+                  "});",
+                  "const data = pm.response.json();",
+                  "pm.test('Login - Cashier (Branch Manager) - accessToken present', function () {",
+                  "    pm.expect(data.accessToken).to.be.a('string');",
+                  "});",
+                  "if (data.accessToken) { pm.collectionVariables.set('cashierToken', data.accessToken); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "0. Booking",
+      "item": [
+        {
+          "name": "Patient books an appointment with the doctor",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{patientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/book",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "appointments",
+                "book"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"doctorId\": \"{{doctorId}}\",\n  \"date\": \"{{$isoTimestamp}}\",\n  \"reason\": \"Smoke test consultation\",\n  \"type\": \"IN_PERSON\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.test('appointment.id is defined', function () { pm.expect(data.appointment).to.have.property('id'); });",
+                  "pm.test('appointment.status is SCHEDULED', function () { pm.expect(data.appointment.status).to.eql('SCHEDULED'); });",
+                  "if (data.appointment && data.appointment.id) { pm.collectionVariables.set('appointmentId', data.appointment.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "1. Queue (Check-in)",
+      "item": [
+        {
+          "name": "Receptionist checks the patient in (SCHEDULED -> ARRIVED)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{receptionistToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/{{appointmentId}}/check-in",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointmentId}}",
+                "check-in"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.test('status is ARRIVED', function () { pm.expect(data.status).to.eql('ARRIVED'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Second check-in attempt is rejected (status guard)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{receptionistToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/{{appointmentId}}/check-in",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointmentId}}",
+                "check-in"
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 409 - already checked in', function () { pm.response.to.have.status(409); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Nurse records triage vitals (ARRIVED -> READY_FOR_DOCTOR)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{nurseToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/{{appointmentId}}/triage",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointmentId}}",
+                "triage"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"bloodPressure\": \"120/80\",\n  \"temperature\": 37.1,\n  \"weight\": 68,\n  \"heartRate\": 76,\n  \"oxygenSaturation\": 98,\n  \"notes\": \"Patient alert and oriented\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.test('status is READY_FOR_DOCTOR', function () { pm.expect(data.status).to.eql('READY_FOR_DOCTOR'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "2. Consultation",
+      "item": [
+        {
+          "name": "Doctor completes the consult and an invoice is generated",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{doctorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/appointments/{{appointmentId}}/consult",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "appointments",
+                "{{appointmentId}}",
+                "consult"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"diagnosisSummary\": \"Acute pharyngitis\",\n  \"doctorRecommendations\": \"Rest, fluids, review in 5 days\",\n  \"items\": [\n    {\n      \"description\": \"Consultation fee\",\n      \"quantity\": 1,\n      \"unitCost\": 5000\n    },\n    {\n      \"description\": \"Triage fee\",\n      \"quantity\": 1,\n      \"unitCost\": 2000\n    }\n  ]\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.test('invoice.id is defined', function () { pm.expect(data.invoice).to.have.property('id'); });",
+                  "pm.test('invoice.totalAmount is 7000', function () { pm.expect(Number(data.invoice.totalAmount)).to.eql(7000); });",
+                  "pm.test('invoice.paymentStatus is UNPAID', function () { pm.expect(data.invoice.paymentStatus).to.eql('UNPAID'); });",
+                  "if (data.invoice && data.invoice.id) { pm.collectionVariables.set('hospitalInvoiceId', data.invoice.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "3. Labs",
+      "item": [
+        {
+          "name": "Doctor requests a diagnostic order tied to the appointment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{doctorToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/orders",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "diagnostics",
+                "orders"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"patientId\": \"{{patientId}}\",\n  \"appointmentId\": \"{{appointmentId}}\",\n  \"testType\": \"BLOOD\",\n  \"icd10Code\": \"J02.9\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.test('id is defined', function () { pm.expect(data).to.have.property('id'); });",
+                  "pm.test('status is PENDING', function () { pm.expect(data.status).to.eql('PENDING'); });",
+                  "if (data.id) { pm.collectionVariables.set('labOrderId', data.id); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Order appears in the technician queue",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{technicianToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/queue?status=PENDING",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "diagnostics",
+                "queue"
+              ],
+              "query": [
+                {
+                  "key": "status",
+                  "value": "PENDING"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "const labOrderId = pm.collectionVariables.get('labOrderId');",
+                  "const ids = data.map(function (o) { return o.id; });",
+                  "pm.test('labOrderId is in the queue', function () { pm.expect(ids).to.include(labOrderId); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Technician reports findings and marks the order COMPLETED",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{technicianToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/diagnostics/orders/{{labOrderId}}/findings",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "diagnostics",
+                "orders",
+                "{{labOrderId}}",
+                "findings"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"COMPLETED\",\n  \"findings\": \"No abnormalities detected\",\n  \"resultValue\": \"WBC 6.2 x10^9/L\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 200', function () { pm.response.to.have.status(200); });",
+                  "const data = pm.response.json();",
+                  "pm.test('status is COMPLETED', function () { pm.expect(data.status).to.eql('COMPLETED'); });",
+                  "pm.test('completedAt is defined', function () { pm.expect(data.completedAt).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "4. Billing",
+      "item": [
+        {
+          "name": "Settles the hospital invoice via the payment webhook",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/webhook/hospital",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "webhook",
+                "hospital"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"invoiceId\": \"{{hospitalInvoiceId}}\",\n  \"status\": \"SUCCESSFUL\",\n  \"transactionRef\": \"TEST-SMOKE-TXN-001\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.test(\"response status is 'success'\", function () { pm.expect(data.status).to.eql('success'); });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Pharmacy Checkout",
+      "item": [
+        {
+          "name": "Patient checks out an order for pickup, paying CASH",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{patientToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/checkout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "checkout"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"pharmacyId\": \"{{pharmacyId}}\",\n  \"branchId\": \"{{branchId}}\",\n  \"type\": \"PICKUP\",\n  \"items\": [\n    {\n      \"medicationId\": \"{{medicationId}}\",\n      \"quantity\": 2\n    }\n  ],\n  \"paymentMethod\": \"CASH\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.test('order.id is defined', function () { pm.expect(data.order).to.have.property('id'); });",
+                  "pm.test('payment.paymentId is defined', function () { pm.expect(data.payment).to.have.property('paymentId'); });",
+                  "if (data.order && data.order.id) { pm.collectionVariables.set('orderId', data.order.id); }",
+                  "if (data.payment && data.payment.paymentId) { pm.collectionVariables.set('paymentId', data.payment.paymentId); }"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cashier (branch manager) records the in-person cash payment",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Authorization",
+                "value": "Bearer {{cashierToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/payments/record",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "payments",
+                "record"
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"orderId\": \"{{orderId}}\",\n  \"paymentMethod\": \"CASH\",\n  \"amountReceived\": \"{{amountReceived}}\"\n}"
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "// amountReceived should equal the order's patientPayment/total.",
+                  "// Set this collection variable manually before running, or wire up",
+                  "// a prior GET /orders/:id request to populate it automatically."
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('status 201', function () { pm.response.to.have.status(201); });",
+                  "const data = pm.response.json();",
+                  "pm.test('success is true', function () { pm.expect(data.success).to.eql(true); });",
+                  "pm.test('receiptNumber is defined', function () { pm.expect(data.receiptNumber).to.not.be.undefined; });"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

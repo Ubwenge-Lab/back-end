@@ -6,6 +6,8 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
+    "cleanup:staging": "ts-node scripts/cleanup-staging.ts",
+    "pretest:e2e": "ts-node scripts/cleanup-staging.ts --confirm",
     "build": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
     "start": "node dist/main.js",
