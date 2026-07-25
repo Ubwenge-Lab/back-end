@@ -57,7 +57,7 @@ export class AppointmentsController {
   // ========================================
 
   @Get()
-  @Roles(Role.PATIENT, Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN)
+  @Roles(Role.PATIENT, Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN, Role.RECEPTIONIST)
   @ApiOperation({ summary: "List appointments (scoped to the caller's role)" })
   @ApiQuery({ name: 'from', required: false, example: '2026-06-02', description: 'Filter start date (ISO 8601). Applied to DOCTOR role.' })
   @ApiQuery({ name: 'to',   required: false, example: '2026-06-08', description: 'Filter end date (ISO 8601). Applied to DOCTOR role.' })
@@ -153,7 +153,7 @@ export class AppointmentsController {
   }
 
   @Put(':id/check-in')
-  // @Roles(Role.RECEPTIONIST)
+  @Roles(Role.RECEPTIONIST)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary: 'Check in an arrived patient',
