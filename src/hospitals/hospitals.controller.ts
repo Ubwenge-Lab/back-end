@@ -107,7 +107,7 @@ export class HospitalsController {
   }
 
   @Get(':id/patients')
-  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST)
   @ApiOperation({
     summary: 'Get all patients registered at this hospital. Optionally filter by doctorId.',
   })
@@ -115,9 +115,10 @@ export class HospitalsController {
   @ApiQuery({ name: 'doctorId', required: false, description: 'Doctor UUID to filter patients by appointments' })
   getHospitalPatients(
     @Param('id') id: string,
+    @Req() req: any,
     @Query('doctorId') doctorId?: string,
   ) {
-    return this.hospitalsService.getHospitalPatients(id, doctorId);
+    return this.hospitalsService.getHospitalPatients(id, req.user.sub, doctorId);
   }
 
   @Post(':id/patients/search')
@@ -251,13 +252,7 @@ export class HospitalsController {
     return this.hospitalsService.getWeeklyRevenue(id, req.user.sub);
   }
 
-  @Get(':id/patients')
-  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST)
-  @ApiOperation({ summary: 'Get all patients registered at this hospital' })
-  @ApiParam({ name: 'id', description: 'Hospital UUID' })
-  getHospitalPatients(@Param('id') id: string, @Req() req: any) {
-    return this.hospitalsService.getHospitalPatients(id, req.user.sub);
-  }
+
 
   @Post(':id/surgery-bookings/:bookingId/post-op')
   @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)

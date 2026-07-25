@@ -101,7 +101,10 @@ export class HospitalsService {
     });
   }
 
-  async getHospitalPatients(hospitalId: string, doctorId?: string) {
+  async getHospitalPatients(hospitalId: string, userId: string, doctorId?: string) {
+    // Ensure the user actually belongs to this hospital (Security check)
+    await this.validateHospitalAccess(hospitalId, userId);
+
     let doctorPatientIds: string[] | undefined;
 
     if (doctorId) {
@@ -136,7 +139,8 @@ export class HospitalsService {
 
     return registrations.map((reg) => ({
       ...reg.patient,
-      hospitalMrn: reg.mrn,
+      mrn: reg.mrn, // for the nurse UI compatibility
+      hospitalMrn: reg.mrn, // for the doctor UI compatibility
       registeredAt: reg.registeredAt,
     }));
   }
@@ -941,39 +945,7 @@ export class HospitalsService {
     };
   }
 
-  // ========================================
-  // GET HOSPITAL PATIENTS
-  // ========================================
-  async getHospitalPatients(hospitalId: string, userId: string) {
-    // Ensure the user actually belongs to this hospital (Security check)
-    await this.validateHospitalAccess(hospitalId, userId);
 
-    const registrations = await this.prisma.hospitalPatientRegistration.findMany({
-      where: { hospitalId },
-      include: {
-        patient: {
-          select: {
-            id: true,
-            firstName: true,
-            lastName: true,
-            dateOfBirth: true,
-            gender: true,
-            phone: true,
-            address: true,
-            createdAt: true,
-          }
-        }
-      },
-      orderBy: { registeredAt: 'desc' },
-    });
-
-    // Flatten the response so the frontend gets a clean array of patients
-    return registrations.map(reg => ({
-      mrn: reg.mrn,
-      registeredAt: reg.registeredAt,
-      ...reg.patient
-    }));
-  }
 
   // ========================================
   // SURGERY MANAGEMENT (Post-Op & Inventory)
