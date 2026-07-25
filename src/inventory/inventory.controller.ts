@@ -11,7 +11,7 @@ import { AdjustStockDto } from './dto/adjust-stock.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
-import { UserRole } from '@prisma/client';
+import { Role } from '../common/constants/role.enum';
 
 @Controller('inventory')
 @UseGuards(JwtAuthGuard, RolesGuard)
@@ -20,9 +20,9 @@ export class InventoryController {
 
   @Patch('consumables/:id/adjust')
   @Roles(
-    UserRole.HOSPITAL_ADMIN as any,
-    UserRole.PHARMACY as any,
-    UserRole.PHARMACIST as any,
+    Role.HOSPITAL_ADMIN,
+    Role.PHARMACY,
+    Role.PHARMACIST,
   )
   async adjustConsumableStock(
     @Param('id', ParseUUIDPipe) stockId: string,
