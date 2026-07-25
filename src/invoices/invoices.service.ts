@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { EventEmitter2 } from '@nestjs/event-emitter';
 import { PrismaService } from '../prisma/prisma.service';
-import { HospitalBillingStatus, Prisma } from '@prisma/client';
+import { HospitalBillingStatus } from '@prisma/client';
 import { InvoicePaidEvent } from '../documents/invoice-paid.event';
 
 @Injectable()
@@ -131,38 +131,29 @@ export class InvoicesService {
       }
     }
 
-    // Serializable transaction prevents two concurrent requests from both
-    // passing the PAID status check and double-settling the same invoice.
-    const updated = await this.prisma.$transaction(
-      async (tx) => {
-        const invoice = await tx.hospitalInvoice.findUnique({ where: { id } });
-        if (!invoice) throw new NotFoundException('Invoice not found');
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.hospitalInvoice.findUnique({ where: { id } });
+      if (!invoice) throw new NotFoundException('Invoice not found');
 
-        if (invoice.paymentStatus === HospitalBillingStatus.PAID) {
-          throw new BadRequestException('Invoice is already paid');
-        }
+      if (invoice.paymentStatus === HospitalBillingStatus.PAID) {
+        throw new BadRequestException('Invoice is already paid');
+      }
 
-        return tx.hospitalInvoice.update({
-          where: { id },
-          data: { paymentStatus: HospitalBillingStatus.PAID },
-          include: {
-            ...hospitalInvoiceInclude,
-            patient: {
-              select: {
-                firstName: true,
-                lastName: true,
-                phone: true,
-                user: { select: { email: true } },
-              },
-            },
-          },
-        });
-      },
-      { isolationLevel: Prisma.TransactionIsolationLevel.Serializable },
-    );
+      return tx.hospitalInvoice.update({
+        where: { id },
+        data: { paymentStatus: HospitalBillingStatus.PAID },
+        include: hospitalInvoiceInclude,
+      });
+    });
 
-    // Fire async — does not block the response
-    const patientEmail = updated.patient?.user?.email;
+    // Fetch email separately so the Serializable-free transaction above
+    // never has to JOIN through Patient (a clinical model with async audit hooks).
+    const patientUser = await this.prisma.patient.findUnique({
+      where: { id: updated.patientId },
+      select: { user: { select: { email: true } } },
+    });
+    const patientEmail = patientUser?.user?.email;
+
     if (patientEmail) {
       this.eventEmitter.emit(
         'invoice.paid',

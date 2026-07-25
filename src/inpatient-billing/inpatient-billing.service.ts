@@ -89,7 +89,7 @@ export class InpatientBillingService {
       data: {
         admissionId,
         itemName: data.itemName,
-        category: data.category,
+        category: data.category ?? 'GENERAL',
         quantity: data.quantity,
         unitCost: data.unitCost,
         totalCost: totalCost,

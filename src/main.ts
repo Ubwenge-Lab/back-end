@@ -21,7 +21,7 @@ import * as Sentry from '@sentry/nestjs'
 import { nodeProfilingIntegration } from '@sentry/profiling-node'
 
 Sentry.init({
-  dsn: process.env.SENTRY_DSN,
+  // dsn is read automatically from process.env.SENTRY_DSN by the SDK
   tracesSampleRate: 1.0,
   profilesSampleRate: 1.0,
   integrations: [
