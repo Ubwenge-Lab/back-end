@@ -34,6 +34,12 @@ import {
 } from './dto';
 import { randomInt, randomBytes } from 'crypto';
 
+// Small helper so `catch (error)` blocks can safely read a message off an
+// `unknown`-typed error without every call site needing its own type guard.
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -99,7 +105,7 @@ export class AuthService {
       const tokens = await Sentry.startSpan({ name: "Generate Auth Tokens" }, async () => {
         return await this.generateTokens(user.id, user.email, user.role);
       });
-      
+
       await this.updateRefreshToken(user.id, tokens.refreshToken);
       void this.auditService.log({
         actorId: user.id,
@@ -354,14 +360,6 @@ export class AuthService {
         );
         await this.updateRefreshToken(user.id, tokens.refreshToken);
 
-        let doctorProfile: { id: string; firstName: string | null; lastName: string | null; specialization: string } | null = null;
-        if (user.role === 'DOCTOR') {
-          doctorProfile = await this.prisma.doctor.findFirst({
-            where: { userId: user.id },
-            select: { id: true, firstName: true, lastName: true, specialization: true },
-          });
-        }
-
         return {
           user: {
             id: user.id,
@@ -375,12 +373,6 @@ export class AuthService {
             requiresPasswordChange: !!isUsingTempPassword,
             ...(hospitalStaff.technicianSpecialization && {
               specialization: hospitalStaff.technicianSpecialization,
-            }),
-            ...(doctorProfile && {
-              doctorId: doctorProfile.id,
-              firstName: doctorProfile.firstName,
-              lastName: doctorProfile.lastName,
-              specialization: doctorProfile.specialization,
             }),
           },
           ...tokens,
@@ -507,7 +499,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send patient verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -579,7 +571,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send pharmacy verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -648,7 +640,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send hospital verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -762,7 +754,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send hospital staff credentials email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -881,7 +873,7 @@ export class AuthService {
       } catch (error) {
         this.logger.error(
           'Failed to notify super admins about new hospital',
-          error?.message || error,
+          getErrorMessage(error),
         );
       }
     }
@@ -929,7 +921,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to resend verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -969,7 +961,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send password reset email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
