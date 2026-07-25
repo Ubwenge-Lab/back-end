@@ -93,6 +93,7 @@ model Doctor {
   updatedAt              DateTime                 @updatedAt
   firstName              String?
   lastName               String?
+  phone                  String?
   signatureUrl           String?
   isDepartmentHead       Boolean                  @default(false)
   appointments           Appointment[]
