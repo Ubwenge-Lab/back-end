@@ -1132,6 +1132,7 @@ model SurgeryBooking {
   theater         OperatingTheater         @relation(fields: [theaterId], references: [id], onDelete: Cascade)
   patient         Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   teamAssignments SurgicalTeamAssignment[]
+  inventoryDeducted Boolean @default(false)
 
   @@index([theaterId])
   @@index([startTime, endTime])
@@ -1370,6 +1371,7 @@ model HospitalConsumableStock {
 
   hospital Hospital                  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
   boms     DiagnosticConsumableBOM[]
+  surgeryBoms SurgeryConsumableBOM[]
 
   @@unique([hospitalId, itemName])
   @@map("hospital_consumable_stock")
@@ -1385,6 +1387,18 @@ model DiagnosticConsumableBOM {
 
   @@unique([diagnosticType, consumableId])
   @@map("diagnostic_consumable_bom")
+}
+
+model SurgeryConsumableBOM {
+  id            String   @id @default(uuid())
+  procedureName String   // Matches SurgeryBooking.procedureName
+  consumableId  String
+  quantityUsed  Int
+
+  consumable HospitalConsumableStock @relation(fields: [consumableId], references: [id], onDelete: Cascade)
+
+  @@unique([procedureName, consumableId])
+  @@map("surgery_consumable_bom")
 }
 
 enum WardTier {
