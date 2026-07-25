@@ -28,6 +28,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
+import { LogPostOpReportDto } from './dto/surgery-scheduling.dto';
 
 @ApiTags('Hospitals')
 @Controller('hospitals')
@@ -242,6 +243,27 @@ export class HospitalsController {
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
   getHospitalPatients(@Param('id') id: string, @Req() req: any) {
     return this.hospitalsService.getHospitalPatients(id, req.user.sub);
+  }
+
+  @Post(':id/surgery-bookings/:bookingId/post-op')
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)
+  @ApiOperation({
+    summary: 'Log post-operation report and complete surgery',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiParam({ name: 'bookingId', description: 'Surgery Booking UUID' })
+  logPostOpReport(
+    @Param('id') hospitalId: string,
+    @Param('bookingId') bookingId: string,
+    @Req() req: any,
+    @Body() dto: LogPostOpReportDto,
+  ) {
+    return this.hospitalsService.logPostOpReport(
+      hospitalId,
+      req.user.sub,
+      bookingId,
+      dto,
+    );
   }
 
   // ========================================

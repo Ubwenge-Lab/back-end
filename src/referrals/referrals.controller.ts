@@ -13,7 +13,7 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
 
 @ApiTags('Referrals')
-@Controller('api/referrals')
+@Controller('referrals')
 @UseGuards(JwtAuthGuard, RolesGuard)
 @ApiBearerAuth()
 export class ReferralsController {
