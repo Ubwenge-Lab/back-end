@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsService } from '../notifications/notifications.service';
-import { InventoryService } from '../inventory/inventory.service';
+import { EventEmitter2 } from '@nestjs/event-emitter';
 import { CreateDiagnosticOrderDto, UpdateDiagnosticOrderFindingsDto } from './dto';
 import { DiagnosticStatus, DiagnosticType, NotificationType, UserRole } from '@prisma/client';
 
@@ -16,7 +16,7 @@ export class DiagnosticsService {
   constructor(
     private prisma: PrismaService,
     private notificationsService: NotificationsService,
-    private inventoryService: InventoryService,
+    private eventEmitter: EventEmitter2,
   ) {}
 
   // 1. Doctor requests a diagnostic test
@@ -63,6 +63,7 @@ export class DiagnosticsService {
       },
     });
   }
+
 
   // 2. Technicians view the queue of requests
   async getQueue(status?: DiagnosticStatus) {
@@ -178,15 +179,11 @@ export class DiagnosticsService {
         });
       }
 
-      // Auto-deduct inventory
-      try {
-        await this.inventoryService.deductConsumablesForDiagnostic(order.id);
-      } catch (err) {
-        // Log but don't fail the order completion if inventory deduction throws an exception (e.g., negative stock warning)
-        // Optionally, this could be handled differently depending on business logic
-        console.error('Failed to deduct inventory for diagnostic order:', err);
-      }
-    }
+      // Emit event to trigger background inventory deduction
+            this.eventEmitter.emit('diagnostic.completed', {
+              orderId: order.id,
+            });
+          }
 
     return updatedOrder;
   }

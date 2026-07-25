@@ -110,4 +110,80 @@ export class InventoryService {
 
     this.logger.log(`Successfully deducted inventory for diagnostic order ${diagnosticOrderId}`);
   }
+
+  /**
+   * Intercepts surgery completion and deducts consumables from inventory
+   */
+  async deductConsumablesForSurgery(bookingId: string) {
+    const booking = await this.prisma.surgeryBooking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new NotFoundException(`Surgery Booking ${bookingId} not found`);
+    }
+
+    if (booking.inventoryDeducted) {
+      this.logger.warn(`Inventory already deducted for surgery booking ${bookingId}`);
+      return;
+    }
+
+    const hospitalId = booking.hospitalId;
+
+    // Fetch the BOM mapping for this specific surgical procedure
+    const boms = await this.prisma.surgeryConsumableBOM.findMany({
+      where: { procedureName: booking.procedureName },
+      include: { consumable: true },
+    });
+
+    if (boms.length === 0) {
+      this.logger.log(`No consumable BOM found for procedure '${booking.procedureName}'. Skipping deduction.`);
+      return;
+    }
+
+    // Execute safely in a transaction
+    await this.prisma.$transaction(async (prisma) => {
+      for (const bom of boms) {
+        // Look up the specific stock record for this hospital
+        const stock = await prisma.hospitalConsumableStock.findUnique({
+          where: {
+            id: bom.consumableId,
+          },
+        });
+
+        if (!stock) {
+          this.logger.warn(`Consumable stock ID ${bom.consumableId} not found. Cannot deduct.`);
+          continue; 
+        }
+
+        const newQuantity = stock.quantity - bom.quantityUsed;
+
+        if (newQuantity < 0) {
+          throw new BadRequestException(
+            `Negative stock alert: Insufficient stock for ${stock.itemName}. Current: ${stock.quantity}, Required: ${bom.quantityUsed}`
+          );
+        }
+
+        if (newQuantity <= stock.criticalThreshold) {
+          this.logger.warn(`CRITICAL THRESHOLD ALERT: Stock for ${stock.itemName} dropped to ${newQuantity}`);
+        }
+
+        // Deduct the quantity
+        await prisma.hospitalConsumableStock.update({
+          where: { id: stock.id },
+          data: { quantity: newQuantity },
+        });
+      }
+
+      // Mark the surgery booking as deducted to prevent double-billing
+      await prisma.surgeryBooking.update({
+        where: { id: booking.id },
+        data: { inventoryDeducted: true },
+      });
+    });
+
+    this.logger.log(`Successfully deducted inventory for surgery booking ${bookingId}`);
+  }
+
+
 }
