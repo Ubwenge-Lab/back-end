@@ -8,6 +8,7 @@ import { NotificationsModule } from '../notifications/notifications.module';
 import { MedicationsModule } from '../medications/medications.module';
 import { StaffModule } from '../staff/staff.module';
 import { HospitalsModule } from '../hospitals/hospitals.module';
+import { TriangulationModule } from '../triangulation/triangulation.module';
 
 @Module({
   imports: [
@@ -16,6 +17,7 @@ import { HospitalsModule } from '../hospitals/hospitals.module';
     MedicationsModule,
     StaffModule,
     forwardRef(() => HospitalsModule),
+    TriangulationModule,
   ],
   controllers: [PrescriptionsController],
   providers: [PrescriptionsService],

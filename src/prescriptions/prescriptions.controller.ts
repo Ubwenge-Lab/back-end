@@ -19,7 +19,9 @@ import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
 import { CreatePrescriptionDto, UpdatePrescriptionStatusDto } from './dto';
 import { HospitalIssuePrescriptionDto } from './dto/hospital-issue-prescription.dto';
-
+import { WebhookAuthGuard } from './guards/webhook-auth.guard';
+import { ExternalFulfillmentWebhookDto } from './dto/external-fulfillment-webhook.dto';
+import { Public } from '../auth/decorators/public.decorator';
 interface RequestWithUser {
   user: {
     sub: string;
@@ -112,4 +114,19 @@ export class PrescriptionsController {
   dispatchExternal(@Param('id') id: string) {
     return this.prescriptionsService.dispatchExternal(id);
   }
+
+  @Public()
+  @Post('webhook/external-fulfillment')
+  @HttpCode(HttpStatus.OK)
+  @UseGuards(WebhookAuthGuard) // Webhook authentication guard
+  @ApiOperation({
+    summary:
+      'Webhook callback for external E-Vuze pharmacies to update prescription fulfillment status',
+  })
+  async handleExternalFulfillment(
+    @Body() dto: ExternalFulfillmentWebhookDto,
+  ) {
+    return this.prescriptionsService.processExternalFulfillment(dto);
+  }
+
 }
