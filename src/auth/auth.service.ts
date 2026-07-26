@@ -34,6 +34,12 @@ import {
 } from './dto';
 import { randomInt, randomBytes } from 'crypto';
 
+// Small helper so `catch (error)` blocks can safely read a message off an
+// `unknown`-typed error without every call site needing its own type guard.
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -99,7 +105,7 @@ export class AuthService {
       const tokens = await Sentry.startSpan({ name: "Generate Auth Tokens" }, async () => {
         return await this.generateTokens(user.id, user.email, user.role);
       });
-      
+
       await this.updateRefreshToken(user.id, tokens.refreshToken);
       void this.auditService.log({
         actorId: user.id,
@@ -251,7 +257,7 @@ export class AuthService {
     }
 
     if (
-      ['PHARMACIST', 'CASHIER', 'NURSE', 'DOCTOR', 'RECEPTIONIST'].includes(
+      ['PHARMACIST', 'CASHIER', 'NURSE', 'DOCTOR', 'RECEPTIONIST', 'TECHNICIAN'].includes(
         user.role,
       )
     ) {
@@ -350,16 +356,9 @@ export class AuthService {
           user.role,
           undefined,
           hospitalStaff.hospitalId,
+          hospitalStaff.technicianSpecialization ?? undefined,
         );
         await this.updateRefreshToken(user.id, tokens.refreshToken);
-
-        let doctorProfile: { id: string; firstName: string | null; lastName: string | null; specialization: string } | null = null;
-        if (user.role === 'DOCTOR') {
-          doctorProfile = await this.prisma.doctor.findFirst({
-            where: { userId: user.id },
-            select: { id: true, firstName: true, lastName: true, specialization: true },
-          });
-        }
 
         return {
           user: {
@@ -372,11 +371,8 @@ export class AuthService {
             hospitalName: hospitalStaff.hospital.name,
             status: hospitalStaff.status,
             requiresPasswordChange: !!isUsingTempPassword,
-            ...(doctorProfile && {
-              doctorId: doctorProfile.id,
-              firstName: doctorProfile.firstName,
-              lastName: doctorProfile.lastName,
-              specialization: doctorProfile.specialization,
+            ...(hospitalStaff.technicianSpecialization && {
+              specialization: hospitalStaff.technicianSpecialization,
             }),
           },
           ...tokens,
@@ -503,7 +499,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send patient verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -575,7 +571,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send pharmacy verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -644,7 +640,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send hospital verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -687,6 +683,12 @@ export class AuthService {
       }
     }
 
+    if (dto.role === 'TECHNICIAN' && !dto.technicianSpecialization) {
+      throw new BadRequestException(
+        'technicianSpecialization (LAB or RADIOLOGY) is required when onboarding a Technician',
+      );
+    }
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -719,6 +721,9 @@ export class AuthService {
           status: 'ACTIVE',
           tempPasswordHash: hashedPassword,
           tempPasswordExpiry,
+          ...(dto.role === 'TECHNICIAN' && {
+            technicianSpecialization: dto.technicianSpecialization,
+          }),
         },
       });
 
@@ -749,7 +754,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send hospital staff credentials email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -868,7 +873,7 @@ export class AuthService {
       } catch (error) {
         this.logger.error(
           'Failed to notify super admins about new hospital',
-          error?.message || error,
+          getErrorMessage(error),
         );
       }
     }
@@ -916,7 +921,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to resend verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -956,7 +961,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send password reset email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -1193,10 +1198,33 @@ export class AuthService {
     role: string,
     status?: string,
     hospitalId?: string,
+    specialization?: string,
   ) {
     const payload: Record<string, any> = { sub: userId, email, role };
     if (status !== undefined) payload.status = status;
     if (hospitalId) payload.hospitalId = hospitalId;
+    if (specialization) payload.specialization = specialization;
+
+    if (role === 'DOCTOR') {
+      const doctor = await this.prisma.doctor.findUnique({
+        where: { userId },
+        select: { firstName: true, lastName: true }
+      });
+      if (doctor) {
+        payload.firstName = doctor.firstName;
+        payload.lastName = doctor.lastName;
+      }
+    }
+    else if (role === 'HOSPITAL_ADMIN') {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { firstName: true, lastName: true }
+      });
+      if (user) {
+        payload.firstName = user.firstName;
+        payload.lastName = user.lastName;
+      }
+    }
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get('JWT_SECRET'),

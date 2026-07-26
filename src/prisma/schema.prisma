@@ -30,6 +30,8 @@ model User {
   pharmacy               Pharmacy?       @relation("PharmacyOwner")
   staff                  Staff?
   SupportTickets         SupportTicket[]
+  sentMessages           ChatMessage[]   @relation("SentMessages")
+  receivedMessages       ChatMessage[]   @relation("ReceivedMessages")
 
   @@index([email])
   @@map("users")
@@ -91,6 +93,7 @@ model Doctor {
   updatedAt              DateTime                 @updatedAt
   firstName              String?
   lastName               String?
+  phone                  String?
   signatureUrl           String?
   isDepartmentHead       Boolean                  @default(false)
   appointments           Appointment[]
@@ -149,6 +152,7 @@ model HospitalStaff {
   lastName           String
   phone              String?
   department         String?
+  technicianSpecialization TechnicianSpecialization?
   status             StaffStatus              @default(ACTIVE)
   tempPasswordHash   String?
   tempPasswordExpiry DateTime?
@@ -202,6 +206,7 @@ model Patient {
   referrals              Referral[]
   diagnosticOrders       DiagnosticOrder[]
   surgeryBookings        SurgeryBooking[]
+  mohSurveillanceLogs    MohSurveillanceLog[]
 
   @@index([userId])
   @@map("patients")
@@ -463,6 +468,7 @@ model Appointment {
   sessionLogs           TelemedicineSessionLog[]
   diagnosticOrders      DiagnosticOrder[]
   triageVitals          TriageVitals?
+  chatMessages          ChatMessage[]
 
   @@index([patientId])
   @@index([hospitalId])
@@ -930,6 +936,11 @@ enum UserRole {
   TECHNICIAN
 }
 
+enum TechnicianSpecialization {
+  LAB
+  RADIOLOGY
+}
+
 enum PharmacyStatus {
   PENDING
   APPROVED
@@ -986,6 +997,9 @@ enum NotificationType {
   CONSULTATION_COMPLETED
   PRESCRIPTION_DISPATCHED
   INVOICE_GENERATED
+  LAB_RESULT_READY
+  LAB_ORDER_REJECTED
+  NEW_CHAT_MESSAGE
 }
 
 enum PrescriptionStatus {
@@ -1132,6 +1146,7 @@ model SurgeryBooking {
   theater         OperatingTheater         @relation(fields: [theaterId], references: [id], onDelete: Cascade)
   patient         Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
   teamAssignments SurgicalTeamAssignment[]
+  inventoryDeducted Boolean @default(false)
 
   @@index([theaterId])
   @@index([startTime, endTime])
@@ -1328,36 +1343,64 @@ enum DiagnosticType {
 
 enum DiagnosticStatus {
   PENDING
+  COLLECTED
+  IN_PROGRESS
   PROCESSING
   COMPLETED
+  REJECTED
   CANCELLED
 }
 
 model DiagnosticOrder {
-  id            String           @id @default(uuid())
-  patientId     String
-  doctorId      String
-  appointmentId String?
-  testType      DiagnosticType
-  icd10Code     String
-  status        DiagnosticStatus @default(PENDING)
-  findings      String?
-  resultValue   String?
-  fileUrl       String?
-  fileName      String?
-  fileType      String?
-  technicianId  String?
-  completedAt   DateTime?
-  createdAt     DateTime         @default(now())
-  updatedAt     DateTime         @updatedAt
+  id               String           @id @default(uuid())
+  patientId        String
+  doctorId         String
+  appointmentId    String?
+  testType         DiagnosticType
+  icd10Code        String
+  status           DiagnosticStatus @default(PENDING)
+  findings         String?
+  resultValue      String?
+  structuredResult Json?
+  fileUrl          String?
+  fileName         String?
+  fileType         String?
+  technicianId     String?
+  rejectedById     String?
+  rejectionReason  String?
+  rejectedAt       DateTime?
+  completedAt      DateTime?
+  createdAt        DateTime         @default(now())
+  updatedAt        DateTime         @updatedAt
 
   patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
   doctor      Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
   appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  revisions   LabResultRevision[]
 
   inventoryDeducted Boolean @default(false)
+  mohSurveillanceLog MohSurveillanceLog?
 
   @@map("diagnostic_orders")
+}
+
+model LabResultRevision {
+  id                String   @id @default(uuid())
+  diagnosticOrderId String
+  fileUrl           String?
+  fileName          String?
+  fileType          String?
+  findings          String?
+  resultValue       String?
+  structuredResult  Json?
+  correctedById     String
+  correctionReason  String
+  createdAt         DateTime @default(now())
+
+  diagnosticOrder DiagnosticOrder @relation(fields: [diagnosticOrderId], references: [id], onDelete: Cascade)
+
+  @@index([diagnosticOrderId])
+  @@map("lab_result_revisions")
 }
 
 model HospitalConsumableStock {
@@ -1370,6 +1413,7 @@ model HospitalConsumableStock {
 
   hospital Hospital                  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
   boms     DiagnosticConsumableBOM[]
+  surgeryBoms SurgeryConsumableBOM[]
 
   @@unique([hospitalId, itemName])
   @@map("hospital_consumable_stock")
@@ -1385,6 +1429,18 @@ model DiagnosticConsumableBOM {
 
   @@unique([diagnosticType, consumableId])
   @@map("diagnostic_consumable_bom")
+}
+
+model SurgeryConsumableBOM {
+  id            String   @id @default(uuid())
+  procedureName String   // Matches SurgeryBooking.procedureName
+  consumableId  String
+  quantityUsed  Int
+
+  consumable HospitalConsumableStock @relation(fields: [consumableId], references: [id], onDelete: Cascade)
+
+  @@unique([procedureName, consumableId])
+  @@map("surgery_consumable_bom")
 }
 
 enum WardTier {
@@ -1461,4 +1517,43 @@ model AuditLog {
   @@index([action])
   @@index([actorRole])
   @@index([createdAt])
+}
+
+model MohSurveillanceLog {
+  id                String          @id @default(uuid())
+  patientId         String
+  diagnosticOrderId String          @unique
+  icd10Code         String
+  diseaseCategory   String
+  reportedAt        DateTime        @default(now())
+  createdAt         DateTime        @default(now())
+  updatedAt         DateTime        @updatedAt
+
+  patient           Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  diagnosticOrder   DiagnosticOrder @relation(fields: [diagnosticOrderId], references: [id], onDelete: Cascade)
+
+  @@index([patientId])
+  @@index([diseaseCategory])
+  @@index([reportedAt])
+  @@map("moh_surveillance_logs")
+}
+
+model ChatMessage {
+  id            String      @id @default(uuid())
+  appointmentId String
+  senderId      String
+  receiverId    String
+  content       String      @db.Text
+  isRead        Boolean     @default(false)
+  createdAt     DateTime    @default(now())
+
+  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  sender        User        @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver      User        @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+
+  @@index([appointmentId])
+  @@index([senderId])
+  @@index([receiverId])
+  @@index([createdAt])
+  @@map("chat_messages")
 }

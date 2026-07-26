@@ -13,6 +13,9 @@ import {
   UpdateLeaveStatusDto,
   LeaveAction,
 } from '../doctors/dto/update-leave-status.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { LogPostOpReportDto } from './dto/surgery-scheduling.dto';
+import { SurgeryStatus } from '@prisma/client';
 
 @Injectable()
 export class HospitalsService {
@@ -20,6 +23,7 @@ export class HospitalsService {
     private readonly prisma: PrismaService,
     private readonly flutterwaveService: FlutterwaveService,
     private readonly notificationsService: NotificationsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async findAll() {
@@ -97,6 +101,50 @@ export class HospitalsService {
     });
   }
 
+  async getHospitalPatients(hospitalId: string, userId: string, doctorId?: string) {
+    // Ensure the user actually belongs to this hospital (Security check)
+    await this.validateHospitalAccess(hospitalId, userId);
+
+    let doctorPatientIds: string[] | undefined;
+
+    if (doctorId) {
+      const appointments = await this.prisma.appointment.findMany({
+        where: { hospitalId, doctorId },
+        select: { patientId: true },
+        distinct: ['patientId'],
+      });
+      doctorPatientIds = appointments.map((appt) => appt.patientId);
+
+      if (doctorPatientIds.length === 0) {
+        return [];
+      }
+    }
+
+    const registrations = await this.prisma.hospitalPatientRegistration.findMany({
+      where: {
+        hospitalId,
+        ...(doctorPatientIds ? { patientId: { in: doctorPatientIds } } : {}),
+      },
+      include: {
+        patient: {
+          include: {
+            user: {
+              select: { email: true, isActive: true },
+            },
+          },
+        },
+      },
+      orderBy: { registeredAt: 'desc' },
+    });
+
+    return registrations.map((reg) => ({
+      ...reg.patient,
+      mrn: reg.mrn, // for the nurse UI compatibility
+      hospitalMrn: reg.mrn, // for the doctor UI compatibility
+      registeredAt: reg.registeredAt,
+    }));
+  }
+
   async findDoctors(
     hospitalId: string,
     specialty?: string,
@@ -115,8 +163,14 @@ export class HospitalsService {
     return this.prisma.doctor.findMany({
       where,
       include: {
+        // SECURITY FIX: this previously used `include` with no `select` on
+        // `user`, which returns every column on User — password hash,
+        // refreshToken, verificationCode — to any caller of this endpoint,
+        // including Role.PATIENT. Scoped to just `email` now, the only User
+        // field anything downstream actually reads.
         user: {
-          include: {
+          select: {
+            email: true,
             hospitalStaff: {
               select: { firstName: true, lastName: true, phone: true },
             },
@@ -201,7 +255,7 @@ export class HospitalsService {
   }
 
   async getStats(hospitalId: string, userId: string) {
-    await this.validateHospitalAccess(hospitalId, userId);
+    await this.validateHospitalReadAccess(hospitalId, userId);
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -287,11 +341,12 @@ export class HospitalsService {
 
     // 5. Revenue counts (total vs monthly)
     const revenueStatsResult = await this.prisma.$queryRaw<any[]>`
-      SELECT 
+      SELECT
         COALESCE(SUM("totalAmount"), 0)::float AS total_revenue,
         COALESCE(SUM(CASE WHEN "issuedAt" >= ${startOfMonth} AND "issuedAt" <= ${endOfMonth} THEN "totalAmount" ELSE 0 END), 0)::float AS monthly_revenue
       FROM hospital_invoices
       WHERE "hospitalId" = ${hospitalId}
+        AND "paymentStatus" = 'PAID'
     `;
     const totalRevenue = Number(revenueStatsResult[0]?.total_revenue ?? 0);
     const monthlyRevenue = Number(revenueStatsResult[0]?.monthly_revenue ?? 0);
@@ -353,7 +408,7 @@ export class HospitalsService {
   }
 
   async getWeeklyRevenue(hospitalId: string, userId: string) {
-    await this.validateHospitalAccess(hospitalId, userId);
+    await this.validateHospitalReadAccess(hospitalId, userId);
 
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -384,6 +439,7 @@ export class HospitalsService {
       FROM   hospital_invoices
       WHERE  "hospitalId" = ${hospitalId}
         AND  "issuedAt" >= ${oldestStart}
+        AND  "paymentStatus" = 'PAID'
       GROUP  BY DATE_TRUNC('week', "issuedAt")
       ORDER  BY week_start ASC
     `;
@@ -435,6 +491,31 @@ export class HospitalsService {
       throw new ForbiddenException('You do not have access to this hospital');
     }
     return hospital;
+  }
+
+  /**
+   * Read-only variant of validateHospitalAccess for endpoints a hospital's
+   * own doctors should also be able to read (dashboard stats, weekly
+   * revenue), not just the hospital admin who owns the account. Deliberately
+   * NOT used for write endpoints (updateProfile, updateDrugStock) — a doctor
+   * belonging to a hospital should be able to see its stats, not edit its
+   * profile or stock.
+   */
+  private async validateHospitalReadAccess(hospitalId: string, userId: string) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+    if (!hospital) {
+      throw new NotFoundException('Hospital not found');
+    }
+    if (hospital.userId === userId) return hospital;
+
+    const doctor = await this.prisma.doctor.findFirst({
+      where: { userId, hospitalId },
+    });
+    if (doctor) return hospital;
+
+    throw new ForbiddenException('You do not have access to this hospital');
   }
 
   // ========================================
@@ -563,9 +644,9 @@ export class HospitalsService {
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
@@ -862,5 +943,58 @@ export class HospitalsService {
         details: refundResults,
       },
     };
+  }
+
+
+
+  // ========================================
+  // SURGERY MANAGEMENT (Post-Op & Inventory)
+  // ========================================
+
+  async logPostOpReport(
+    hospitalId: string,
+    userId: string,
+    bookingId: string,
+    dto: LogPostOpReportDto,
+  ) {
+    // 1. Validate the user actually belongs to this hospital
+    await this.validateHospitalAccess(hospitalId, userId);
+
+    const booking = await this.prisma.surgeryBooking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Surgery booking not found');
+    }
+
+    if (booking.hospitalId !== hospitalId) {
+      throw new ForbiddenException('This booking belongs to another hospital');
+    }
+
+    if (booking.status === SurgeryStatus.COMPLETED) {
+      throw new BadRequestException('Surgery is already marked as completed');
+    }
+
+    // 2. Update the database with the post-op report and mark as COMPLETED
+    const updatedBooking = await this.prisma.surgeryBooking.update({
+      where: { id: bookingId },
+      data: {
+        status: SurgeryStatus.COMPLETED,
+        durationMinutes: dto.durationMinutes,
+        anesthesiaDetails: dto.anesthesiaDetails,
+        operationNotes: dto.operationNotes,
+        complications: dto.complications,
+        outcome: dto.outcome,
+        reportLoggedAt: new Date(),
+      },
+    });
+
+    // 3. Emit the event so InventoryService can deduct the required BOM consumables safely in the background
+    this.eventEmitter.emit('surgery.completed', {
+      bookingId: updatedBooking.id,
+    });
+
+    return updatedBooking;
   }
 }

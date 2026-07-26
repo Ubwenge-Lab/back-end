@@ -15,6 +15,7 @@ import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
+import { ExcelBuilderUtil } from './utils/excel-builder.util';
 
 @ApiTags('Reports')
 @Controller('reports/export')
@@ -116,5 +117,31 @@ export class ReportsController {
     res.setHeader('Content-Type', 'text/csv; charset=utf-8');
     res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     res.send(csv);
+  }
+
+
+  @Get('moh/weekly')
+  @Roles(Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Export Weekly MOH Statutory Disease Tracker (XLSX)' })
+  async exportMohWeeklyReport(@Res() res: Response) {
+    // 1. Fetch aggregated data from the service
+    const reportData = await this.reportsService.getWeeklyMohStats();
+
+    // 2. Generate the Excel buffer
+    const buffer = await ExcelBuilderUtil.buildMohWeeklyReport(reportData);
+
+    // 3. Set standard HTTP headers to trigger a file download in the browser
+    const timestamp = new Date().toISOString().split('T')[0];
+    const fileName = `MOH_Weekly_Surveillance_${timestamp}.xlsx`;
+
+    res.setHeader(
+      'Content-Type',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    );
+    res.setHeader('Content-Disposition', `attachment; filename=${fileName}`);
+    res.setHeader('Content-Length', buffer.length);
+
+    // 4. Send the file
+    res.send(buffer);
   }
 }
