@@ -20,7 +20,7 @@ import { StaffService } from '../staff/staff.service';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { PrescriptionMedication, PrescriptionStatus } from '@prisma/client';
+import { PrescriptionMedication, PrescriptionStatus, DispenseStatus } from '@prisma/client';
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
 import { TriangulationService } from '../triangulation/triangulation.service';
@@ -595,23 +595,23 @@ Do not include any explanation, only the JSON array.`,
         }
 
         // 3. Update dispense status for target items
-        const newDispenseStatus =
-          status === FulfillmentStatus.FULFILLED
-            ? 'FULFILLED'
-            : status === FulfillmentStatus.PARTIALLY_FULFILLED
-            ? 'PARTIALLY_FULFILLED'
-            : 'REJECTED';
+        const newDispenseStatus: DispenseStatus =
+        status === FulfillmentStatus.FULFILLED
+          ? DispenseStatus.FULFILLED
+          : status === FulfillmentStatus.PARTIALLY_FULFILLED
+          ? DispenseStatus.DISPATCHED_TO_PHARMACY
+          : DispenseStatus.PENDING;
 
         const now = new Date();
 
         await tx.prescriptionMedication.updateMany({
-          where: { id: { in: prescriptionMedicationIds } },
-          data: {
-            dispenseStatus: newDispenseStatus,
-            fulfilledAt: status === FulfillmentStatus.FULFILLED ? now : undefined,
-            available: status === FulfillmentStatus.FULFILLED,
-          },
-        });
+        where: { id: { in: prescriptionMedicationIds } },
+        data: {
+          dispenseStatus: newDispenseStatus,
+          fulfilledAt: status === FulfillmentStatus.FULFILLED ? now : undefined,
+          available: status === FulfillmentStatus.FULFILLED,
+        },
+      });
 
         const alreadyFulfilled = targetItems.filter(
           (item) => item.dispenseStatus === 'FULFILLED',
@@ -622,7 +622,7 @@ Do not include any explanation, only the JSON array.`,
             message: 'Items have already been fulfilled (idempotent response)',
             prescriptionId,
             itemsUpdated: 0,
-            isFullyFulfilled: prescription.status === 'FILLED',
+            isFullyFulfilled: prescription.status === 'APPROVED',
             status: prescription.status,
           };
         }
@@ -634,8 +634,8 @@ Do not include any explanation, only the JSON array.`,
 
         const isFullyFulfilled = allItems.every(
           (item) =>
-            item.dispenseStatus === 'HOSPITAL_DISPENSED' ||
-            item.dispenseStatus === 'FULFILLED',
+            item.dispenseStatus === DispenseStatus.HOSPITAL_DISPENSED ||
+            item.dispenseStatus === DispenseStatus.FULFILLED,
         );
 
         let updatedPrescription = prescription;
@@ -644,10 +644,13 @@ Do not include any explanation, only the JSON array.`,
           updatedPrescription = await tx.prescription.update({
             where: { id: prescriptionId },
             data: {
-              status: 'FILLED',
+              status: 'APPROVED',
               refillsRemaining: { decrement: 1 },
             },
-            include: { prescriptionMedications: true, patient: true },
+            include: {
+              prescriptionMedications: true,
+              patient: { select: { userId: true } },
+            },
           });
         }
 
@@ -798,7 +801,7 @@ Do not include any explanation, only the JSON array.`,
       where: { id: prescriptionId },
       include: {
         doctor: true,
-        patient: true,
+        patient: { select: { userId: true, firstName: true, lastName: true } },
         prescriptionMedications: true,
       },
     });
@@ -1207,7 +1210,7 @@ async dispatchExternal(prescriptionId: string) {
           where: { id: prescriptionId },
           data: { 
             dispatchedAt: new Date(),
-            status: 'DISPATCHED',
+            status: 'PENDING',
           },
         });
       },
