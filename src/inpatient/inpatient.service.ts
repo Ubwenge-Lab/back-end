@@ -9,6 +9,11 @@ import { CreateAdmissionDto } from './dto/create-admission.dto';
 import { LogVitalsDto } from './dto/log-vitals.dto';
 import { LogMarDto } from './dto/log-mar.dto';
 import { CreateHandoverDto } from './dto/create-handover.dto';
+import { TransferBedDto } from './dto/transfer-bed.dto';
+import { UpdateBedStatusDto } from './dto/update-bed-status.dto';
+import { AdmissionStatus, BedStatus } from '@prisma/client';
+import { BadRequestException } from '@nestjs/common/exceptions';
+import { DischargeAdmissionDto } from './dto/discharge-admission.dto';
 
 @Injectable()
 export class InpatientService {
@@ -103,24 +108,45 @@ export class InpatientService {
       throw new ConflictException('Patient already has an active admission at this hospital');
     }
 
-    return this.prisma.inpatientAdmission.create({
-      data: {
-        patientId: dto.patientId,
-        hospitalId: dto.hospitalId,
-        admittedByUserId: userId,
-        admittedByName: admitter.name,
-        admittedByRole: admitter.role,
-        reason: dto.reason,
-        wardName: dto.wardName,
-        bedNumber: dto.bedNumber,
-      },
-      include: {
-        patient: { select: { id: true, firstName: true, lastName: true } },
-        hospital: { select: { id: true, name: true } },
-      },
+    // Check bed availability before proceeding
+    if (dto.bedId) {
+      const bed = await this.prisma.bed.findUnique({ where: { id: dto.bedId } });
+      if (!bed || bed.status !== BedStatus.AVAILABLE) {
+        throw new BadRequestException('The selected bed is not available.');
+      }
+    }
+
+    // Wrap admission and bed allocation in an atomic transaction
+    return this.prisma.$transaction(async (tx) => {
+      const admission = await tx.inpatientAdmission.create({
+        data: {
+          patientId: dto.patientId,
+          hospitalId: dto.hospitalId,
+          admittedByUserId: userId,
+          admittedByName: admitter.name,
+          admittedByRole: admitter.role,
+          reason: dto.reason,
+          wardName: dto.wardName,
+          bedNumber: dto.bedNumber,
+          bedId: dto.bedId, // Ensure bedId is mapped
+        },
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true } },
+          hospital: { select: { id: true, name: true } },
+        },
+      });
+
+      // Mark the bed as occupied
+      if (dto.bedId) {
+        await tx.bed.update({
+          where: { id: dto.bedId },
+          data: { status: BedStatus.OCCUPIED, isOccupied: true },
+        });
+      }
+
+      return admission;
     });
   }
-
   async listAdmissions(userId: string, role: string, hospitalId?: string) {
     const admitter = await this.resolveAdmitter(userId, role);
     const targetHospitalId = hospitalId ?? admitter.hospitalId;
@@ -156,24 +182,52 @@ export class InpatientService {
     });
   }
 
-  async dischargeAdmission(admissionId: string, userId: string, role: string) {
+  async dischargeAdmission(admissionId: string, userId: string, role: string, dto: DischargeAdmissionDto) {
     const admitter = await this.resolveAdmitter(userId, role);
     const admission = await this.resolveAdmission(admissionId);
+    
     this.assertSameHospital(admitter.hospitalId, admission.hospitalId);
 
     if (admission.status !== 'ACTIVE') {
       throw new ConflictException(`Admission is already ${admission.status.toLowerCase()}`);
     }
 
-    return this.prisma.inpatientAdmission.update({
-      where: { id: admissionId },
-      data: { status: 'DISCHARGED', dischargedAt: new Date() },
-      include: {
-        patient: { select: { id: true, firstName: true, lastName: true } },
-      },
+    // NEW: Enforce Clearance logic
+    const clinicalCleared = dto.clinicalClearance ?? admission.clinicalCleared;
+    const billingCleared = dto.billingClearance ?? admission.billingCleared;
+
+    if (!clinicalCleared || !billingCleared) {
+      throw new BadRequestException('Cannot discharge patient. Both clinical and billing clearances are required.');
+    }
+
+    // NEW: Wrap discharge and bed freeing in a transaction
+    return this.prisma.$transaction(async (tx) => {
+      const discharged = await tx.inpatientAdmission.update({
+        where: { id: admissionId },
+        data: { 
+          status: 'DISCHARGED', 
+          dischargedAt: new Date(),
+          clinicalCleared,
+          billingCleared,
+          dischargeNotes: dto.notes,
+          dischargedByUserId: userId,
+        },
+        include: {
+          patient: { select: { id: true, firstName: true, lastName: true } },
+        },
+      });
+
+      // Free the bed and flag for cleaning
+      if (admission.bedId) {
+        await tx.bed.update({
+          where: { id: admission.bedId },
+          data: { status: BedStatus.CLEANING, isOccupied: false },
+        });
+      }
+
+      return discharged;
     });
   }
-
   // =============================================
   // VITALS — free-form readings + checklist
   // =============================================
@@ -337,5 +391,155 @@ export class InpatientService {
         incomingNurse: { select: { id: true, firstName: true, lastName: true } },
       },
     });
+  }
+
+
+  /**
+   * Update individual bed status and sync the isOccupied flag
+   */
+  async updateBedStatus(bedId: string, dto: UpdateBedStatusDto) {
+    const bed = await this.prisma.bed.findUnique({ where: { id: bedId } });
+    if (!bed) {
+      throw new NotFoundException(`Bed with ID ${bedId} not found.`);
+    }
+
+    const isOccupied = dto.status === BedStatus.OCCUPIED;
+
+    return this.prisma.bed.update({
+      where: { id: bedId },
+      data: {
+        status: dto.status,
+        isOccupied,
+      },
+    });
+  }
+
+  /**
+   * Transfer an admitted patient to a new bed atomically using a transaction
+   */
+  async transferBed(admissionId: string, userId: string, dto: TransferBedDto) {
+    const admission = await this.prisma.inpatientAdmission.findUnique({
+      where: { id: admissionId },
+      include: { bed: true },
+    });
+
+    if (!admission) {
+      throw new NotFoundException(`Admission with ID ${admissionId} not found.`);
+    }
+
+    if (admission.status !== AdmissionStatus.ACTIVE) {
+      throw new BadRequestException('Cannot transfer a patient who does not have an active admission.');
+    }
+
+    const targetBed = await this.prisma.bed.findUnique({
+      where: { id: dto.targetBedId },
+    });
+
+    if (!targetBed) {
+      throw new NotFoundException(`Target bed with ID ${dto.targetBedId} not found.`);
+    }
+
+    if (targetBed.status !== BedStatus.AVAILABLE || targetBed.isOccupied) {
+      throw new BadRequestException(`Target bed ${targetBed.number} is not available for occupancy.`);
+    }
+
+    const previousBedId = admission.bedId;
+
+    // Execute transfer inside an atomic transaction
+    return this.prisma.$transaction(async (tx) => {
+      // 1. Free up the previous bed if it exists
+      if (previousBedId) {
+        await tx.bed.update({
+          where: { id: previousBedId },
+          data: { status: BedStatus.AVAILABLE, isOccupied: false },
+        });
+      }
+
+      // 2. Mark target bed as occupied
+      await tx.bed.update({
+        where: { id: targetBed.id },
+        data: { status: BedStatus.OCCUPIED, isOccupied: true },
+      });
+
+      // 3. Create the audit trail for the transfer
+      const transferRecord = await tx.bedTransfer.create({
+        data: {
+          admissionId: admission.id,
+          fromBedId: previousBedId,
+          toBedId: targetBed.id,
+          transferredByUserId: userId,
+          reason: dto.reason,
+        },
+      });
+
+      // 4. Update the admission record with the new bed and bed number reference
+      await tx.inpatientAdmission.update({
+        where: { id: admission.id },
+        data: {
+          bedId: targetBed.id,
+          bedNumber: targetBed.number,
+        },
+      });
+
+      return {
+        message: 'Patient transferred successfully',
+        transfer: transferRecord,
+        newBed: targetBed,
+      };
+    });
+  }
+
+  /**
+   * Get real-time occupancy breakdown for a hospital
+   */
+  async getHospitalOccupancyOverview(hospitalId: string) {
+    const wards = await this.prisma.ward.findMany({
+      where: { hospitalId },
+      include: {
+        beds: true,
+      },
+    });
+
+    let totalBeds = 0;
+    let occupiedBeds = 0;
+    let availableBeds = 0;
+    let maintenanceBeds = 0;
+
+    const wardBreakdown = wards.map((ward) => {
+      const wardTotal = ward.beds.length;
+      const wardOccupied = ward.beds.filter((b) => b.isOccupied).length;
+      const wardAvailable = ward.beds.filter((b) => !b.isOccupied).length;
+      const wardMaintenance = 0;
+
+      totalBeds += wardTotal;
+      occupiedBeds += wardOccupied;
+      availableBeds += wardAvailable;
+      maintenanceBeds += wardMaintenance;
+
+      return {
+        wardId: ward.id,
+        wardName: ward.name,
+        tier: ward.tier,
+        stats: {
+          total: wardTotal,
+          occupied: wardOccupied,
+          available: wardAvailable,
+          maintenance: wardMaintenance,
+          occupancyRate: wardTotal > 0 ? Number(((wardOccupied / wardTotal) * 100).toFixed(2)) : 0,
+        },
+        beds: ward.beds,
+      };
+    });
+
+    return {
+      summary: {
+        totalBeds,
+        occupiedBeds,
+        availableBeds,
+        maintenanceBeds,
+        overallOccupancyRate: totalBeds > 0 ? Number(((occupiedBeds / totalBeds) * 100).toFixed(2)) : 0,
+      },
+      wards: wardBreakdown,
+    };
   }
 }

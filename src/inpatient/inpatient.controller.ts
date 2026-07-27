@@ -29,6 +29,9 @@ import {
   CreateHandoverDto,
   LogMarDto,
   LogVitalsDto,
+  TransferBedDto,
+  UpdateBedStatusDto,
+  DischargeAdmissionDto,
 } from './dto';
 
 @ApiTags('Inpatient')
@@ -72,14 +75,20 @@ export class InpatientController {
     return this.inpatientService.getAdmission(id, req.user.sub, req.user.role);
   }
 
-  @Patch('admissions/:id/discharge')
+@Patch('admissions/:id/discharge')
   @Roles(Role.DOCTOR, Role.HOSPITAL_ADMIN)
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Discharge an admitted patient (Doctor / Admin)' })
+  @ApiOperation({ summary: 'Discharge an admitted patient (Doctor / Admin), enforcing clearances' })
   @ApiParam({ name: 'id', description: 'InpatientAdmission UUID' })
+  @ApiResponse({ status: 200, description: 'Patient successfully discharged and bed set to CLEANING.' })
   @ApiResponse({ status: 409, description: 'Admission already closed' })
-  dischargeAdmission(@Req() req: any, @Param('id') id: string) {
-    return this.inpatientService.dischargeAdmission(id, req.user.sub, req.user.role);
+  @ApiResponse({ status: 400, description: 'Missing clinical or billing clearance' })
+  dischargeAdmission(
+    @Req() req: any, 
+    @Param('id') id: string,
+    @Body() dto: DischargeAdmissionDto // <-- Add the DTO here
+  ) {
+    return this.inpatientService.dischargeAdmission(id, req.user.sub, req.user.role, dto);
   }
 
   // =============================================
@@ -191,5 +200,37 @@ export class InpatientController {
     @Param('handoverId') handoverId: string,
   ) {
     return this.inpatientService.acknowledgeHandover(admissionId, handoverId, req.user.sub);
+  }
+
+
+  @Patch('beds/:id/status')
+  @ApiOperation({ summary: 'Update bed status (Available, Maintenance, Cleaning, etc.)' })
+  @ApiResponse({ status: 200, description: 'Bed status successfully updated.' })
+  async updateBedStatus(
+    @Param('id') bedId: string,
+    @Body() dto: UpdateBedStatusDto,
+  ) {
+    return this.inpatientService.updateBedStatus(bedId, dto);
+  }
+
+  @Post('admissions/:id/transfer')
+  @ApiOperation({ summary: 'Transfer an active inpatient admission to a new bed with audit logging' })
+  @ApiResponse({ status: 201, description: 'Patient successfully transferred to new bed.' })
+  async transferBed(
+    @Param('id') admissionId: string,
+    @Req() req: any,
+    @Body() dto: TransferBedDto,
+  ) {
+    const userId = req.user?.id || req.user?.sub; // Adjust based on your JWT payload structure
+    return this.inpatientService.transferBed(admissionId, userId, dto);
+  }
+
+  @Get('hospitals/:hospitalId/occupancy')
+  @ApiOperation({ summary: 'Get real-time ward and bed occupancy overview for a hospital' })
+  @ApiResponse({ status: 200, description: 'Occupancy breakdown retrieved successfully.' })
+  async getHospitalOccupancyOverview(
+    @Param('hospitalId') hospitalId: string,
+  ) {
+    return this.inpatientService.getHospitalOccupancyOverview(hospitalId);
   }
 }
