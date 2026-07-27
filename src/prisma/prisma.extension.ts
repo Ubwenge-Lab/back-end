@@ -58,49 +58,59 @@ function decryptResult(result: any) {
   }
 }
 
-export const auditEncryptionExtension = Prisma.defineExtension((client) => {
-  return client.$extends({
-    query: {
-      $allModels: {
-        async $allOperations({ model, operation, args, query }) {
-          const store = correlationStorage.getStore();
-          const isClinicalModel = CLINICAL_MODELS.includes(model);
+// Builds the encryption/decryption + audit-log extension. `auditWriteClient`
+// lets a read-replica client still write its audit log rows to the primary
+// database — replicas are read-only standbys, so writing `auditLog.create`
+// against the replica itself would fail.
+export function createAuditEncryptionExtension(auditWriteClient?: unknown) {
+  return Prisma.defineExtension((client) => {
+    const auditTarget = auditWriteClient ?? client;
 
-          // 1. Intercept & Encrypt Before Saving / Searching
-          if (isClinicalModel) {
-            encryptArgs(args);
-          }
+    return client.$extends({
+      query: {
+        $allModels: {
+          async $allOperations({ model, operation, args, query }) {
+            const store = correlationStorage.getStore();
+            const isClinicalModel = CLINICAL_MODELS.includes(model);
 
-          // 2. Execute DB Query
-          const result = await query(args);
+            // 1. Intercept & Encrypt Before Saving / Searching
+            if (isClinicalModel) {
+              encryptArgs(args);
+            }
 
-          // 3. Decrypt on Retrieval
-          if (isClinicalModel && result) {
-            decryptResult(result);
-          }
+            // 2. Execute DB Query
+            const result = await query(args);
 
-          // 4. Fire Async Audit Log if clinical model accessed by a user
-          if (isClinicalModel && store && store.userId) {
-            const opType = ['findUnique', 'findFirst', 'findMany', 'count'].includes(operation) ? 'READ' : 'WRITE';
-            
-            Promise.resolve().then(() => {
-              (client as any).auditLog.create({
-                data: {
-                  targetType: model,
-                  action: opType,
-                  targetId: (result && typeof result === 'object' && 'id' in result) ? String((result as any).id) : null,
-                  actorId: store.userId,
-                  actorRole: store.userRole || 'UNKNOWN',
-                  ip: store.ipAddress || '0.0.0.0',
-                  metadata: { reason: store.actionReason || 'Standard Clinical Access' },
-                }
-              }).catch((err: any) => console.error(`[Audit Log Failed]: ${err.message}`));
-            });
-          }
+            // 3. Decrypt on Retrieval
+            if (isClinicalModel && result) {
+              decryptResult(result);
+            }
 
-          return result;
+            // 4. Fire Async Audit Log if clinical model accessed by a user
+            if (isClinicalModel && store && store.userId) {
+              const opType = ['findUnique', 'findFirst', 'findMany', 'count'].includes(operation) ? 'READ' : 'WRITE';
+
+              Promise.resolve().then(() => {
+                (auditTarget as any).auditLog.create({
+                  data: {
+                    targetType: model,
+                    action: opType,
+                    targetId: (result && typeof result === 'object' && 'id' in result) ? String((result as any).id) : null,
+                    actorId: store.userId,
+                    actorRole: store.userRole || 'UNKNOWN',
+                    ip: store.ipAddress || '0.0.0.0',
+                    metadata: { reason: store.actionReason || 'Standard Clinical Access' },
+                  }
+                }).catch((err: any) => console.error(`[Audit Log Failed]: ${err.message}`));
+              });
+            }
+
+            return result;
+          },
         },
       },
-    },
+    });
   });
-});
+}
+
+export const auditEncryptionExtension = createAuditEncryptionExtension();
