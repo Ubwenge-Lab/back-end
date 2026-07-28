@@ -103,3 +103,6 @@ prisma/patch-enum.ts
 prisma/restore-data.ts
 replace_ids.js
 scratch.ts
+
+# load-testing: per-run output, not test source
+load-testing/memory-log.csv
