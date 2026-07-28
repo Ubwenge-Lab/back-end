@@ -10,6 +10,7 @@ import { Response, Request } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../../notifications/email.service';
+import * as Sentry from '@sentry/nestjs';
 
 @Catch()
 export class GlobalExceptionFilter extends BaseExceptionFilter {
@@ -62,11 +63,19 @@ export class GlobalExceptionFilter extends BaseExceptionFilter {
 
     this.logger.error(
       `[Error-Trace] Correlation ID: ${correlationId} | Path: ${request.method} ${request.url}\n` +
-        `Message: ${errorMessage}\n` +
-        `Stack: ${errorStack}`,
+      `Message: ${errorMessage}\n` +
+      `Stack: ${errorStack}`,
     );
 
     if (status === HttpStatus.INTERNAL_SERVER_ERROR) {
+      // Sending to Sentry
+      Sentry.withScope((scope) => {
+        scope.setTag('correlationId', correlationId)
+        scope.setExtra('path', `${request.method} ${request.url}`);
+        Sentry.captureException(exception)
+      })
+
+
       this.sendEmailAlert({
         correlationId,
         path: `${request.method} ${request.url}`,

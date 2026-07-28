@@ -1,5 +1,9 @@
 // backend/src/main.ts
 
+// IMPORTANT: dotenv MUST be loaded before ANYTHING else so that
+// process.env is fully populated when Sentry.init() reads SENTRY_DSN.
+import 'dotenv/config';
+
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, LoggerService } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
@@ -13,7 +17,20 @@ import { ConfigService } from '@nestjs/config';
 import { EmailService } from './notifications/email.service';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
 import { QueryLoggerInterceptor } from './common/interceptors/query-logger.interceptor';
+import * as Sentry from '@sentry/nestjs'
+import { nodeProfilingIntegration } from '@sentry/profiling-node'
 
+Sentry.init({
+  // dsn is read automatically from process.env.SENTRY_DSN by the SDK
+  tracesSampleRate: 1.0,
+  profilesSampleRate: 1.0,
+  integrations: [
+    nodeProfilingIntegration(),
+    // Capture all console logs, warnings, and errors automatically
+    Sentry.captureConsoleIntegration({ levels: ['log', 'warn', 'error'] })
+  ],
+  environment: process.env.NODE_ENV || 'development',
+})
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,

@@ -66,7 +66,8 @@ pids
 report.[0-9]*.[0-9]*.[0-9]*.[0-9]*.json
 
 # Test scripts
-scripts/
+scripts/*
+!scripts/cleanup-staging.ts
 scratch/
 src/prisma/backup-data.ts
 src/prisma/data-backup.json
@@ -83,3 +84,25 @@ get_ids.ts
 test_checkout.ts
 .env.backup
 /test/manual/
+# User specific
+/screens/
+/documentations/
+/sprints/
+/test/temp/
+
+#prisma
+prisma/backup-data.ts
+prisma/data-backup.json
+prisma/test-conn.ts
+prisma/check-columns.ts
+prisma/check-enum.ts
+prisma/check-hospitals-columns.ts
+prisma/check-tables.ts
+prisma/data-state-backup.json
+prisma/patch-enum.ts
+prisma/restore-data.ts
+replace_ids.js
+scratch.ts
+
+# load-testing: per-run output, not test source
+load-testing/memory-log.csv

@@ -13,6 +13,9 @@ import {
   UpdateLeaveStatusDto,
   LeaveAction,
 } from '../doctors/dto/update-leave-status.dto';
+import { EventEmitter2 } from '@nestjs/event-emitter';
+import { LogPostOpReportDto } from './dto/surgery-scheduling.dto';
+import { SurgeryStatus } from '@prisma/client';
 
 @Injectable()
 export class HospitalsService {
@@ -20,6 +23,7 @@ export class HospitalsService {
     private readonly prisma: PrismaService,
     private readonly flutterwaveService: FlutterwaveService,
     private readonly notificationsService: NotificationsService,
+    private readonly eventEmitter: EventEmitter2,
   ) {}
 
   async findAll() {
@@ -29,9 +33,17 @@ export class HospitalsService {
   }
 
   async findOne(id: string) {
-    const hospital = await this.prisma.hospital.findUnique({ where: { id } });
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id },
+      include: { user: { select: { email: true } } },
+    });
     if (!hospital) throw new NotFoundException('Hospital not found');
-    return hospital;
+    // HospitalDto documents an `email` field, but Hospital has no email
+    // column — it lives on the linked User row. Previously this method
+    // returned the raw Prisma record with no `email` key at all, silently
+    // breaking the documented contract.
+    const { user, ...rest } = hospital;
+    return { ...rest, email: user?.email ?? null };
   }
 
   async searchPatient(identifier: string) {
@@ -89,6 +101,50 @@ export class HospitalsService {
     });
   }
 
+  async getHospitalPatients(hospitalId: string, userId: string, doctorId?: string) {
+    // Ensure the user actually belongs to this hospital (Security check)
+    await this.validateHospitalAccess(hospitalId, userId);
+
+    let doctorPatientIds: string[] | undefined;
+
+    if (doctorId) {
+      const appointments = await this.prisma.appointment.findMany({
+        where: { hospitalId, doctorId },
+        select: { patientId: true },
+        distinct: ['patientId'],
+      });
+      doctorPatientIds = appointments.map((appt) => appt.patientId);
+
+      if (doctorPatientIds.length === 0) {
+        return [];
+      }
+    }
+
+    const registrations = await this.prisma.hospitalPatientRegistration.findMany({
+      where: {
+        hospitalId,
+        ...(doctorPatientIds ? { patientId: { in: doctorPatientIds } } : {}),
+      },
+      include: {
+        patient: {
+          include: {
+            user: {
+              select: { email: true, isActive: true },
+            },
+          },
+        },
+      },
+      orderBy: { registeredAt: 'desc' },
+    });
+
+    return registrations.map((reg) => ({
+      ...reg.patient,
+      mrn: reg.mrn, // for the nurse UI compatibility
+      hospitalMrn: reg.mrn, // for the doctor UI compatibility
+      registeredAt: reg.registeredAt,
+    }));
+  }
+
   async findDoctors(
     hospitalId: string,
     specialty?: string,
@@ -107,8 +163,14 @@ export class HospitalsService {
     return this.prisma.doctor.findMany({
       where,
       include: {
+        // SECURITY FIX: this previously used `include` with no `select` on
+        // `user`, which returns every column on User — password hash,
+        // refreshToken, verificationCode — to any caller of this endpoint,
+        // including Role.PATIENT. Scoped to just `email` now, the only User
+        // field anything downstream actually reads.
         user: {
-          include: {
+          select: {
+            email: true,
             hospitalStaff: {
               select: { firstName: true, lastName: true, phone: true },
             },
@@ -119,8 +181,81 @@ export class HospitalsService {
     });
   }
 
+  // Aggregates doctors by specialization into a "department" view. There is
+  // no Department model on the backend — this mirrors the client-side
+  // derivation the frontend was doing in departments/page.tsx, just moved
+  // server-side so there's a real endpoint instead of none at all.
+  //
+  // nurseCount/head are sourced from HospitalStaff.department and
+  // Doctor.isDepartmentHead — both added in this migration (see
+  // src/docs/HOSPITAL_ADMIN_DASHBOARD_DEPARTMENTS_INTEGRATION.md, Gap 2/3).
+  // NOTE: this requires that migration to actually be applied to the
+  // database before it works at runtime — `prisma generate` only updates
+  // the TypeScript client, it doesn't touch the DB schema.
+  async getDepartments(hospitalId: string) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+    if (!hospital) throw new NotFoundException('Hospital not found');
+
+    const doctors = await this.prisma.doctor.findMany({
+      where: { hospitalId },
+      select: { specialization: true, isAvailable: true, isDepartmentHead: true, firstName: true, lastName: true },
+    });
+
+    const nurses = await this.prisma.hospitalStaff.findMany({
+      where: { hospitalId, department: { not: null } },
+      select: { department: true },
+    });
+
+    const departments = new Map<string, {
+      doctorCount: number;
+      nurseCount: number;
+      hasAvailableDoctor: boolean;
+      head: string | null;
+    }>();
+
+    for (const doctor of doctors) {
+      const entry = departments.get(doctor.specialization) ?? {
+        doctorCount: 0,
+        nurseCount: 0,
+        hasAvailableDoctor: false,
+        head: null,
+      };
+      entry.doctorCount += 1;
+      if (doctor.isAvailable) entry.hasAvailableDoctor = true;
+      if (doctor.isDepartmentHead) {
+        entry.head = `${doctor.firstName ?? ''} ${doctor.lastName ?? ''}`.trim() || null;
+      }
+      departments.set(doctor.specialization, entry);
+    }
+
+    for (const nurse of nurses) {
+      const department = nurse.department as string;
+      const entry = departments.get(department) ?? {
+        doctorCount: 0,
+        nurseCount: 0,
+        hasAvailableDoctor: false,
+        head: null,
+      };
+      entry.nurseCount += 1;
+      departments.set(department, entry);
+    }
+
+    return Array.from(departments.entries())
+      .map(([name, entry]) => ({
+        id: name.toLowerCase().replace(/\s+/g, '-'),
+        name,
+        doctorCount: entry.doctorCount,
+        nurseCount: entry.nurseCount,
+        status: entry.hasAvailableDoctor ? ('ACTIVE' as const) : ('INACTIVE' as const),
+        head: entry.head,
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name));
+  }
+
   async getStats(hospitalId: string, userId: string) {
-    await this.validateHospitalAccess(hospitalId, userId);
+    await this.validateHospitalReadAccess(hospitalId, userId);
 
     const now = new Date();
     const startOfMonth = new Date(now.getFullYear(), now.getMonth(), 1);
@@ -181,25 +316,37 @@ export class HospitalsService {
       CANCELLED: 0,
     };
 
+    // AppointmentStatus on the backend (SCHEDULED, COMPLETED, CANCELLED,
+    // NO_SHOW, ARRIVED, IN_TRIAGE, READY_FOR_DOCTOR) has no CONFIRMED value —
+    // there is no 1:1 mapping to the frontend's 4-bucket summary. ARRIVED/
+    // IN_TRIAGE/READY_FOR_DOCTOR all represent an appointment the patient
+    // has actually shown up for and is actively progressing through, which
+    // is the closest match to "confirmed" as opposed to merely SCHEDULED.
+    // NO_SHOW is bucketed with CANCELLED since neither resulted in a
+    // completed visit. Every status row now lands in a bucket instead of
+    // 4 of 7 being silently dropped.
     for (const row of statusRows) {
       const status = row.status;
       const count = Number(row.count);
       if (status === 'SCHEDULED') {
-        appointmentsByStatus.PENDING = count;
+        appointmentsByStatus.PENDING += count;
+      } else if (status === 'ARRIVED' || status === 'IN_TRIAGE' || status === 'READY_FOR_DOCTOR') {
+        appointmentsByStatus.CONFIRMED += count;
       } else if (status === 'COMPLETED') {
-        appointmentsByStatus.COMPLETED = count;
-      } else if (status === 'CANCELLED') {
-        appointmentsByStatus.CANCELLED = count;
+        appointmentsByStatus.COMPLETED += count;
+      } else if (status === 'CANCELLED' || status === 'NO_SHOW') {
+        appointmentsByStatus.CANCELLED += count;
       }
     }
 
     // 5. Revenue counts (total vs monthly)
     const revenueStatsResult = await this.prisma.$queryRaw<any[]>`
-      SELECT 
+      SELECT
         COALESCE(SUM("totalAmount"), 0)::float AS total_revenue,
         COALESCE(SUM(CASE WHEN "issuedAt" >= ${startOfMonth} AND "issuedAt" <= ${endOfMonth} THEN "totalAmount" ELSE 0 END), 0)::float AS monthly_revenue
       FROM hospital_invoices
       WHERE "hospitalId" = ${hospitalId}
+        AND "paymentStatus" = 'PAID'
     `;
     const totalRevenue = Number(revenueStatsResult[0]?.total_revenue ?? 0);
     const monthlyRevenue = Number(revenueStatsResult[0]?.monthly_revenue ?? 0);
@@ -261,7 +408,7 @@ export class HospitalsService {
   }
 
   async getWeeklyRevenue(hospitalId: string, userId: string) {
-    await this.validateHospitalAccess(hospitalId, userId);
+    await this.validateHospitalReadAccess(hospitalId, userId);
 
     const now = new Date();
     const dayOfWeek = now.getDay();
@@ -292,6 +439,7 @@ export class HospitalsService {
       FROM   hospital_invoices
       WHERE  "hospitalId" = ${hospitalId}
         AND  "issuedAt" >= ${oldestStart}
+        AND  "paymentStatus" = 'PAID'
       GROUP  BY DATE_TRUNC('week', "issuedAt")
       ORDER  BY week_start ASC
     `;
@@ -311,6 +459,27 @@ export class HospitalsService {
     });
   }
 
+  async updateProfile(
+    hospitalId: string,
+    userId: string,
+    dto: { name?: string; address?: string; phone?: string },
+  ) {
+    await this.validateHospitalAccess(hospitalId, userId);
+
+    const data: Record<string, unknown> = {};
+    if (dto.name !== undefined) data.name = dto.name;
+    if (dto.address !== undefined) data.address = dto.address;
+    if (dto.phone !== undefined) data.phone = dto.phone;
+
+    const updated = await this.prisma.hospital.update({
+      where: { id: hospitalId },
+      data,
+      include: { user: { select: { email: true } } },
+    });
+    const { user, ...rest } = updated;
+    return { ...rest, email: user?.email ?? null };
+  }
+
   private async validateHospitalAccess(hospitalId: string, userId: string) {
     const hospital = await this.prisma.hospital.findUnique({
       where: { id: hospitalId },
@@ -322,6 +491,31 @@ export class HospitalsService {
       throw new ForbiddenException('You do not have access to this hospital');
     }
     return hospital;
+  }
+
+  /**
+   * Read-only variant of validateHospitalAccess for endpoints a hospital's
+   * own doctors should also be able to read (dashboard stats, weekly
+   * revenue), not just the hospital admin who owns the account. Deliberately
+   * NOT used for write endpoints (updateProfile, updateDrugStock) — a doctor
+   * belonging to a hospital should be able to see its stats, not edit its
+   * profile or stock.
+   */
+  private async validateHospitalReadAccess(hospitalId: string, userId: string) {
+    const hospital = await this.prisma.hospital.findUnique({
+      where: { id: hospitalId },
+    });
+    if (!hospital) {
+      throw new NotFoundException('Hospital not found');
+    }
+    if (hospital.userId === userId) return hospital;
+
+    const doctor = await this.prisma.doctor.findFirst({
+      where: { userId, hospitalId },
+    });
+    if (doctor) return hospital;
+
+    throw new ForbiddenException('You do not have access to this hospital');
   }
 
   // ========================================
@@ -450,9 +644,9 @@ export class HospitalsService {
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
       Math.cos((lat1 * Math.PI) / 180) *
-        Math.cos((lat2 * Math.PI) / 180) *
-        Math.sin(dLon / 2) *
-        Math.sin(dLon / 2);
+      Math.cos((lat2 * Math.PI) / 180) *
+      Math.sin(dLon / 2) *
+      Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
@@ -749,5 +943,58 @@ export class HospitalsService {
         details: refundResults,
       },
     };
+  }
+
+
+
+  // ========================================
+  // SURGERY MANAGEMENT (Post-Op & Inventory)
+  // ========================================
+
+  async logPostOpReport(
+    hospitalId: string,
+    userId: string,
+    bookingId: string,
+    dto: LogPostOpReportDto,
+  ) {
+    // 1. Validate the user actually belongs to this hospital
+    await this.validateHospitalAccess(hospitalId, userId);
+
+    const booking = await this.prisma.surgeryBooking.findUnique({
+      where: { id: bookingId },
+    });
+
+    if (!booking) {
+      throw new NotFoundException('Surgery booking not found');
+    }
+
+    if (booking.hospitalId !== hospitalId) {
+      throw new ForbiddenException('This booking belongs to another hospital');
+    }
+
+    if (booking.status === SurgeryStatus.COMPLETED) {
+      throw new BadRequestException('Surgery is already marked as completed');
+    }
+
+    // 2. Update the database with the post-op report and mark as COMPLETED
+    const updatedBooking = await this.prisma.surgeryBooking.update({
+      where: { id: bookingId },
+      data: {
+        status: SurgeryStatus.COMPLETED,
+        durationMinutes: dto.durationMinutes,
+        anesthesiaDetails: dto.anesthesiaDetails,
+        operationNotes: dto.operationNotes,
+        complications: dto.complications,
+        outcome: dto.outcome,
+        reportLoggedAt: new Date(),
+      },
+    });
+
+    // 3. Emit the event so InventoryService can deduct the required BOM consumables safely in the background
+    this.eventEmitter.emit('surgery.completed', {
+      bookingId: updatedBooking.id,
+    });
+
+    return updatedBooking;
   }
 }

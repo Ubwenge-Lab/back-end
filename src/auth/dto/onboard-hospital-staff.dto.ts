@@ -27,9 +27,9 @@ export class OnboardHospitalStaffDto {
   @IsString()
   phone?: string;
 
-  @ApiProperty({ enum: ['DOCTOR', 'NURSE', 'RECEPTIONIST'] })
-  @IsEnum(['DOCTOR', 'NURSE', 'RECEPTIONIST'])
-  role: 'DOCTOR' | 'NURSE' | 'RECEPTIONIST';
+  @ApiProperty({ enum: ['DOCTOR', 'NURSE', 'RECEPTIONIST', 'TECHNICIAN'] })
+  @IsEnum(['DOCTOR', 'NURSE', 'RECEPTIONIST', 'TECHNICIAN'])
+  role: 'DOCTOR' | 'NURSE' | 'RECEPTIONIST' | 'TECHNICIAN';
 
   @ApiPropertyOptional({
     example: 'Cardiology',
@@ -38,6 +38,14 @@ export class OnboardHospitalStaffDto {
   @IsOptional()
   @IsString()
   specialization?: string;
+
+  @ApiPropertyOptional({
+    enum: ['LAB', 'RADIOLOGY'],
+    description: 'Required when role is TECHNICIAN',
+  })
+  @IsOptional()
+  @IsEnum(['LAB', 'RADIOLOGY'])
+  technicianSpecialization?: 'LAB' | 'RADIOLOGY';
 
   @ApiPropertyOptional({
     example: 'RW-MED-2024-001',

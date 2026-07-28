@@ -175,7 +175,7 @@ export class AppointmentsService {
   // ========================================
   // LIST APPOINTMENTS (role-scoped)
   // ========================================
-  async findAll(userId: string, role: string) {
+  async findAll(userId: string, role: string, from?: string, to?: string) {
     if (role === 'PATIENT') {
       const patient = await this.prisma.patient.findUnique({
         where: { userId },
@@ -193,8 +193,20 @@ export class AppointmentsService {
       const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
       if (!doctor) throw new ForbiddenException('Doctor profile not found');
 
+      // Build optional date filter when from/to are provided
+      const dateFilter: any = {};
+      if (from) dateFilter.gte = new Date(from);
+      if (to) {
+        const toDate = new Date(to);
+        toDate.setHours(23, 59, 59, 999);
+        dateFilter.lte = toDate;
+      }
+
       return this.prisma.appointment.findMany({
-        where: { doctorId: doctor.id },
+        where: {
+          doctorId: doctor.id,
+          ...(Object.keys(dateFilter).length > 0 ? { date: dateFilter } : {}),
+        },
         include: appointmentInclude,
         orderBy: { date: 'asc' },
       });
@@ -215,6 +227,32 @@ export class AppointmentsService {
 
     if (role === 'SUPER_ADMIN') {
       return this.prisma.appointment.findMany({
+        include: appointmentInclude,
+        orderBy: { date: 'asc' },
+      });
+    }
+
+    // Receptionists are scoped to today's appointments at their own hospital
+    // only — unlike HOSPITAL_ADMIN, who sees the full history, a receptionist
+    // is working a front-desk queue and doesn't need appointments from other
+    // days or other hospitals.
+    if (role === 'RECEPTIONIST') {
+      const staff = await this.prisma.hospitalStaff.findFirst({
+        where: { userId },
+      });
+      if (!staff)
+        throw new ForbiddenException('Receptionist profile not found');
+
+      const startOfDay = new Date();
+      startOfDay.setHours(0, 0, 0, 0);
+      const endOfDay = new Date();
+      endOfDay.setHours(23, 59, 59, 999);
+
+      return this.prisma.appointment.findMany({
+        where: {
+          hospitalId: staff.hospitalId,
+          date: { gte: startOfDay, lte: endOfDay },
+        },
         include: appointmentInclude,
         orderBy: { date: 'asc' },
       });

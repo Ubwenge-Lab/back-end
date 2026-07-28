@@ -33,6 +33,7 @@ import { DoctorsModule } from './doctors/doctors.module';
 import { AvailabilityModule } from './doctors/availability/availability.module';
 import { DocumentsModule } from './documents/documents.module';
 import { ClaimsModule } from './claims/claims.module';
+import { AnalyticsModule } from './analytics/analytics.module';
 import {
   LoggerModule,
   CorrelationIdMiddleware,
@@ -40,10 +41,24 @@ import {
 } from './logger';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { EventEmitterModule } from '@nestjs/event-emitter';
+import { ScheduleModule } from '@nestjs/schedule';
 import { ReportsModule } from './reports/reports.module';
+import { PlatformBillingModule } from './platform-billing/platform-billing.module';
+import { InpatientBillingModule } from './inpatient-billing/inpatient-billing.module';
+import { InpatientModule } from './inpatient/inpatient.module';
+import { ReferralsModule } from './referrals/referrals.module';
+import { AuditModule } from './audit/audit.module';
+import { AuditContextInterceptor } from './audit/audit-context.interceptor';
+import { SentryModule } from '@sentry/nestjs/setup';
+import { DiagnosticsModule } from './diagnostics/diagnostics.module';
+import { InventoryModule } from './inventory/inventory.module';
+import { LabResultsModule } from './lab-results/lab-results.module';
+import { NursesModule } from './nurses/nurses.module';
+import { ChatModule } from './chat/chat.module';
 
 @Module({
   imports: [
+    SentryModule.forRoot(),
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: '.env',
@@ -57,6 +72,7 @@ import { ReportsModule } from './reports/reports.module';
     ]),
 
     EventEmitterModule.forRoot(),
+    ScheduleModule.forRoot(),
     LoggerModule,
     PrismaModule,
     AuthModule,
@@ -86,6 +102,17 @@ import { ReportsModule } from './reports/reports.module';
     ReportsModule,
     DocumentsModule,
     ClaimsModule,
+    AnalyticsModule,
+    PlatformBillingModule,
+    InpatientBillingModule,
+    InpatientModule,
+    ReferralsModule,
+    AuditModule,
+    DiagnosticsModule,
+    InventoryModule,
+    LabResultsModule,
+    NursesModule,
+    ChatModule,
   ],
   controllers: [AppController],
   providers: [
@@ -94,6 +121,10 @@ import { ReportsModule } from './reports/reports.module';
     {
       provide: APP_INTERCEPTOR,
       useClass: LoggingInterceptor,
+    },
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: AuditContextInterceptor,
     },
     // Bind ThrottlerGuard globally to apply rate limiting to all routes
     {

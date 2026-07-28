@@ -395,6 +395,7 @@ async function main() {
 
   const patients = [
     {
+      id: 'b39bcac3-9eae-4c50-b408-347fd13e9b33',
       email: 'alice@patient.com',
       firstName: 'Alice',
       lastName: 'Mukamana',
@@ -403,6 +404,7 @@ async function main() {
       coverage: 80,
     },
     {
+      id: 'c7dbe656-1869-45d1-a498-f6341cd54930',
       email: 'bob@patient.com',
       firstName: 'Bob',
       lastName: 'Habimana',
@@ -411,6 +413,7 @@ async function main() {
       coverage: 0,
     },
     {
+      id: '1e14481d-5a94-4206-8b34-83c35044ae3d',
       email: 'claire@patient.com',
       firstName: 'Claire',
       lastName: 'Ingabire',
@@ -419,6 +422,7 @@ async function main() {
       coverage: 60,
     },
     {
+      id: '6416e65b-a0be-40cb-bad8-c3f2ec4a8f7a',
       email: 'david@patient.com',
       firstName: 'David',
       lastName: 'Nshuti',
@@ -440,6 +444,7 @@ async function main() {
         address: p.address,
       },
       create: {
+        id: p.id,
         user: { connect: { id: userId } },
         firstName: p.firstName,
         lastName: p.lastName,
@@ -462,6 +467,7 @@ async function main() {
       where: { userId: pharmId },
       update: { firstName: 'Samuel', status: 'ACTIVE' },
       create: {
+        id: '86e18f92-8874-4d4c-b9e7-aaba80d6a11c',
         userId: pharmId,
         branchId: medPlusMain.id,
         firstName: 'Samuel',
@@ -478,6 +484,7 @@ async function main() {
       where: { userId: cashierId },
       update: { firstName: 'Grace', status: 'ACTIVE' },
       create: {
+        id: 'e091747a-6eec-4131-923f-f0e727ef4fb7',
         userId: cashierId,
         branchId: medPlusMain.id,
         firstName: 'Grace',
@@ -712,13 +719,13 @@ async function main() {
   const robertUserId = await getUserId('robert@chuk.com');
   const ericUserId = await getUserId('eric@kingfaisal.com');
 
-  const robertDocId = '60000000-0000-0000-0000-000000000001';
-  const ericDocId = '60000000-0000-0000-0000-000000000002';
+  const robertDocId = '60000000-0000-4000-8000-000000000001';
+  const ericDocId = '60000000-0000-4000-8000-000000000002';
 
   if (robertUserId) {
     await prisma.doctor.upsert({
       where: { userId: robertUserId },
-      update: { specialization: 'Cardiology' },
+      update: { specialization: 'Cardiology', isDepartmentHead: true },
       create: {
         id: robertDocId,
         userId: robertUserId,
@@ -728,6 +735,7 @@ async function main() {
         firstName: 'Robert',
         lastName: 'Niyonkuru',
         isAvailable: true,
+        isDepartmentHead: true,
         bio: 'Senior Cardiologist specializing in heart rhythm disorders.',
       },
     });
@@ -755,7 +763,7 @@ async function main() {
   if (ericUserId) {
     await prisma.doctor.upsert({
       where: { userId: ericUserId },
-      update: { specialization: 'Pediatrics' },
+      update: { specialization: 'Pediatrics', isDepartmentHead: true },
       create: {
         id: ericDocId,
         userId: ericUserId,
@@ -765,6 +773,7 @@ async function main() {
         firstName: 'Eric',
         lastName: 'Havugimana',
         isAvailable: true,
+        isDepartmentHead: true,
         bio: 'Compassionate Pediatrician with 8+ years of experience.',
       },
     });
@@ -794,6 +803,7 @@ async function main() {
     where: { hospitalId: chukId },
     update: { consultationFee: 10000, triageFee: 3000 },
     create: {
+      id: '879a7899-beac-4c20-a463-66e111740b61',
       hospitalId: chukId,
       consultationFee: 10000,
       triageFee: 3000,
@@ -804,6 +814,7 @@ async function main() {
     where: { hospitalId: kfhId },
     update: { consultationFee: 25000, triageFee: 5000 },
     create: {
+      id: '736789d0-f12e-4476-ba23-e38c4e5c98d1',
       hospitalId: kfhId,
       consultationFee: 25000,
       triageFee: 5000,
@@ -1129,6 +1140,48 @@ async function main() {
   }
 
   // ==========================================
+  // 7b. HOSPITAL DRUG STOCK
+  // ==========================================
+  console.log('💊 Seeding hospital drug stock...');
+  const stockDrugs = await prisma.medicationRegistry.findMany({ take: 12 });
+
+  const STOCK_ENTRIES = [
+    { qty: 150, reorder: 20, unitPrice: 2500, daysUntilExpiry: 540 },
+    { qty: 8,   reorder: 15, unitPrice: 4800, daysUntilExpiry: 45  }, // low-stock + expiring
+    { qty: 200, reorder: 30, unitPrice: 1200, daysUntilExpiry: 730 },
+    { qty: 0,   reorder: 10, unitPrice: 900,  daysUntilExpiry: -5  }, // low-stock + expired
+    { qty: 75,  reorder: 10, unitPrice: 6500, daysUntilExpiry: 400 },
+    { qty: 12,  reorder: 25, unitPrice: 3200, daysUntilExpiry: 55  }, // low-stock + expiring
+    { qty: 320, reorder: 50, unitPrice: 750,  daysUntilExpiry: 600 },
+    { qty: 5,   reorder: 10, unitPrice: 11000,daysUntilExpiry: 365 }, // low-stock
+    { qty: 90,  reorder: 15, unitPrice: 2100, daysUntilExpiry: 800 },
+    { qty: 45,  reorder: 20, unitPrice: 5500, daysUntilExpiry: 180 },
+    { qty: 18,  reorder: 30, unitPrice: 3800, daysUntilExpiry: 30  }, // expiring
+    { qty: 110, reorder: 10, unitPrice: 1600, daysUntilExpiry: 900 },
+  ];
+
+  for (let i = 0; i < stockDrugs.length; i++) {
+    const drug = stockDrugs[i];
+    const entry = STOCK_ENTRIES[i % STOCK_ENTRIES.length];
+    const expiryDate = new Date(Date.now() + entry.daysUntilExpiry * 24 * 60 * 60 * 1000);
+
+    for (const hospitalId of [kfhId, chukId]) {
+      await prisma.hospitalDrugStock.upsert({
+        where: { drugId_hospitalId: { drugId: drug.id, hospitalId } },
+        update: {},
+        create: {
+          drugId: drug.id,
+          hospitalId,
+          quantity: entry.qty,
+          reorderLevel: entry.reorder,
+          unitPrice: entry.unitPrice,
+          expiryDate,
+        },
+      });
+    }
+  }
+
+  // ==========================================
   // 8. ADDITIONAL FAKER-BASED SEEDING (Merged from seed-full.ts in Idempotent Mode)
   // ==========================================
   console.log(
@@ -1205,7 +1258,7 @@ async function main() {
 
     // Create 2 branches per pharmacy
     for (let j = 0; j < 2; j++) {
-      const branchManagerEmail = `manager${i}_${j}@pharmacy.com`;
+      const branchManagerEmail = `manager${i}_${j}@manager.com`;
       const managerUserId = `00000000-0000-0000-0002-0000000000${i}${j}`;
       const branchId = `20000000-0000-0000-0001-0000000000${i}${j}`;
 
@@ -1427,10 +1480,19 @@ async function main() {
     fakerHospitals.push(hospital);
 
     // Create 3 hospital staff per hospital
+    const departmentsList = [
+      'Cardiology',
+      'Pediatrics',
+      'General Practice',
+      'Orthopedics',
+      'Dermatology',
+    ];
+
     for (let j = 0; j < 3; j++) {
       const hStaffEmail = `nurse${i}_${j}@hospital.com`;
       const nurseUserId = `00000000-0000-0000-0006-0000000000${i}${j}`;
       const nurseStaffId = `60000000-0000-0000-0001-0000000000${i}${j}`;
+      const nurseDepartment = departmentsList[j % departmentsList.length];
 
       const hStaffUser = await prisma.user.upsert({
         where: { email: hStaffEmail },
@@ -1457,6 +1519,7 @@ async function main() {
         update: {
           hospitalId: hospital.id,
           status: StaffStatus.ACTIVE,
+          department: nurseDepartment,
         },
         create: {
           id: nurseStaffId,
@@ -1466,16 +1529,71 @@ async function main() {
           lastName: faker.person.lastName(),
           phone: '+250788' + faker.string.numeric(6),
           status: StaffStatus.ACTIVE,
+          department: nurseDepartment,
         },
       });
       fakerHospitalStaffList.push(hStaff);
     }
+    // Receptionists
+    for (let j = 0; j < 2; j++) {
+      const recEmail = j === 0 && i === 0 ? 'receptionist@ubumwe.com' : `receptionist${i}_${j}@hospital.com`;
+      const recUserId = `00000000-0000-0000-0008-0000000000${i}${j}`;
+      const recStaffId = `80000000-0000-0000-0001-0000000000${i}${j}`;
+
+      const recUser = await prisma.user.upsert({
+        where: { email: recEmail },
+        update: {
+          role: UserRole.RECEPTIONIST,
+          isVerified: true,
+          isActive: true,
+          password: password,
+        },
+        create: {
+          id: recUserId,
+          email: recEmail,
+          role: UserRole.RECEPTIONIST,
+          isVerified: true,
+          password: password,
+          isActive: true,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+        },
+      });
+
+      const recStaff = await prisma.hospitalStaff.upsert({
+        where: { userId: recUser.id },
+        update: {
+          hospitalId: hospital.id,
+          status: StaffStatus.ACTIVE,
+        },
+        create: {
+          id: recStaffId,
+          userId: recUser.id,
+          hospitalId: hospital.id,
+          firstName: faker.person.firstName(),
+          lastName: faker.person.lastName(),
+          phone: '+250788' + faker.string.numeric(6),
+          status: StaffStatus.ACTIVE,
+        },
+      });
+      fakerHospitalStaffList.push(recStaff);
+    }
 
     // Doctors
+    const specialties = [
+      'Cardiology',
+      'Pediatrics',
+      'General Practice',
+      'Orthopedics',
+      'Dermatology',
+    ];
+
     for (let j = 0; j < 5; j++) {
       const docEmail = `doctor${i}_${j}@hospital.com`;
       const doctorUserId = `00000000-0000-0000-0007-0000000000${i}${j}`;
       const doctorId = `70000000-0000-0000-0001-0000000000${i}${j}`;
+      const docSpecialization = specialties[j % specialties.length];
+      const isDocDeptHead = j < 3; // First 3 specialties have heads
 
       const docUser = await prisma.user.upsert({
         where: { email: docEmail },
@@ -1501,7 +1619,9 @@ async function main() {
         where: { userId: docUser.id },
         update: {
           hospitalId: hospital.id,
+          specialization: docSpecialization,
           isAvailable: true,
+          isDepartmentHead: isDocDeptHead,
         },
         create: {
           id: doctorId,
@@ -1509,15 +1629,10 @@ async function main() {
           hospitalId: hospital.id,
           firstName: docUser.firstName || faker.person.firstName(),
           lastName: docUser.lastName || faker.person.lastName(),
-          specialization: faker.helpers.arrayElement([
-            'Cardiology',
-            'Pediatrics',
-            'General Practice',
-            'Orthopedics',
-            'Dermatology',
-          ]),
+          specialization: docSpecialization,
           licenseNumber: 'RW-MED-' + faker.string.numeric(5) + `-${i}-${j}`,
           isAvailable: true,
+          isDepartmentHead: isDocDeptHead,
           bio: faker.person.bio(),
         },
       });

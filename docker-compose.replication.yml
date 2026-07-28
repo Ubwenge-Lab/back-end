@@ -1,0 +1,73 @@
+# Local-only Postgres primary + streaming read-replica, for testing the
+# Prisma read/write split and DB failover behavior without needing a paid
+# Supabase Read Replica. NOT for production use.
+#
+# Usage:
+#   docker compose -f docker-compose.replication.yml up -d
+#   docker compose -f docker-compose.replication.yml down -v   # tear down + wipe data
+#
+# Once healthy, point the app at:
+#   DATABASE_URL="postgresql://evuze:evuze_local_pw@localhost:5433/evuze"
+#   DATABASE_REPLICA_URL="postgresql://evuze:evuze_local_pw@localhost:5434/evuze"
+# and run `npx prisma migrate deploy` against DATABASE_URL before starting the app.
+#
+# To simulate a replica failure mid-load-test:
+#   docker compose -f docker-compose.replication.yml stop pg-replica
+# and to recover:
+#   docker compose -f docker-compose.replication.yml start pg-replica
+
+services:
+  pg-primary:
+    image: postgres:16-alpine
+    container_name: evuze-pg-primary
+    environment:
+      POSTGRES_USER: evuze
+      POSTGRES_PASSWORD: evuze_local_pw
+      POSTGRES_DB: evuze
+      PGDATA: /var/lib/postgresql/data/pgdata
+      REPLICATION_USER: replicator
+      REPLICATION_PASSWORD: replicator_local_pw
+    command: >
+      postgres
+      -c wal_level=replica
+      -c max_wal_senders=10
+      -c max_replication_slots=10
+      -c hot_standby=on
+    volumes:
+      - pg_primary_data:/var/lib/postgresql/data
+      - ./docker/pg-primary/init-replication.sh:/docker-entrypoint-initdb.d/init-replication.sh:ro
+    ports:
+      - '5433:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U evuze -d evuze']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  pg-replica:
+    build:
+      context: ./docker/pg-replica
+    container_name: evuze-pg-replica
+    depends_on:
+      pg-primary:
+        condition: service_healthy
+    environment:
+      PGDATA: /var/lib/postgresql/data/pgdata
+      PRIMARY_HOST: pg-primary
+      PRIMARY_PORT: 5432
+      REPLICATION_USER: replicator
+      REPLICATION_PASSWORD: replicator_local_pw
+      POSTGRES_PASSWORD: evuze_local_pw
+    volumes:
+      - pg_replica_data:/var/lib/postgresql/data
+    ports:
+      - '5434:5432'
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U evuze -d evuze']
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pg_primary_data:
+  pg_replica_data:

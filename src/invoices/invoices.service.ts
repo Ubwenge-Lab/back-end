@@ -111,44 +111,49 @@ export class InvoicesService {
   // ========================================
 
   async pay(id: string, userId: string, role: string) {
-    const invoice = await this.prisma.hospitalInvoice.findUnique({
-      where: { id },
-    });
-    if (!invoice) throw new NotFoundException('Invoice not found');
-
-    if (invoice.paymentStatus === HospitalBillingStatus.PAID) {
-      throw new BadRequestException('Invoice is already paid');
-    }
-
+    // Authorisation check outside the transaction (no write contention here)
     if (role === 'HOSPITAL_ADMIN' || role === 'RECEPTIONIST') {
       const hospital = await this.prisma.hospital.findFirst({
         where: { userId },
       });
       if (!hospital) throw new ForbiddenException('Hospital not found');
 
-      if (role === 'HOSPITAL_ADMIN' && invoice.hospitalId !== hospital.id) {
-        throw new ForbiddenException('Access denied');
+      // For HOSPITAL_ADMIN we need the invoice's hospitalId to scope the check,
+      // but we'll verify that inside the transaction after re-reading.
+      if (role === 'HOSPITAL_ADMIN') {
+        const preCheck = await this.prisma.hospitalInvoice.findUnique({
+          where: { id },
+          select: { hospitalId: true },
+        });
+        if (!preCheck) throw new NotFoundException('Invoice not found');
+        if (preCheck.hospitalId !== hospital.id)
+          throw new ForbiddenException('Access denied');
       }
     }
 
-    const updated = await this.prisma.hospitalInvoice.update({
-      where: { id },
-      data: { paymentStatus: HospitalBillingStatus.PAID },
-      include: {
-        ...hospitalInvoiceInclude,
-        patient: {
-          select: {
-            firstName: true,
-            lastName: true,
-            phone: true,
-            user: { select: { email: true } },
-          },
-        },
-      },
+    const updated = await this.prisma.$transaction(async (tx) => {
+      const invoice = await tx.hospitalInvoice.findUnique({ where: { id } });
+      if (!invoice) throw new NotFoundException('Invoice not found');
+
+      if (invoice.paymentStatus === HospitalBillingStatus.PAID) {
+        throw new BadRequestException('Invoice is already paid');
+      }
+
+      return tx.hospitalInvoice.update({
+        where: { id },
+        data: { paymentStatus: HospitalBillingStatus.PAID },
+        include: hospitalInvoiceInclude,
+      });
     });
 
-    // Fire async — does not block the response
-    const patientEmail = updated.patient?.user?.email;
+    // Fetch email separately so the Serializable-free transaction above
+    // never has to JOIN through Patient (a clinical model with async audit hooks).
+    const patientUser = await this.prisma.patient.findUnique({
+      where: { id: updated.patientId },
+      select: { user: { select: { email: true } } },
+    });
+    const patientEmail = patientUser?.user?.email;
+
     if (patientEmail) {
       this.eventEmitter.emit(
         'invoice.paid',

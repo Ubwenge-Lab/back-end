@@ -8,6 +8,8 @@ import {
   Get,
   Param,
   Req,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
 import { PaymentsService } from './payments.service';
@@ -16,6 +18,7 @@ import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
 import { MtnCallbackDto } from './dto/mtn-callback.dto';
+import { HospitalPaymentWebhookDto } from './dto/hospital-payment-webhook.dto';
 import { Public } from '../auth/decorators/public.decorator';
 import {
   InitiatePaymentDto,
@@ -24,6 +27,7 @@ import {
   CheckoutDto,
   RecordPaymentDto,
 } from './dto';
+import { CreateCheckoutSessionDto, MockWebhookDto } from './dto/payments.dto';
 
 @ApiTags('Payments')
 @Controller('payments')
@@ -65,11 +69,18 @@ export class PaymentsController {
     return this.paymentsService.getRecentSuccessfulPayments();
   }
 
-  @Public() // This tells NestJS: "Don't require a login for this specific URL"
+  @Public()
   @Post('webhook/mtn')
   async handleMtnWebhook(@Body() data: MtnCallbackDto) {
     console.log('Received MTN Webhook:', data);
     return this.paymentsService.processMtnPayment(data);
+  }
+
+  @Public()
+  @Post('webhook/hospital')
+  @ApiOperation({ summary: 'Mock hospital invoice payment webhook' })
+  async handleHospitalWebhook(@Body() data: HospitalPaymentWebhookDto) {
+    return this.paymentsService.processHospitalPaymentWebhook(data);
   }
 
   @Get(':paymentId/receipt')
@@ -87,6 +98,20 @@ export class PaymentsController {
   })
   checkout(@Req() req: any, @Body() dto: CheckoutDto) {
     return this.paymentsService.checkout(req.user.sub, dto);
+  }
+
+
+  @Post('checkout-session')
+  @HttpCode(HttpStatus.CREATED)
+  createSession(@Body() dto: CreateCheckoutSessionDto) {
+    return this.paymentsService.createCheckoutSession(dto);
+  }
+
+  @Post('webhook/mock-callback')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  handleCallback(@Body() dto: MockWebhookDto) {
+    return this.paymentsService.handleMockWebhookCallback(dto);
   }
 
   @Post('record')

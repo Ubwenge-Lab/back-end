@@ -15,6 +15,8 @@ import { UsersService } from '../users/users.service';
 import { PatientsService } from '../patients/patients.service';
 import { PharmaciesService } from '../pharmacies/pharmacies.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { AuditService } from '../audit/audit.service';
+import * as Sentry from '@sentry/nestjs';
 import {
   LoginDto,
   RegisterPatientDto,
@@ -32,6 +34,12 @@ import {
 } from './dto';
 import { randomInt, randomBytes } from 'crypto';
 
+// Small helper so `catch (error)` blocks can safely read a message off an
+// `unknown`-typed error without every call site needing its own type guard.
+function getErrorMessage(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -44,7 +52,8 @@ export class AuthService {
     private patientsService: PatientsService,
     private pharmaciesService: PharmaciesService,
     private notificationsService: NotificationsService,
-  ) {}
+    private auditService: AuditService,
+  ) { }
 
   // ========================================
   // LOGIN (For ALL users including SUPER_ADMIN)
@@ -64,6 +73,14 @@ export class AuthService {
 
     const isPasswordValid = await bcrypt.compare(dto.password, user.password);
     if (!isPasswordValid) {
+      void this.auditService.log({
+        actorEmail: dto.email,
+        targetType: 'User',
+        targetId: user.id,
+        action: 'LOGIN_FAILURE',
+        outcome: 'FAILURE',
+        metadata: { reason: 'Invalid password' },
+      })
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -84,9 +101,20 @@ export class AuthService {
         user.password,
       );
 
-      const tokens = await this.generateTokens(user.id, user.email, user.role);
-      await this.updateRefreshToken(user.id, tokens.refreshToken);
+      // Example of custom performance tracing replacing Sentry.metrics
+      const tokens = await Sentry.startSpan({ name: "Generate Auth Tokens" }, async () => {
+        return await this.generateTokens(user.id, user.email, user.role);
+      });
 
+      await this.updateRefreshToken(user.id, tokens.refreshToken);
+      void this.auditService.log({
+        actorId: user.id,
+        actorEmail: user.email,
+        actorRole: user.role,
+        targetType: 'User',
+        targetId: user.id,
+        action: 'LOGIN_SUCCESS',
+      })
       return {
         user: {
           id: user.id,
@@ -116,7 +144,14 @@ export class AuthService {
         pharmacy.status,
       );
       await this.updateRefreshToken(user.id, tokens.refreshToken);
-
+      void this.auditService.log({
+        actorId: user.id,
+        actorEmail: user.email,
+        actorRole: user.role,
+        targetType: 'User',
+        targetId: user.id,
+        action: 'LOGIN_SUCCESS',
+      })
       return {
         user: {
           id: user.id,
@@ -222,7 +257,7 @@ export class AuthService {
     }
 
     if (
-      ['PHARMACIST', 'CASHIER', 'NURSE', 'DOCTOR', 'RECEPTIONIST'].includes(
+      ['PHARMACIST', 'CASHIER', 'NURSE', 'DOCTOR', 'RECEPTIONIST', 'TECHNICIAN'].includes(
         user.role,
       )
     ) {
@@ -321,6 +356,7 @@ export class AuthService {
           user.role,
           undefined,
           hospitalStaff.hospitalId,
+          hospitalStaff.technicianSpecialization ?? undefined,
         );
         await this.updateRefreshToken(user.id, tokens.refreshToken);
 
@@ -329,13 +365,55 @@ export class AuthService {
             id: user.id,
             email: user.email,
             role: user.role,
+            firstName: hospitalStaff.firstName,
+            lastName: hospitalStaff.lastName,
             hospitalId: hospitalStaff.hospitalId,
             hospitalName: hospitalStaff.hospital.name,
             status: hospitalStaff.status,
             requiresPasswordChange: !!isUsingTempPassword,
+            ...(hospitalStaff.technicianSpecialization && {
+              specialization: hospitalStaff.technicianSpecialization,
+            }),
           },
           ...tokens,
         };
+      }
+
+      // Fallback for a DOCTOR whose User has a Doctor record but no
+      // HospitalStaff row (e.g. seeded via prisma.doctor.create directly,
+      // bypassing the onboard/hospital-staff flow that creates both).
+      if (user.role === 'DOCTOR') {
+        const doctor = await this.prisma.doctor.findFirst({
+          where: { userId: user.id },
+          include: { hospital: true },
+        });
+
+        if (doctor) {
+          const tokens = await this.generateTokens(
+            user.id,
+            user.email,
+            user.role,
+            undefined,
+            doctor.hospitalId,
+          );
+          await this.updateRefreshToken(user.id, tokens.refreshToken);
+
+          return {
+            user: {
+              id: user.id,
+              email: user.email,
+              role: user.role,
+              firstName: doctor.firstName,
+              lastName: doctor.lastName,
+              hospitalId: doctor.hospitalId,
+              hospitalName: doctor.hospital.name,
+              doctorId: doctor.id,
+              specialization: doctor.specialization,
+              requiresPasswordChange: false,
+            },
+            ...tokens,
+          };
+        }
       }
 
       throw new UnauthorizedException('Staff profile not found');
@@ -421,7 +499,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send patient verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -493,7 +571,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send pharmacy verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -562,7 +640,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send hospital verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -605,6 +683,12 @@ export class AuthService {
       }
     }
 
+    if (dto.role === 'TECHNICIAN' && !dto.technicianSpecialization) {
+      throw new BadRequestException(
+        'technicianSpecialization (LAB or RADIOLOGY) is required when onboarding a Technician',
+      );
+    }
+
     const existingUser = await this.prisma.user.findUnique({
       where: { email: dto.email },
     });
@@ -637,6 +721,9 @@ export class AuthService {
           status: 'ACTIVE',
           tempPasswordHash: hashedPassword,
           tempPasswordExpiry,
+          ...(dto.role === 'TECHNICIAN' && {
+            technicianSpecialization: dto.technicianSpecialization,
+          }),
         },
       });
 
@@ -667,7 +754,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send hospital staff credentials email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -786,7 +873,7 @@ export class AuthService {
       } catch (error) {
         this.logger.error(
           'Failed to notify super admins about new hospital',
-          error?.message || error,
+          getErrorMessage(error),
         );
       }
     }
@@ -834,7 +921,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to resend verification email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -874,7 +961,7 @@ export class AuthService {
     } catch (error) {
       this.logger.error(
         'Failed to send password reset email',
-        error?.message || error,
+        getErrorMessage(error),
       );
     }
 
@@ -1111,10 +1198,33 @@ export class AuthService {
     role: string,
     status?: string,
     hospitalId?: string,
+    specialization?: string,
   ) {
     const payload: Record<string, any> = { sub: userId, email, role };
     if (status !== undefined) payload.status = status;
     if (hospitalId) payload.hospitalId = hospitalId;
+    if (specialization) payload.specialization = specialization;
+
+    if (role === 'DOCTOR') {
+      const doctor = await this.prisma.doctor.findUnique({
+        where: { userId },
+        select: { firstName: true, lastName: true }
+      });
+      if (doctor) {
+        payload.firstName = doctor.firstName;
+        payload.lastName = doctor.lastName;
+      }
+    }
+    else if (role === 'HOSPITAL_ADMIN') {
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+        select: { firstName: true, lastName: true }
+      });
+      if (user) {
+        payload.firstName = user.firstName;
+        payload.lastName = user.lastName;
+      }
+    }
     const [accessToken, refreshToken] = await Promise.all([
       this.jwtService.signAsync(payload, {
         secret: this.configService.get('JWT_SECRET'),

@@ -5,6 +5,10 @@ import { AsyncLocalStorage } from 'async_hooks';
 
 interface RequestContext {
   correlationId: string;
+  userId?: string;
+  userRole?: string;
+  ipAddress?: string;
+  actionReason?: string;
 }
 
 export const correlationStorage = new AsyncLocalStorage<RequestContext>();

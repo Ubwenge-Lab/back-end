@@ -22,11 +22,13 @@ import { HospitalsService } from './hospitals.service';
 import { InvoicesService } from '../invoices/invoices.service';
 import { HospitalDto } from './dto/hospital.dto';
 import { UpdateDrugStockDto } from './dto/update-drug-stock.dto';
+import { UpdateHospitalDto } from './dto/update-hospital.dto';
 import { UpdateLeaveStatusDto } from '../doctors/dto/update-leave-status.dto';
 import { JwtAuthGuard } from '../auth/guards/jwt-auth.guard';
 import { RolesGuard } from '../auth/guards/roles.guard';
 import { Roles } from '../auth/decorators/roles.decorator';
 import { Role } from '../common/constants/role.enum';
+import { LogPostOpReportDto } from './dto/surgery-scheduling.dto';
 
 @ApiTags('Hospitals')
 @Controller('hospitals')
@@ -36,7 +38,7 @@ export class HospitalsController {
   constructor(
     private readonly hospitalsService: HospitalsService,
     private readonly invoicesService: InvoicesService,
-  ) {}
+  ) { }
 
   @Get()
   @Roles(Role.SUPER_ADMIN, Role.PATIENT, Role.HOSPITAL_ADMIN, Role.DOCTOR)
@@ -85,6 +87,38 @@ export class HospitalsController {
   @ApiNotFoundResponse({ description: 'Hospital not found' })
   findOne(@Param('id') id: string) {
     return this.hospitalsService.findOne(id);
+  }
+
+  @Patch(':id')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @ApiOperation({
+    summary:
+      'Update this hospital\'s profile (name, address, phone). Hospital admin can only update their own hospital.',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiOkResponse({ type: HospitalDto, description: 'Updated hospital details' })
+  @ApiNotFoundResponse({ description: 'Hospital not found' })
+  updateProfile(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() dto: UpdateHospitalDto,
+  ) {
+    return this.hospitalsService.updateProfile(id, req.user.sub, dto);
+  }
+
+  @Get(':id/patients')
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR, Role.NURSE, Role.RECEPTIONIST)
+  @ApiOperation({
+    summary: 'Get all patients registered at this hospital. Optionally filter by doctorId.',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiQuery({ name: 'doctorId', required: false, description: 'Doctor UUID to filter patients by appointments' })
+  getHospitalPatients(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Query('doctorId') doctorId?: string,
+  ) {
+    return this.hospitalsService.getHospitalPatients(id, req.user.sub, doctorId);
   }
 
   @Post(':id/patients/search')
@@ -175,8 +209,25 @@ export class HospitalsController {
     return this.hospitalsService.findDoctors(id, specialty, availableBool);
   }
 
+  @Get(':id/departments')
+  @Roles(
+    Role.SUPER_ADMIN,
+    Role.HOSPITAL_ADMIN,
+    Role.DOCTOR,
+    Role.NURSE,
+    Role.RECEPTIONIST,
+  )
+  @ApiOperation({
+    summary:
+      'List departments at a hospital, derived from doctor specializations',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getDepartments(@Param('id') id: string) {
+    return this.hospitalsService.getDepartments(id);
+  }
+
   @Get(':id/dashboard/stats')
-  @Roles(Role.HOSPITAL_ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)
   @ApiOperation({ summary: 'Get hospital dashboard stats' })
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
   getStats(@Param('id') id: string, @Req() req: any) {
@@ -194,11 +245,34 @@ export class HospitalsController {
   }
 
   @Get(':id/dashboard/weekly-revenue')
-  @Roles(Role.HOSPITAL_ADMIN)
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)
   @ApiOperation({ summary: 'Get hospital weekly revenue for the last 4 weeks' })
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
   getWeeklyRevenue(@Param('id') id: string, @Req() req: any) {
     return this.hospitalsService.getWeeklyRevenue(id, req.user.sub);
+  }
+
+
+
+  @Post(':id/surgery-bookings/:bookingId/post-op')
+  @Roles(Role.HOSPITAL_ADMIN, Role.DOCTOR)
+  @ApiOperation({
+    summary: 'Log post-operation report and complete surgery',
+  })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiParam({ name: 'bookingId', description: 'Surgery Booking UUID' })
+  logPostOpReport(
+    @Param('id') hospitalId: string,
+    @Param('bookingId') bookingId: string,
+    @Req() req: any,
+    @Body() dto: LogPostOpReportDto,
+  ) {
+    return this.hospitalsService.logPostOpReport(
+      hospitalId,
+      req.user.sub,
+      bookingId,
+      dto,
+    );
   }
 
   // ========================================
