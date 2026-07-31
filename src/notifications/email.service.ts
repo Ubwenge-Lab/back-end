@@ -977,4 +977,71 @@ export class EmailService {
       console.error('❌ Resend error:', error.message);
     }
   }
+
+  async sendStockAlertEmail(
+    email: string,
+    itemName: string,
+    itemType: string,
+    currentQuantity: number,
+    threshold: number,
+    facilityName: string,
+  ) {
+    const html = this.baseTemplate(`
+      <div style="background:#fef2f2;border-radius:12px;padding:24px;text-align:center;margin:0 0 24px;border:1px solid #fecaca;">
+        <p style="margin:0 0 8px;color:#dc2626;font-size:14px;font-weight:700;">${itemName} (${itemType})</p>
+        <h1 style="margin:0;color:#dc2626;font-size:36px;font-weight:800;">${currentQuantity} Left</h1>
+        <p style="margin:8px 0 0;color:#ef4444;font-size:14px;">Critical Threshold: ${threshold}</p>
+      </div>
+      <p style="margin:0 0 24px;color:#475569;font-size:15px;line-height:1.6;">
+        Inventory levels for <strong>${itemName}</strong> have dropped below the safety threshold at <strong>${facilityName}</strong>. 
+        Please reorder immediately to avoid stockouts.
+      </p>
+    `);
+
+    try {
+      await this.resend.emails.send({
+        to: email,
+        from: this.getFrom(),
+        subject: `⚠️ Low Stock Alert: ${itemName}`,
+        html,
+      });
+      console.log(`✅ Stock alert email sent to ${email} for ${itemName}`);
+    } catch (error) {
+      console.error('❌ Resend error:', error.message);
+    }
+  }
+
+  async sendExpiryAlertEmail(
+    email: string,
+    itemName: string,
+    itemType: string,
+    batchNumber: string | null,
+    daysLeft: number,
+    expiryDate: string,
+    facilityName: string,
+  ) {
+    const html = this.baseTemplate(`
+      <p style="margin:0 0 16px;color:#64748b;font-size:13px;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">
+        ${facilityName} - Expiry Alert
+      </p>
+      <div style="background:#fffbeb;border-radius:12px;padding:24px;text-align:center;margin:0 0 24px;border:1px solid #fde68a;">
+        <p style="margin:0 0 8px;color:#d97706;font-size:14px;font-weight:700;">${itemName} (${itemType})</p>
+        ${batchNumber ? `<p style="margin:0 0 8px;color:#b45309;font-size:13px;">Batch: ${batchNumber}</p>` : ''}
+        <h1 style="margin:0;color:#d97706;font-size:36px;font-weight:800;">Expires in ${daysLeft} Days</h1>
+        <p style="margin:8px 0 0;color:#b45309;font-size:14px;">Exact Date: ${expiryDate}</p>
+      </div>
+    `);
+
+    try {
+      await this.resend.emails.send({
+        to: email,
+        from: this.getFrom(),
+        subject: `⏳ Expiry Warning (${daysLeft} days): ${itemName}`,
+        html,
+      });
+      console.log(`✅ Expiry alert email sent to ${email} for ${itemName}`);
+    } catch (error) {
+      console.error('❌ Resend error:', error.message);
+    }
+  }
 }

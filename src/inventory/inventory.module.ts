@@ -3,10 +3,12 @@ import { InventoryService } from './inventory.service';
 import { InventoryController } from './inventory.controller';
 import { PrismaModule } from '../prisma/prisma.module';
 import { InventoryListener } from './inventory.listener';
+import { NotificationsModule } from '../notifications/notifications.module';
+import { InventoryScheduler } from './inventory.scheduler';
 
 @Module({
-  imports: [PrismaModule],
-  providers: [InventoryService, InventoryListener],
+  imports: [PrismaModule, NotificationsModule],
+  providers: [InventoryService, InventoryListener, InventoryScheduler],
   controllers: [InventoryController],
   exports: [InventoryService],
 })
