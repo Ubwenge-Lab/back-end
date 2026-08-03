@@ -1000,6 +1000,7 @@ enum NotificationType {
   LAB_RESULT_READY
   LAB_ORDER_REJECTED
   NEW_CHAT_MESSAGE
+  EXPIRY_WARNING
 }
 
 enum PrescriptionStatus {
@@ -1556,4 +1557,20 @@ model ChatMessage {
   @@index([receiverId])
   @@index([createdAt])
   @@map("chat_messages")
+}
+
+model DisposalLog {
+  id           String   @id
+  itemId       String
+  itemName     String
+  itemType     String
+  quantity     Int
+  method       String
+  authorizedBy String
+  notes        String?
+  createdAt    DateTime @default(now())
+
+  @@index([itemId])
+  @@index([itemType])
+  @@map("disposal_logs")
 }
