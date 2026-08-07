@@ -19,6 +19,7 @@ import { Role } from '../common/constants/role.enum';
 @ApiTags('Notifications')
 @Controller('notifications')
 @UseGuards(JwtAuthGuard, RolesGuard)
+@Roles(Role.PATIENT, Role.PHARMACY, Role.PHARMACIST, Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.NURSE, Role.RECEPTIONIST)
 @ApiBearerAuth()
 export class NotificationsController {
   constructor(private notificationsService: NotificationsService) {}
@@ -27,7 +28,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Get user notifications' })
   getNotifications(
     @Req() req: any,
-    @Query('userType') userType: 'patient' | 'pharmacy',
+    @Query('userType') userType: 'patient' | 'pharmacy' | 'doctor' | 'hospital_admin' | 'nurse' | 'receptionist',
   ) {
     return this.notificationsService.findByUser(req.user.sub, userType);
   }
@@ -42,7 +43,7 @@ export class NotificationsController {
   @ApiOperation({ summary: 'Mark all notifications as read' })
   markAllAsRead(
     @Req() req: any,
-    @Query('userType') userType: 'patient' | 'pharmacy',
+    @Query('userType') userType: 'patient' | 'pharmacy' | 'doctor' | 'hospital_admin' | 'nurse' | 'receptionist',
   ) {
     return this.notificationsService.markAllAsRead(req.user.sub, userType);
   }
