@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, ForbiddenException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
 import { NotificationsGateway } from './notifications.gateway';
 import { EmailService } from './email.service';
@@ -30,6 +30,20 @@ export class NotificationsService {
   }
 
   async findByUser(userId: string, userType?: string) {
+    const hospitalRoles = ['doctor', 'hospital_admin', 'nurse', 'receptionist'];
+    if (userType && hospitalRoles.includes(userType)) {
+      if (userType === 'doctor') {
+        const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
+        if (!doctor) throw new ForbiddenException('Doctor record not found');
+      } else if (userType === 'hospital_admin') {
+        const hospital = await this.prisma.hospital.findUnique({ where: { userId } });
+        if (!hospital) throw new ForbiddenException('Hospital profile not found');
+      } else {
+        const staff = await this.prisma.hospitalStaff.findFirst({ where: { userId } });
+        if (!staff) throw new ForbiddenException('Hospital staff record not found');
+      }
+    }
+
     return this.prisma.notification.findMany({
       where: { userId },
       orderBy: { createdAt: 'desc' },

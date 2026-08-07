@@ -9,7 +9,8 @@ const SENSITIVE_DETERMINISTIC_FIELDS = ['phone', 'nationalId', 'mrn'];
 const SENSITIVE_NON_DETERMINISTIC_FIELDS = ['diagnosisSummary', 'notes', 'nurseNotes', 'reason'];
 const CLINICAL_MODELS = [
   'Patient', 'Appointment', 'TriageVitals', 'MARLog', 
-  'InpatientVitals', 'MedicalHistoryAccess', 'MedicalRecordLog', 'InpatientAdmission'
+  'InpatientVitals', 'MedicalHistoryAccess', 'MedicalRecordLog', 'InpatientAdmission',
+  'HospitalInvoice', 'HospitalPayment'
 ];
 
 function encryptArgs(args: any) {
