@@ -6,7 +6,7 @@
   "private": true,
   "license": "UNLICENSED",
   "scripts": {
-    "cleanup:staging": "ts-node scripts/cleanup-staging.ts",
+    "cleanup:staging": "ts-node qa/cleanup-staging.ts",
     "pretest:e2e": "ts-node scripts/cleanup-staging.ts --confirm",
     "build": "prisma generate && nest build",
     "format": "prettier --write \"src/**/*.ts\" \"test/**/*.ts\"",
@@ -23,7 +23,6 @@
     "test:debug": "node --inspect-brk -r tsconfig-paths/register -r ts-node/register node_modules/.bin/jest --runInBand",
     "test:e2e": "jest --config ./test/jest-e2e.json --runInBand",
     "test:journey": "jest --config ./test/jest-e2e.json --testPathPatterns=patient-journey --runInBand",
-    "cleanup:staging": "ts-node qa/cleanup-staging.ts",
     "cleanup:staging:dry": "ts-node qa/cleanup-staging.ts --dry-run",
     "seed": "ts-node src/prisma/seed.ts",
     "seed:registry": "ts-node src/prisma/seed-registry.ts"

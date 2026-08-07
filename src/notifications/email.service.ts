@@ -21,6 +21,23 @@ export class EmailService {
     console.log(' Resend initialized');
   }
 
+  async sendCustomEmail(to: string, subject: string, message: string) {
+    if (!this.resend) {
+      console.log(`[DEV MODE] Email to ${to}: ${subject} - ${message}`);
+      return;
+    }
+    try {
+      await this.resend.emails.send({
+        from: this.getFrom(),
+        to,
+        subject,
+        html: this.baseTemplate(`<p>${message}</p>`),
+      });
+    } catch (error) {
+      console.error(`Failed to send email to ${to}`, error);
+    }
+  }
+
   private getFrom(): string {
     const name =
       this.configService.get('RESEND_FROM_NAME') || 'Evuze Healthcare';

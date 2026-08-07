@@ -1560,7 +1560,7 @@ model ChatMessage {
 }
 
 model DisposalLog {
-  id           String   @id @default(uuid())
+  id           String   @id
   itemId       String
   itemName     String
   itemType     String

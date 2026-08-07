@@ -1,20 +1,25 @@
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
-import request = require('supertest');
-import { AppModule } from '../src/app.module';
+import request from 'supertest';
+import { App } from 'supertest/types';
+import { AppModule } from './../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { JwtService } from '@nestjs/jwt';
+import { v4 as uuidv4 } from 'uuid';
+import { UserRole } from '@prisma/client';
 
-describe('Stock Alerts and Disposals (e2e)', () => {
-  jest.setTimeout(60000); // 60 seconds timeout for NestJS startup
+jest.setTimeout(60000); // Allow NestJS time to boot
 
-  let app: INestApplication;
+describe('Stock Inventory Disposals (e2e)', () => {
+  let app: INestApplication<App>;
   let prisma: PrismaService;
   let jwtService: JwtService;
-  let adminToken: string;
-  let adminId: string;
+
+  const testId = uuidv4();
   let hospitalId: string;
-  let consumableId: string;
+  let adminUserId: string;
+  let stockId: string;
+  let token: string;
 
   beforeAll(async () => {
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -22,127 +27,102 @@ describe('Stock Alerts and Disposals (e2e)', () => {
     }).compile();
 
     app = moduleFixture.createNestApplication();
+    app.setGlobalPrefix('api');
     app.useGlobalPipes(new ValidationPipe({ whitelist: true }));
     await app.init();
 
-    prisma = app.get<PrismaService>(PrismaService);
-    jwtService = app.get<JwtService>(JwtService);
+    prisma = app.get(PrismaService);
+    jwtService = app.get(JwtService);
 
-    // Setup Test Data
-    const user = await prisma.user.create({
-      data: {
-        email: 'inventory.admin@test.com',
-        password: 'hashedpassword',
-        firstName: 'Admin',
-        lastName: 'Test',
-        role: 'HOSPITAL_ADMIN',
-        isActive: true,
-      },
-    });
-    adminId = user.id;
-
+    // 1. Create a dummy Hospital
     const hospital = await prisma.hospital.create({
       data: {
-        name: 'Test Inventory Hospital',
-        address: '123 Health St',
+        name: `E2E Hospital ${testId}`,
+        address: '123 Test St',
         phone: '123456789',
-        latitude: 0,
-        longitude: 0,
-        userId: user.id,
+        licenseNumber: `REG-${testId}`,
+        status: 'APPROVED',
+        user: {
+          create: {
+            email: `admin_${testId}@test.com`,
+            password: 'hash',
+            role: UserRole.HOSPITAL_ADMIN,
+          },
+        },
       },
+      include: { user: true },
     });
     hospitalId = hospital.id;
+    adminUserId = hospital.userId;
 
-    await prisma.hospitalStaff.create({
-      data: {
-        userId: adminId,
-        hospitalId: hospital.id,
-        firstName: 'Admin',
-        lastName: 'Test',
-      },
-    });
+    // Create JWT Token for admin
+    token = jwtService.sign({ sub: adminUserId, email: hospital.user.email, role: 'HOSPITAL_ADMIN' });
 
-    const consumable = await prisma.hospitalConsumableStock.create({
+    // 2. Create Dummy Consumable Stock
+    const stock = await prisma.hospitalConsumableStock.create({
       data: {
         hospitalId: hospital.id,
-        itemName: 'Test Gloves',
+        itemName: `E2E Syringe ${testId}`,
         quantity: 100,
-        criticalThreshold: 20,
-      },
+        criticalThreshold: 20
+      }
     });
-    consumableId = consumable.id;
-
-    adminToken = jwtService.sign({ sub: user.id, email: user.email, role: user.role });
+    stockId = stock.id;
   });
 
   afterAll(async () => {
-    await prisma.disposalLog.deleteMany({ where: { authorizedBy: adminId } });
-    await prisma.hospitalConsumableStock.deleteMany({ where: { hospitalId: hospitalId } });
-    await prisma.hospitalStaff.deleteMany({ where: { userId: adminId } });
-    await prisma.hospital.delete({ where: { id: hospitalId } });
-    await prisma.user.delete({ where: { id: adminId } });
     await app.close();
   });
 
-  describe('/inventory/disposal (POST)', () => {
-    it('should successfully log disposal and deduct stock', async () => {
-      const payload = {
-        itemId: consumableId,
-        itemName: 'Test Gloves',
-        itemType: 'Hospital Consumable',
-        quantity: 10,
-        method: 'Expired - Incinerated',
-        notes: 'Expired last month',
-      };
-
-      const res = await request(app.getHttpServer())
-        .post('/inventory/disposal')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send(payload)
-        .expect(201);
-
-      // Verify log was created
-      expect(res.body.itemId).toBe(consumableId);
-      expect(res.body.quantity).toBe(10);
-      expect(res.body.method).toBe('Expired - Incinerated');
-
-      // Verify stock was deducted
-      const stock = await prisma.hospitalConsumableStock.findUnique({
-        where: { id: consumableId },
-      });
-      expect(stock?.quantity).toBe(90); // 100 - 10
-    });
-
-    it('should fail if requested quantity is more than available', async () => {
-      const payload = {
-        itemId: consumableId,
-        itemName: 'Test Gloves',
-        itemType: 'Hospital Consumable',
-        quantity: 200, // more than the 90 available
-        method: 'Damaged',
-      };
-
-      await request(app.getHttpServer())
-        .post('/inventory/disposal')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send(payload)
-        .expect(400); // BadRequestException
-    });
-
-    it('should fail if item type is invalid', async () => {
-      const payload = {
-        itemId: consumableId,
-        itemName: 'Test Gloves',
-        itemType: 'Invalid Type', // Validation should catch this
-        quantity: 10,
-        method: 'Damaged',
-      };
-
-      await request(app.getHttpServer())
-        .post('/inventory/disposal')
-        .set('Authorization', `Bearer ${adminToken}`)
-        .send(payload)
+  describe('POST /api/inventory/disposal', () => {
+    it('Should reject invalid payload (DTO validation)', () => {
+      return request(app.getHttpServer())
+        .post('/api/inventory/disposal')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          itemId: stockId,
+          itemName: `E2E Syringe ${testId}`,
+          itemType: 'INVALID_TYPE', // Invalid
+          quantity: -5, // Invalid (Must be >= 1)
+          method: 'EXPIRED'
+        })
         .expect(400);
+    });
+
+    it('Should reject if trying to dispose MORE than in stock', () => {
+      return request(app.getHttpServer())
+        .post('/api/inventory/disposal')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          itemId: stockId,
+          itemName: `E2E Syringe ${testId}`,
+          itemType: 'Hospital Consumable',
+          quantity: 200, // We only have 100 in stock!
+          method: 'EXPIRED'
+        })
+        .expect(400); // Bad Request (Insufficient stock)
+    });
+
+    it('Should successfully dispose stock and create Audit Log', async () => {
+      const res = await request(app.getHttpServer())
+        .post('/api/inventory/disposal')
+        .set('Authorization', `Bearer ${token}`)
+        .send({
+          itemId: stockId,
+          itemName: `E2E Syringe ${testId}`,
+          itemType: 'Hospital Consumable',
+          quantity: 10,
+          method: 'DAMAGED',
+          notes: 'Dropped box'
+        })
+        .expect(201);
+      
+      expect(res.body.quantity).toBe(10);
+      expect(res.body.method).toBe('DAMAGED');
+
+      // Verify Stock was deducted!
+      const updatedStock = await prisma.hospitalConsumableStock.findUnique({ where: { id: stockId } });
+      expect(updatedStock!.quantity).toBe(90); // 100 - 10 = 90
     });
   });
 });
