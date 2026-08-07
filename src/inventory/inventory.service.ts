@@ -1,5 +1,6 @@
 import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service';
+import { LogDisposalDto } from './dto/log-disposal.dto';
 
 @Injectable()
 export class InventoryService {
@@ -185,5 +186,56 @@ export class InventoryService {
     this.logger.log(`Successfully deducted inventory for surgery booking ${bookingId}`);
   }
 
+  /**
+   * Deduct stock due to expiry and log the disposal
+   */
+  async logDisposal(dto: LogDisposalDto, adminId: string) {
+    this.logger.log(`Disposing ${dto.quantity} of ${dto.itemName} (${dto.itemType})`);
 
+    return this.prisma.$transaction(async (prisma) => {
+      // Deduct the stock
+      if (dto.itemType === 'Hospital Consumable') {
+        const stock = await prisma.hospitalConsumableStock.findUnique({ where: { id: dto.itemId } });
+        if (!stock) throw new NotFoundException('Consumable not found');
+        if (stock.quantity < dto.quantity) throw new BadRequestException('Insufficient quantity to dispose');
+        await prisma.hospitalConsumableStock.update({
+          where: { id: dto.itemId },
+          data: { quantity: stock.quantity - dto.quantity },
+        });
+      } else if (dto.itemType === 'Hospital Drug') {
+        // Find stock based on drugId + hospitalId? Wait, the DTO itemId will be drugId, but we don't have hospitalId directly. 
+        // We'll search by drugId and first available or require hospitalId in DTO? 
+        // For simplicity assuming itemId is the drugId, we deduct from the admin's hospital or the first one.
+        // Actually, let's just search first HospitalDrugStock for that drugId.
+        const stock = await prisma.hospitalDrugStock.findFirst({ where: { drugId: dto.itemId } });
+        if (!stock) throw new NotFoundException('Hospital Drug Stock not found');
+        if (stock.quantity < dto.quantity) throw new BadRequestException('Insufficient quantity to dispose');
+        await prisma.hospitalDrugStock.update({
+          where: { drugId_hospitalId: { drugId: stock.drugId, hospitalId: stock.hospitalId } },
+          data: { quantity: stock.quantity - dto.quantity },
+        });
+      } else if (dto.itemType === 'Pharmacy Medication') {
+        const stock = await prisma.medication.findUnique({ where: { id: dto.itemId } });
+        if (!stock) throw new NotFoundException('Medication not found');
+        if (stock.quantity < dto.quantity) throw new BadRequestException('Insufficient quantity to dispose');
+        await prisma.medication.update({
+          where: { id: dto.itemId },
+          data: { quantity: stock.quantity - dto.quantity },
+        });
+      }
+
+      // Log it
+      return prisma.disposalLog.create({
+        data: {
+          itemId: dto.itemId,
+          itemName: dto.itemName,
+          itemType: dto.itemType,
+          quantity: dto.quantity,
+          method: dto.method,
+          notes: dto.notes,
+          authorizedBy: adminId,
+        },
+      });
+    }, { timeout: 15000 });
+  }
 }

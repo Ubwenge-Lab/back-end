@@ -211,4 +211,68 @@ export class NotificationsService {
       `${process.env.FRONTEND_URL || 'http://localhost:3000'}/super-admin/hospitals`,
     );
   }
+
+  async sendStockAlertNotification(
+    userIds: string[],
+    email: string,
+    itemName: string,
+    itemType: string,
+    currentQuantity: number,
+    threshold: number,
+    facilityName: string,
+  ) {
+    const title = 'Critical Stock Alert';
+    const message = `Inventory for ${itemName} (${itemType}) has dropped to ${currentQuantity} (Threshold: ${threshold}).`;
+
+    for (const userId of userIds) {
+      await this.create({
+        userId,
+        type: 'LOW_STOCK',
+        title,
+        message,
+      });
+    }
+
+    await this.emailService.sendStockAlertEmail(
+      email,
+      itemName,
+      itemType,
+      currentQuantity,
+      threshold,
+      facilityName,
+    );
+  }
+
+  async sendExpiryAlertNotification(
+    userIds: string[],
+    email: string,
+    itemName: string,
+    itemType: string,
+    batchNumber: string | null,
+    daysLeft: number,
+    expiryDate: string,
+    facilityName: string,
+  ) {
+    const title = 'Upcoming Expiry Warning';
+    const message = `${itemName} (${itemType}) is expiring in ${daysLeft} days.`;
+
+    for (const userId of userIds) {
+      await this.create({
+        userId,
+        type: 'EXPIRY_WARNING',
+        title,
+        message,
+      });
+    }
+
+    await this.emailService.sendExpiryAlertEmail(
+      email,
+      itemName,
+      itemType,
+      batchNumber,
+      daysLeft,
+      expiryDate,
+      facilityName,
+    );
+  }
 }
