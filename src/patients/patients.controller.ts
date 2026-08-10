@@ -91,4 +91,14 @@ export class PatientsController {
   grantConsent(@Req() req: any, @Body() dto: GrantConsentDto) {
     return this.patientsService.grantConsent(req.user.sub, dto);
   }
+
+
+  @Get('prescriptions')
+  @Roles(Role.PATIENT)
+  @ApiOperation({
+    summary: 'List active prescriptions with refill and pharmacy checkout status',
+  })
+  getPrescriptions(@Req() req: any) {
+    return this.patientsService.getActivePrescriptions(req.user.sub);
+  }
 }

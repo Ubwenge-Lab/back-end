@@ -406,4 +406,42 @@ You must return a JSON object with this exact structure:
       },
     };
   }
+
+  // ========================================
+  // GET ACTIVE PRESCRIPTIONS (Patient Portal)
+  // ========================================
+
+  async getActivePrescriptions(userId: string) {
+    const patient = await this.findByUserId(userId);
+
+    return this.prisma.prescription.findMany({
+      where: {
+        patientId: patient.id,
+        status: 'APPROVED',
+      },
+      select: {
+        id: true,
+        diagnosis: true,
+        refillsAllowed: true,
+        refillsRemaining: true,
+        status: true,
+        dispatchedAt: true,
+        createdAt: true,
+        prescriptionMedications: {
+          select: {
+            id: true,
+            medicationName: true,
+            dosage: true,
+            frequency: true,
+            duration: true,
+            quantity: true,
+            dispenseStatus: true,
+            pharmacyId: true,
+            fulfilledAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
 }
