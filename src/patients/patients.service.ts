@@ -25,7 +25,9 @@ export class PatientsService {
   async symptomCheck(symptoms: string) {
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
     if (!apiKey) {
-      console.warn('⚠️ GEMINI_API_KEY not set - falling back to keyword matrix');
+      console.warn(
+        '⚠️ GEMINI_API_KEY not set - falling back to keyword matrix',
+      );
       return getLocalSymptomFallback(symptoms);
     }
 
@@ -56,7 +58,7 @@ You must return a JSON object with this exact structure:
 
       const result = await model.generateContent(prompt);
       const responseText = result.response.text();
-      
+
       const jsonMatch = responseText.match(/\{[\s\S]*\}/);
       if (!jsonMatch) {
         throw new Error('No valid JSON found in Gemini response');
@@ -330,10 +332,15 @@ You must return a JSON object with this exact structure:
         }
         accessType = 'CONSENT_TOKEN';
       }
-    } else if (userPayload.role === 'SUPER_ADMIN' || userPayload.role === 'HOSPITAL_ADMIN') {
+    } else if (
+      userPayload.role === 'SUPER_ADMIN' ||
+      userPayload.role === 'HOSPITAL_ADMIN'
+    ) {
       accessType = 'ADMIN';
     } else {
-      throw new ForbiddenException('Role not authorized to access medical records');
+      throw new ForbiddenException(
+        'Role not authorized to access medical records',
+      );
     }
 
     // Log the read request to the database-side immutable audit log
@@ -405,5 +412,171 @@ You must return a JSON object with this exact structure:
         totalInvoices,
       },
     };
+  }
+
+  // ========================================
+  // GET ACTIVE PRESCRIPTIONS (Patient Portal)
+  // ========================================
+
+  async getActivePrescriptions(userId: string) {
+    const patient = await this.findByUserId(userId);
+
+    return this.prisma.prescription.findMany({
+      where: {
+        patientId: patient.id,
+        status: 'APPROVED',
+      },
+      select: {
+        id: true,
+        diagnosis: true,
+        refillsAllowed: true,
+        refillsRemaining: true,
+        status: true,
+        dispatchedAt: true,
+        createdAt: true,
+        prescriptionMedications: {
+          select: {
+            id: true,
+            medicationName: true,
+            dosage: true,
+            frequency: true,
+            duration: true,
+            quantity: true,
+            dispenseStatus: true,
+            pharmacyId: true,
+            fulfilledAt: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+  }
+
+  // ========================================
+  // GET RECEIPTS (Patient Portal — pharmacy + hospital billing)
+  // ========================================
+
+  async getReceipts(userId: string) {
+    const patient = await this.findByUserId(userId);
+
+    const [pharmacyPayments, hospitalInvoices] = await Promise.all([
+      this.prisma.payment.findMany({
+        where: { order: { patientId: patient.id } },
+        select: {
+          id: true,
+          amount: true,
+          status: true,
+          paymentMethod: true,
+          receiptNumber: true,
+          createdAt: true,
+          order: {
+            select: { orderNumber: true, pharmacy: { select: { name: true } } },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+      this.prisma.hospitalInvoice.findMany({
+        where: { patientId: patient.id },
+        select: {
+          id: true,
+          totalAmount: true,
+          paymentStatus: true,
+          issuedAt: true,
+          createdAt: true,
+          hospital: { select: { name: true } },
+          items: {
+            select: { description: true, category: true, subtotal: true },
+          },
+        },
+        orderBy: { createdAt: 'desc' },
+      }),
+    ]);
+
+    const receipts = [
+      ...pharmacyPayments.map((p) => ({
+        source: 'PHARMACY' as const,
+        id: p.id,
+        amount: p.amount,
+        status: p.status,
+        method: p.paymentMethod,
+        receiptNumber: p.receiptNumber,
+        provider: p.order.pharmacy.name,
+        orderNumber: p.order.orderNumber,
+        date: p.createdAt,
+        lineItems: null as any,
+      })),
+      ...hospitalInvoices.map((inv) => ({
+        source: 'HOSPITAL' as const,
+        id: inv.id,
+        amount: inv.totalAmount,
+        status: inv.paymentStatus,
+        method: null as string | null,
+        receiptNumber: null as string | null,
+        provider: inv.hospital.name,
+        orderNumber: null as string | null,
+        date: inv.issuedAt ?? inv.createdAt,
+        lineItems: inv.items, // category here is the actual diagnostic-fee tag
+      })),
+    ];
+
+    return receipts.sort(
+      (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime(),
+    );
+  }
+
+  // ========================================
+  // GET DISCHARGE SUMMARIES (Patient Portal — list, no schema change)
+  // ========================================
+
+  async getDischargeSummaries(userId: string) {
+    const patient = await this.findByUserId(userId);
+
+    return this.prisma.inpatientAdmission.findMany({
+      where: {
+        patientId: patient.id,
+        status: 'DISCHARGED',
+      },
+      select: {
+        id: true,
+        reason: true,
+        wardName: true,
+        bedNumber: true,
+        admittedAt: true,
+        dischargedAt: true,
+        doctor: {
+          select: { firstName: true, lastName: true, licenseNumber: true },
+        },
+      },
+      orderBy: { dischargedAt: 'desc' },
+    });
+  }
+
+  // ========================================
+  // GENERATE DISCHARGE SUMMARY PDF (on-the-fly, no stored file)
+  // ========================================
+
+  async generateDischargeSummaryPdf(userId: string, admissionId: string) {
+    const patient = await this.findByUserId(userId);
+
+    const admission = await this.prisma.inpatientAdmission.findUnique({
+      where: { id: admissionId },
+      include: {
+        doctor: {
+          select: { firstName: true, lastName: true, licenseNumber: true },
+        },
+        hospital: { select: { name: true, address: true } },
+      },
+    });
+
+    if (!admission || admission.patientId !== patient.id) {
+      throw new NotFoundException('Discharge summary not found');
+    }
+    if (admission.status !== 'DISCHARGED') {
+      throw new ForbiddenException(
+        'This admission has not been discharged yet',
+      );
+    }
+
+    return { patient, admission };
   }
 }
