@@ -80,25 +80,20 @@ export class PatientsController {
 
   @Post('symptom-check')
   @Roles(Role.PATIENT)
-  @ApiOperation({ summary: 'AI-assisted symptom checker with clinical specialty recommendations' })
+  @ApiOperation({
+    summary:
+      'AI-assisted symptom checker with clinical specialty recommendations',
+  })
   symptomCheck(@Body() dto: SymptomCheckDto) {
     return this.patientsService.symptomCheck(dto.symptoms);
   }
 
   @Post('consent')
   @Roles(Role.PATIENT)
-  @ApiOperation({ summary: 'Grant temporary 7-day medical history read access to a doctor' })
+  @ApiOperation({
+    summary: 'Grant temporary 7-day medical history read access to a doctor',
+  })
   grantConsent(@Req() req: any, @Body() dto: GrantConsentDto) {
     return this.patientsService.grantConsent(req.user.sub, dto);
-  }
-
-
-  @Get('prescriptions')
-  @Roles(Role.PATIENT)
-  @ApiOperation({
-    summary: 'List active prescriptions with refill and pharmacy checkout status',
-  })
-  getPrescriptions(@Req() req: any) {
-    return this.patientsService.getActivePrescriptions(req.user.sub);
   }
 }
