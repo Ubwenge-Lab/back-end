@@ -128,6 +128,7 @@ export class TriangulationService {
         },
         select: {
           id: true,
+          pharmacyId: true,
           name: true,
           latitude: true,
           longitude: true,
@@ -142,11 +143,17 @@ export class TriangulationService {
     ]);
 
     const allLocations = [
-      ...pharmacies.map((p) => ({ ...p, type: 'MAIN' })),
+      ...pharmacies.map((p) => ({
+        ...p,
+        locationType: 'MAIN' as const,
+        pharmacyId: p.id,
+        branchId: null,
+      })),
       ...branches.map((b) => ({
         ...b,
         name: `${b.pharmacy.name} - ${b.name}`,
-        type: 'BRANCH',
+        locationType: 'BRANCH' as const,
+        branchId: b.id,
         status: String(b.branchStatus),
       })),
     ];
@@ -190,7 +197,7 @@ export class TriangulationService {
                 : 'Unknown',
             rating: null,
             isActive:
-              loc.type === 'MAIN'
+              loc.locationType === 'MAIN'
                 ? loc.status === 'APPROVED'
                 : (loc as { isActive?: boolean }).isActive === true &&
                   loc.status === 'APPROVED',

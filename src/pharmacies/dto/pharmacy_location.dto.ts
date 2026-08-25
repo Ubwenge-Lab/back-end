@@ -5,12 +5,27 @@ import {
   IsEnum,
   IsBoolean,
 } from 'class-validator';
-import { ApiProperty } from '@nestjs/swagger';
+import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class PharmacyLocationDto {
   @ApiProperty()
   @IsString()
   id: string;
+
+  @ApiPropertyOptional({ enum: ['MAIN', 'BRANCH'] })
+  @IsEnum(['MAIN', 'BRANCH'])
+  @IsOptional()
+  locationType?: 'MAIN' | 'BRANCH';
+
+  @ApiPropertyOptional()
+  @IsString()
+  @IsOptional()
+  pharmacyId?: string;
+
+  @ApiPropertyOptional({ nullable: true })
+  @IsString()
+  @IsOptional()
+  branchId?: string | null;
 
   @ApiProperty()
   @IsString()
