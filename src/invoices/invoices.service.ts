@@ -111,27 +111,52 @@ export class InvoicesService {
   // ========================================
 
   async pay(id: string, userId: string, role: string) {
-    // Authorisation check outside the transaction (no write contention here)
-    if (role === 'HOSPITAL_ADMIN' || role === 'RECEPTIONIST') {
+    let actorHospitalId: string | null = null;
+    if (role === 'HOSPITAL_ADMIN') {
       const hospital = await this.prisma.hospital.findFirst({
         where: { userId },
       });
       if (!hospital) throw new ForbiddenException('Hospital not found');
-
-      // For HOSPITAL_ADMIN we need the invoice's hospitalId to scope the check,
-      // but we'll verify that inside the transaction after re-reading.
-      if (role === 'HOSPITAL_ADMIN') {
-        const preCheck = await this.prisma.hospitalInvoice.findUnique({
-          where: { id },
-          select: { hospitalId: true },
-        });
-        if (!preCheck) throw new NotFoundException('Invoice not found');
-        if (preCheck.hospitalId !== hospital.id)
-          throw new ForbiddenException('Access denied');
-      }
+      actorHospitalId = hospital.id;
+    } else if (role === 'RECEPTIONIST') {
+      const staff = await this.prisma.hospitalStaff.findFirst({
+        where: { userId },
+        select: { hospitalId: true },
+      });
+      if (!staff) throw new ForbiddenException('Hospital staff not found');
+      actorHospitalId = staff.hospitalId;
+    } else if (role !== 'SUPER_ADMIN') {
+      throw new ForbiddenException('Access denied');
     }
 
     const updated = await this.prisma.$transaction(async (tx) => {
+      const invoiceScope = await tx.hospitalInvoice.findUnique({
+        where: { id },
+        select: { admissionId: true, hospitalId: true },
+      });
+      if (!invoiceScope) throw new NotFoundException('Invoice not found');
+      if (actorHospitalId && invoiceScope.hospitalId !== actorHospitalId) {
+        throw new ForbiddenException('Access denied');
+      }
+
+      // Inpatient charge writers lock the admission before touching its
+      // invoice. Taking the same locks in the same order prevents payment from
+      // racing a late supply or nightly bed charge.
+      if (invoiceScope.admissionId) {
+        await tx.$queryRaw`
+          SELECT id
+          FROM inpatient_admissions
+          WHERE id = ${invoiceScope.admissionId}
+          FOR UPDATE
+        `;
+      }
+      await tx.$queryRaw`
+        SELECT id
+        FROM hospital_invoices
+        WHERE id = ${id}
+        FOR UPDATE
+      `;
+
       const invoice = await tx.hospitalInvoice.findUnique({ where: { id } });
       if (!invoice) throw new NotFoundException('Invoice not found');
 
