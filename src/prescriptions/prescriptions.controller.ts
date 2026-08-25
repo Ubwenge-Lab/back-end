@@ -22,6 +22,8 @@ import { HospitalIssuePrescriptionDto } from './dto/hospital-issue-prescription.
 import { WebhookAuthGuard } from './guards/webhook-auth.guard';
 import { ExternalFulfillmentWebhookDto } from './dto/external-fulfillment-webhook.dto';
 import { Public } from '../auth/decorators/public.decorator';
+import { ConfirmTranscriptionDto } from './dto/confirm-transcription.dto';
+import { StaffDirectUploadPrescriptionDto } from './dto/staff-direct-upload.dto';
 interface RequestWithUser {
   user: {
     sub: string;
@@ -125,5 +127,50 @@ export class PrescriptionsController {
   })
   async handleExternalFulfillment(@Body() dto: ExternalFulfillmentWebhookDto) {
     return this.prescriptionsService.processExternalFulfillment(dto);
+  }
+
+  // ── UGANDA-PORTED counter workflows ──
+
+  @Post('staff-direct-upload')
+  @Roles(Role.PHARMACIST, Role.CASHIER, Role.BRANCH_MANAGER, Role.NURSE)
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({
+    summary: 'Staff direct upload for walk-in patients (branch-tagged)',
+  })
+  staffDirectUpload(
+    @Req() req: RequestWithUser,
+    @Body() dto: StaffDirectUploadPrescriptionDto,
+  ) {
+    return this.prescriptionsService.staffDirectUpload(req.user.sub, dto);
+  }
+
+  @Post(':id/confirm-transcription')
+  @Roles(Role.PHARMACIST, Role.CASHIER, Role.BRANCH_MANAGER, Role.NURSE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Pharmacist confirms/corrects AI transcription, optionally creates an order',
+  })
+  confirmTranscription(
+    @Req() req: RequestWithUser,
+    @Param('id') id: string,
+    @Body() dto: ConfirmTranscriptionDto,
+  ) {
+    return this.prescriptionsService.confirmTranscription(
+      req.user.sub,
+      id,
+      dto,
+    );
+  }
+
+  @Post('verify')
+  @Roles(Role.PHARMACIST, Role.CASHIER, Role.BRANCH_MANAGER, Role.NURSE)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary:
+      'Verify a prescription by ID or QR payload (APPROVED-only dispense)',
+  })
+  verifyPrescription(@Body() payload: { id?: string; qrCodePayload?: string }) {
+    return this.prescriptionsService.verifyPrescription(payload);
   }
 }
