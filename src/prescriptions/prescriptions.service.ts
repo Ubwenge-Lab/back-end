@@ -20,12 +20,19 @@ import { StaffService } from '../staff/staff.service';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
-import { PrescriptionMedication, PrescriptionStatus, DispenseStatus } from '@prisma/client';
+import {
+  DispenseStatus,
+  PrescriptionMedication,
+  PrescriptionStatus,
+} from '@prisma/client';
 import * as crypto from 'crypto';
 import * as QRCode from 'qrcode';
 import { TriangulationService } from '../triangulation/triangulation.service';
-import { ExternalFulfillmentWebhookDto, FulfillmentStatus } from './dto/external-fulfillment-webhook.dto';
-import { Prisma } from '@prisma/client';
+import {
+  ExternalFulfillmentWebhookDto,
+  FulfillmentStatus,
+} from './dto/external-fulfillment-webhook.dto';
+import { PharmacyLocationDto } from '../pharmacies/dto/pharmacy_location.dto';
 
 interface ExtractedMedication {
   name: string;
@@ -52,7 +59,6 @@ export class PrescriptionsService {
     private staffService: StaffService,
     private hospitalsService: HospitalsService,
     private triangulationService: TriangulationService,
-
   ) {
     // Initialize Google Gemini AI
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
@@ -557,10 +563,22 @@ Do not include any explanation, only the JSON array.`,
   // ========================================
 
   async processExternalFulfillment(dto: ExternalFulfillmentWebhookDto) {
-    const { prescriptionId, pharmacyId, prescriptionMedicationIds, status, notes } = dto;
+    const {
+      prescriptionId,
+      pharmacyId,
+      prescriptionMedicationIds,
+      status,
+      notes,
+    } = dto;
 
-    return this.prisma.$transaction(
+    const outcome = await this.prisma.$transaction(
       async (tx) => {
+        // Serialize callbacks for the same prescription so two pharmacies
+        // cannot race the final status/refill transition.
+        await tx.$queryRaw<Array<{ id: string }>>`
+          SELECT id FROM prescriptions WHERE id = ${prescriptionId} FOR UPDATE
+        `;
+
         // 1. Fetch prescription
         const prescription = await tx.prescription.findUnique({
           where: { id: prescriptionId },
@@ -571,60 +589,100 @@ Do not include any explanation, only the JSON array.`,
         });
 
         if (!prescription) {
-          throw new NotFoundException(`Prescription ${prescriptionId} not found`);
-        }
-
-        // 2. Fetch target medication items
-        const targetItems = prescription.prescriptionMedications.filter((item) =>
-          prescriptionMedicationIds.includes(item.id),
-        );
-
-        if (targetItems.length === 0) {
-          throw new BadRequestException(
-            'None of the provided medication IDs match this prescription',
+          throw new NotFoundException(
+            `Prescription ${prescriptionId} not found`,
           );
         }
 
-        // Validate pharmacy assignment
+        // 2. Resolve every requested item strictly within this prescription.
+        const requestedItemIds = [...new Set(prescriptionMedicationIds)];
+        const targetItems = prescription.prescriptionMedications.filter(
+          (item) => requestedItemIds.includes(item.id),
+        );
+
+        if (targetItems.length !== requestedItemIds.length) {
+          throw new BadRequestException(
+            'One or more medication IDs do not belong to this prescription',
+          );
+        }
+
+        // Only the assigned pharmacy may update externally dispatched items.
         for (const item of targetItems) {
-          if (item.pharmacyId && item.pharmacyId !== pharmacyId) {
+          if (item.isHospitalMed || item.pharmacyId !== pharmacyId) {
             throw new ForbiddenException(
-              `Medication item ${item.id} is assigned to a different pharmacy`,
+              `Medication item ${item.id} is not assigned to this pharmacy`,
+            );
+          }
+          if (
+            item.dispenseStatus !== DispenseStatus.DISPATCHED_TO_PHARMACY &&
+            item.dispenseStatus !== DispenseStatus.FULFILLED
+          ) {
+            throw new ConflictException(
+              `Medication item ${item.id} has not been dispatched`,
             );
           }
         }
 
-        // 3. Update dispense status for target items
-        const newDispenseStatus: DispenseStatus =
-        status === FulfillmentStatus.FULFILLED
-          ? DispenseStatus.FULFILLED
-          : status === FulfillmentStatus.PARTIALLY_FULFILLED
-          ? DispenseStatus.DISPATCHED_TO_PHARMACY
-          : DispenseStatus.PENDING;
-
-        const now = new Date();
-
-        await tx.prescriptionMedication.updateMany({
-        where: { id: { in: prescriptionMedicationIds } },
-        data: {
-          dispenseStatus: newDispenseStatus,
-          fulfilledAt: status === FulfillmentStatus.FULFILLED ? now : undefined,
-          available: status === FulfillmentStatus.FULFILLED,
-        },
-      });
-
-        const alreadyFulfilled = targetItems.filter(
-          (item) => item.dispenseStatus === 'FULFILLED',
+        const fulfilledItems = targetItems.filter(
+          (item) => item.dispenseStatus === DispenseStatus.FULFILLED,
         );
 
-        if (alreadyFulfilled.length === targetItems.length) {
+        // Never let a delayed callback regress already-fulfilled medication.
+        if (
+          fulfilledItems.length > 0 &&
+          status !== FulfillmentStatus.FULFILLED
+        ) {
+          throw new ConflictException(
+            'Fulfilled medication items cannot be moved back to an earlier state',
+          );
+        }
+
+        const itemsToUpdate = targetItems.filter(
+          (item) => item.dispenseStatus !== DispenseStatus.FULFILLED,
+        );
+
+        if (itemsToUpdate.length === 0) {
           return {
-            message: 'Items have already been fulfilled (idempotent response)',
-            prescriptionId,
-            itemsUpdated: 0,
-            isFullyFulfilled: prescription.status === 'APPROVED',
-            status: prescription.status,
+            result: {
+              message:
+                'Items have already been fulfilled (idempotent response)',
+              prescriptionId,
+              itemsUpdated: 0,
+              isFullyFulfilled:
+                prescription.status === PrescriptionStatus.APPROVED,
+              status: prescription.status,
+            },
+            notification: null,
           };
+        }
+
+        // 3. Update only validated rows belonging to this prescription/pharmacy.
+        const newDispenseStatus: DispenseStatus =
+          status === FulfillmentStatus.FULFILLED
+            ? DispenseStatus.FULFILLED
+            : DispenseStatus.DISPATCHED_TO_PHARMACY;
+
+        const now = new Date();
+        const updatedItems = await tx.prescriptionMedication.updateMany({
+          where: {
+            id: { in: itemsToUpdate.map((item) => item.id) },
+            prescriptionId,
+            pharmacyId,
+            isHospitalMed: false,
+          },
+          data: {
+            dispenseStatus: newDispenseStatus,
+            fulfilledAt:
+              status === FulfillmentStatus.FULFILLED ? now : undefined,
+            available:
+              status === FulfillmentStatus.FULFILLED ? true : undefined,
+          },
+        });
+
+        if (updatedItems.count !== itemsToUpdate.length) {
+          throw new ConflictException(
+            'Medication assignments changed while processing the callback',
+          );
         }
 
         // 4. Re-fetch all prescription medications to calculate complete state
@@ -632,20 +690,25 @@ Do not include any explanation, only the JSON array.`,
           where: { prescriptionId },
         });
 
-        const isFullyFulfilled = allItems.every(
-          (item) =>
-            item.dispenseStatus === DispenseStatus.HOSPITAL_DISPENSED ||
-            item.dispenseStatus === DispenseStatus.FULFILLED,
-        );
+        const isFullyFulfilled =
+          allItems.length > 0 &&
+          allItems.every(
+            (item) =>
+              item.dispenseStatus === DispenseStatus.HOSPITAL_DISPENSED ||
+              item.dispenseStatus === DispenseStatus.FULFILLED,
+          );
 
         let updatedPrescription = prescription;
 
-        if (isFullyFulfilled && prescription.refillsRemaining > 0) {
+        if (isFullyFulfilled) {
           updatedPrescription = await tx.prescription.update({
             where: { id: prescriptionId },
             data: {
-              status: 'APPROVED',
-              refillsRemaining: { decrement: 1 },
+              status: PrescriptionStatus.APPROVED,
+              refillsRemaining:
+                prescription.refillsRemaining > 0
+                  ? { decrement: 1 }
+                  : undefined,
             },
             include: {
               prescriptionMedications: true,
@@ -654,9 +717,15 @@ Do not include any explanation, only the JSON array.`,
           });
         }
 
-        // 5. Notify patient
-        try {
-          await this.notificationsService.create({
+        return {
+          result: {
+            message: 'Fulfillment callback processed successfully',
+            prescriptionId,
+            itemsUpdated: updatedItems.count,
+            isFullyFulfilled,
+            status: updatedPrescription.status,
+          },
+          notification: {
             userId: prescription.patient.userId,
             type: 'PRESCRIPTION_APPROVED',
             title: 'Prescription Order Fulfilled',
@@ -664,24 +733,32 @@ Do not include any explanation, only the JSON array.`,
               status === FulfillmentStatus.FULFILLED
                 ? `Your medication order for prescription ${prescriptionId} has been fulfilled by the partner pharmacy.`
                 : `Update on prescription ${prescriptionId}: Fulfillment status is ${status}.`,
-          });
-        } catch (error) {
-          console.error('Failed to send fulfillment notification:', error);
-        }
-
-        return {
-          message: 'Fulfillment callback processed successfully',
-          prescriptionId,
-          itemsUpdated: targetItems.length,
-          isFullyFulfilled,
-          status: updatedPrescription.status,
+            notes,
+          },
         };
       },
       { timeout: 20000 },
     );
+
+    // Notify only after the state transaction has committed.
+    if (outcome.notification) {
+      const notificationMessage = outcome.notification.notes
+        ? `${outcome.notification.message} Notes: ${outcome.notification.notes}`
+        : outcome.notification.message;
+      try {
+        await this.notificationsService.create({
+          userId: outcome.notification.userId,
+          type: outcome.notification.type,
+          title: outcome.notification.title,
+          message: notificationMessage,
+        });
+      } catch (error) {
+        this.logger.error('Failed to send fulfillment notification', error);
+      }
+    }
+
+    return outcome.result;
   }
-
-
 
   // ========================================
   // HELPER: DOWNLOAD IMAGE AS BASE64
@@ -987,13 +1064,15 @@ Do not include any explanation, only the JSON array.`,
         const prescriptionMeds: PrescriptionMedication[] = [];
         let invoiceAddedTotal = 0;
 
-        for (const med of dto.medications) {
-          // Try to find the drug in hospital stock by name match
-          const stockItems = await tx.hospitalDrugStock.findMany({
-            where: { hospitalId: dto.hospitalId },
-            include: { drug: true },
-          });
+        // Load hospital inventory once and keep the in-memory quantity aligned
+        // with atomic decrements performed during this transaction.
+        const stockItems = await tx.hospitalDrugStock.findMany({
+          where: { hospitalId: dto.hospitalId },
+          include: { drug: true },
+        });
+        let nearbyLocations: PharmacyLocationDto[] | undefined;
 
+        for (const med of dto.medications) {
           const matchedStock = stockItems.find(
             (s) =>
               s.drug.brandName.toLowerCase().includes(med.name.toLowerCase()) ||
@@ -1014,6 +1093,7 @@ Do not include any explanation, only the JSON array.`,
               },
               data: { quantity: { decrement: qty } },
             });
+            matchedStock.quantity -= qty;
 
             const pmRow = await tx.prescriptionMedication.create({
               data: {
@@ -1052,14 +1132,22 @@ Do not include any explanation, only the JSON array.`,
             let assignedPharmacyId: string | null = null;
             let matchedMedId: string | null = null;
 
-            if (hospital.latitude && hospital.longitude) {
-              const fallbackPharmacy = await this.findNearestPharmacyWithStockWithinRadius(
-                hospital.latitude,
-                hospital.longitude,
-                med.name,
-                qty,
-                10, // 10 km radius limit
-              );
+            if (hospital.latitude != null && hospital.longitude != null) {
+              nearbyLocations ??=
+                await this.triangulationService.getNearbyPharmacies(
+                  hospital.latitude,
+                  hospital.longitude,
+                  10,
+                );
+              const fallbackPharmacy =
+                await this.findNearestPharmacyWithStockWithinRadius(
+                  hospital.latitude,
+                  hospital.longitude,
+                  med.name,
+                  qty,
+                  10, // 10 km radius limit
+                  nearbyLocations,
+                );
 
               if (fallbackPharmacy) {
                 assignedPharmacyId = fallbackPharmacy.pharmacyId;
@@ -1141,10 +1229,14 @@ Do not include any explanation, only the JSON array.`,
   // EXTERNAL PHARMACY DISPATCH
   // ========================================
 
-async dispatchExternal(prescriptionId: string) {
+  async dispatchExternal(prescriptionId: string) {
     const prescription = await this.prisma.prescription.findUnique({
       where: { id: prescriptionId },
-      include: { prescriptionMedications: true },
+      include: {
+        prescriptionMedications: {
+          include: { matchedMedication: true },
+        },
+      },
     });
 
     if (!prescription) {
@@ -1158,7 +1250,8 @@ async dispatchExternal(prescriptionId: string) {
     }
 
     const externalItems = prescription.prescriptionMedications.filter(
-      (m) => !m.isHospitalMed && m.dispenseStatus !== 'HOSPITAL_DISPENSED',
+      (item) =>
+        !item.isHospitalMed && item.dispenseStatus === DispenseStatus.PENDING,
     );
 
     if (externalItems.length === 0) {
@@ -1167,58 +1260,131 @@ async dispatchExternal(prescriptionId: string) {
       );
     }
 
-    // Group items by target pharmacy
-    const byPharmacy = new Map<string, typeof externalItems>();
+    // Group items by the physical branch that owns the selected inventory.
+    const byLocation = new Map<
+      string,
+      {
+        pharmacyId: string;
+        branchId: string;
+        items: typeof externalItems;
+      }
+    >();
     for (const item of externalItems) {
-      if (!item.pharmacyId) {
+      const medication = item.matchedMedication;
+      if (
+        !item.pharmacyId ||
+        !medication ||
+        medication.pharmacyId !== item.pharmacyId
+      ) {
         throw new BadRequestException(
-          `Item "${item.medicationName}" does not have an assigned external pharmacy within range`,
+          `Item "${item.medicationName}" does not have valid external inventory assigned`,
         );
       }
-      const pid = item.pharmacyId;
-      if (!byPharmacy.has(pid)) byPharmacy.set(pid, []);
-      byPharmacy.get(pid)!.push(item);
+
+      const locationKey = `${item.pharmacyId}:${medication.branchId}`;
+      const group = byLocation.get(locationKey) ?? {
+        pharmacyId: item.pharmacyId,
+        branchId: medication.branchId,
+        items: [],
+      };
+      group.items.push(item);
+      byLocation.set(locationKey, group);
     }
 
-    const createdOrders: any[] = [];
+    const createdOrders: Array<{ id: string }> = [];
 
     await this.prisma.$transaction(
       async (tx) => {
-        for (const pharmacyId of byPharmacy.keys()) {
+        const dispatchClaim = await tx.prescription.updateMany({
+          where: { id: prescriptionId, dispatchedAt: null },
+          data: {
+            dispatchedAt: new Date(),
+            status: PrescriptionStatus.PENDING,
+          },
+        });
+        if (dispatchClaim.count !== 1) {
+          throw new ConflictException(
+            'This prescription has already been dispatched',
+          );
+        }
+
+        for (const group of byLocation.values()) {
+          let subtotal = 0;
+          const orderItems: Array<{
+            medicationId: string;
+            quantity: number;
+            price: number;
+          }> = [];
+
+          for (const item of group.items) {
+            const medication = item.matchedMedication;
+            const reservation = await tx.medication.updateMany({
+              where: {
+                id: medication.id,
+                pharmacyId: group.pharmacyId,
+                branchId: group.branchId,
+                quantity: { gte: item.quantity },
+              },
+              data: { quantity: { decrement: item.quantity } },
+            });
+
+            if (reservation.count !== 1) {
+              throw new ConflictException(
+                `Insufficient stock for ${item.medicationName}; choose another pharmacy`,
+              );
+            }
+
+            subtotal += medication.price * item.quantity;
+            orderItems.push({
+              medicationId: medication.id,
+              quantity: item.quantity,
+              price: medication.price,
+            });
+          }
+
           const order = await tx.order.create({
             data: {
               patientId: prescription.patientId,
-              pharmacyId,
+              pharmacyId: group.pharmacyId,
+              branchId: group.branchId,
               type: 'PICKUP',
               status: 'PENDING',
-              total: 0,
+              subtotal,
+              total: subtotal,
+              totalItems: orderItems.reduce(
+                (total, item) => total + item.quantity,
+                0,
+              ),
+              paymentStatus: 'PENDING',
+              prescriptionId:
+                byLocation.size === 1 ? prescriptionId : undefined,
+              orderItems: { create: orderItems },
             },
+            select: { id: true },
           });
           createdOrders.push(order);
         }
 
-        for (const item of externalItems) {
-          await tx.prescriptionMedication.update({
-            where: { id: item.id },
-            data: { 
-              dispenseStatus: 'DISPATCHED_TO_PHARMACY',
-            },
-          });
-        }
-
-        await tx.prescription.update({
-          where: { id: prescriptionId },
-          data: { 
-            dispatchedAt: new Date(),
-            status: 'PENDING',
+        const dispatchedItems = await tx.prescriptionMedication.updateMany({
+          where: {
+            prescriptionId,
+            id: { in: externalItems.map((item) => item.id) },
+            dispenseStatus: DispenseStatus.PENDING,
           },
+          data: { dispenseStatus: DispenseStatus.DISPATCHED_TO_PHARMACY },
         });
+
+        if (dispatchedItems.count !== externalItems.length) {
+          throw new ConflictException(
+            'Prescription medication state changed during dispatch',
+          );
+        }
       },
       { timeout: 20000 },
     );
 
     return {
-      message: `Dispatched ${externalItems.length} item(s) to ${byPharmacy.size} pharmacy(ies)`,
+      message: `Dispatched ${externalItems.length} item(s) to ${byLocation.size} pharmacy location(s)`,
       orders: createdOrders,
     };
   }
@@ -1266,7 +1432,6 @@ async dispatchExternal(prescriptionId: string) {
     return prescriptions;
   }
 
-
   /**
    * Helper: Searches external pharmacies within 10 km radius that have the medication in stock
    */
@@ -1276,41 +1441,70 @@ async dispatchExternal(prescriptionId: string) {
     medicationName: string,
     requiredQty: number,
     radiusKm: number = 10,
-  ): Promise<{ pharmacyId: string; branchId?: string; matchedMedicationId?: string } | null> {
+    knownNearbyLocations?: PharmacyLocationDto[],
+  ): Promise<{
+    pharmacyId: string;
+    branchId: string;
+    matchedMedicationId: string;
+  } | null> {
     // 1. Fetch nearby pharmacies & branches within 10 km
-    const nearbyLocations = await this.triangulationService.getNearbyPharmacies(
-      originLat,
-      originLng,
-      radiusKm,
-    );
+    const nearbyLocations =
+      knownNearbyLocations ??
+      (await this.triangulationService.getNearbyPharmacies(
+        originLat,
+        originLng,
+        radiusKm,
+      ));
 
     if (!nearbyLocations || nearbyLocations.length === 0) {
       return null;
     }
 
-    // 2. Iterate through ordered nearest pharmacies to match stock in Medication table
-    for (const location of nearbyLocations) {
-      const availableMedication = await this.prisma.medication.findFirst({
-        where: {
-          pharmacyId: location.id,
-          quantity: { gte: requiredQty },
-          name: { contains: medicationName, mode: 'insensitive' },
-        },
-      });
+    const nearbyBranches = nearbyLocations.filter(
+      (
+        location,
+      ): location is PharmacyLocationDto & {
+        pharmacyId: string;
+        branchId: string;
+      } =>
+        typeof location.pharmacyId === 'string' &&
+        typeof location.branchId === 'string',
+    );
+    if (nearbyBranches.length === 0) {
+      return null;
+    }
 
-      if (availableMedication) {
+    // Fetch matching inventory for all nearby branches in one query.
+    const availableMedications = await this.prisma.medication.findMany({
+      where: {
+        branchId: { in: nearbyBranches.map((location) => location.branchId) },
+        quantity: { gte: requiredQty },
+        name: { contains: medicationName, mode: 'insensitive' },
+      },
+      select: {
+        id: true,
+        pharmacyId: true,
+        branchId: true,
+      },
+    });
+    const medicationByBranch = new Map(
+      availableMedications.map((medication) => [
+        medication.branchId,
+        medication,
+      ]),
+    );
+
+    for (const location of nearbyBranches) {
+      const medication = medicationByBranch.get(location.branchId);
+      if (medication?.pharmacyId === location.pharmacyId) {
         return {
-          pharmacyId: location.id,
-          matchedMedicationId: availableMedication.id,
+          pharmacyId: location.pharmacyId,
+          branchId: location.branchId,
+          matchedMedicationId: medication.id,
         };
       }
     }
 
-    // 3. Fallback to nearest pharmacy even if stock isn't explicitly pre-indexed
-    return {
-      pharmacyId: nearbyLocations[0].id,
-    };
+    return null;
   }
-
-
 }

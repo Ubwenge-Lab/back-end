@@ -123,10 +123,7 @@ export class PrescriptionsController {
     summary:
       'Webhook callback for external E-Vuze pharmacies to update prescription fulfillment status',
   })
-  async handleExternalFulfillment(
-    @Body() dto: ExternalFulfillmentWebhookDto,
-  ) {
+  async handleExternalFulfillment(@Body() dto: ExternalFulfillmentWebhookDto) {
     return this.prescriptionsService.processExternalFulfillment(dto);
   }
-
 }

@@ -29,12 +29,21 @@ describe('PrescriptionsController', () => {
   describe('issueHospitalPrescription', () => {
     it('should delegate prescription creation to PrescriptionsService', async () => {
       const req = { user: { sub: 'doctor-user-id' } };
-      const dto: any = { hospitalId: 'hosp-1', patientId: 'pat-1', medications: [] };
+      const dto: any = {
+        hospitalId: 'hosp-1',
+        patientId: 'pat-1',
+        medications: [],
+      };
       const expectedResult = { prescription: { id: 'PRESC-1' }, summary: {} };
 
-      serviceMock.emitHospitalDigitalPrescription.mockResolvedValue(expectedResult);
+      serviceMock.emitHospitalDigitalPrescription.mockResolvedValue(
+        expectedResult,
+      );
 
-      const result = await controller.issueHospitalPrescription(req as any, dto);
+      const result = await controller.issueHospitalPrescription(
+        req as any,
+        dto,
+      );
 
       expect(serviceMock.emitHospitalDigitalPrescription).toHaveBeenCalledWith(
         'doctor-user-id',
@@ -65,7 +74,9 @@ describe('PrescriptionsController', () => {
         status: FulfillmentStatus.FULFILLED,
       };
 
-      const expectedResult = { message: 'Fulfillment callback processed successfully' };
+      const expectedResult = {
+        message: 'Fulfillment callback processed successfully',
+      };
       serviceMock.processExternalFulfillment.mockResolvedValue(expectedResult);
 
       const result = await controller.handleExternalFulfillment(dto);

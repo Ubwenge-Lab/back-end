@@ -25,6 +25,7 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
   beforeEach(async () => {
     prismaMock = {
       $transaction: jest.fn((cb) => cb(prismaMock)),
+      $queryRaw: jest.fn().mockResolvedValue([]),
       doctor: { findUnique: jest.fn() },
       appointment: { findUnique: jest.fn() },
       hospital: { findUnique: jest.fn() },
@@ -32,6 +33,7 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
         findUnique: jest.fn(),
         create: jest.fn(),
         update: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         findMany: jest.fn(),
       },
       hospitalInvoice: {
@@ -46,11 +48,14 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
       },
       prescriptionMedication: {
         create: jest.fn(),
-        updateMany: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
         update: jest.fn(),
         findMany: jest.fn(),
       },
-      medication: { findFirst: jest.fn() },
+      medication: {
+        findMany: jest.fn(),
+        updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+      },
       order: { create: jest.fn() },
     };
 
@@ -69,7 +74,7 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
         { provide: PatientsService, useValue: {} },
         { provide: NotificationsService, useValue: notificationsServiceMock },
         { provide: MedicationsService, useValue: {} },
-        { provide: ConfigService, useValue: { get: jest.fn() } }, 
+        { provide: ConfigService, useValue: { get: jest.fn() } },
         { provide: StaffService, useValue: {} },
         { provide: HospitalsService, useValue: {} },
         { provide: TriangulationService, useValue: triangulationServiceMock },
@@ -92,13 +97,21 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
 
     it('should return pharmacy and matched medication ID when stock is available within 10km', async () => {
       triangulationServiceMock.getNearbyPharmacies.mockResolvedValue([
-        { id: 'pharmacy-1', distance: 2.5 },
+        {
+          id: 'branch-1',
+          locationType: 'BRANCH',
+          pharmacyId: 'pharmacy-1',
+          branchId: 'branch-1',
+          distance: 2.5,
+        },
       ]);
-      prismaMock.medication.findFirst.mockResolvedValue({
-        id: 'med-123',
-        pharmacyId: 'pharmacy-1',
-        quantity: 50,
-      });
+      prismaMock.medication.findMany.mockResolvedValue([
+        {
+          id: 'med-123',
+          pharmacyId: 'pharmacy-1',
+          branchId: 'branch-1',
+        },
+      ]);
 
       const result = await service.findNearestPharmacyWithStockWithinRadius(
         lat,
@@ -108,25 +121,37 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
         10,
       );
 
-      expect(triangulationServiceMock.getNearbyPharmacies).toHaveBeenCalledWith(lat, lng, 10);
-      expect(prismaMock.medication.findFirst).toHaveBeenCalledWith({
+      expect(triangulationServiceMock.getNearbyPharmacies).toHaveBeenCalledWith(
+        lat,
+        lng,
+        10,
+      );
+      expect(prismaMock.medication.findMany).toHaveBeenCalledWith({
         where: {
-          pharmacyId: 'pharmacy-1',
+          branchId: { in: ['branch-1'] },
           quantity: { gte: 10 },
           name: { contains: 'Amoxicillin', mode: 'insensitive' },
         },
+        select: { id: true, pharmacyId: true, branchId: true },
       });
       expect(result).toEqual({
         pharmacyId: 'pharmacy-1',
+        branchId: 'branch-1',
         matchedMedicationId: 'med-123',
       });
     });
 
-    it('should fallback to nearest pharmacy if no explicit stock match is pre-indexed', async () => {
+    it('should not assign a pharmacy that has no matching stock', async () => {
       triangulationServiceMock.getNearbyPharmacies.mockResolvedValue([
-        { id: 'pharmacy-fallback', distance: 3.0 },
+        {
+          id: 'branch-fallback',
+          locationType: 'BRANCH',
+          pharmacyId: 'pharmacy-fallback',
+          branchId: 'branch-fallback',
+          distance: 3.0,
+        },
       ]);
-      prismaMock.medication.findFirst.mockResolvedValue(null);
+      prismaMock.medication.findMany.mockResolvedValue([]);
 
       const result = await service.findNearestPharmacyWithStockWithinRadius(
         lat,
@@ -136,7 +161,7 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
         10,
       );
 
-      expect(result).toEqual({ pharmacyId: 'pharmacy-fallback' });
+      expect(result).toBeNull();
     });
 
     it('should return null if no pharmacies are found within 10km', async () => {
@@ -168,12 +193,25 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
     };
 
     beforeEach(() => {
-      prismaMock.doctor.findUnique.mockResolvedValue({ id: 'doc-1', licenseNumber: 'LIC123' });
-      prismaMock.appointment.findUnique.mockResolvedValue({ id: 'appointment-1', diagnosisSummary: 'Flu' });
-      prismaMock.hospital.findUnique.mockResolvedValue({ id: 'hospital-1', latitude: -1.94, longitude: 30.06 });
+      prismaMock.doctor.findUnique.mockResolvedValue({
+        id: 'doc-1',
+        licenseNumber: 'LIC123',
+      });
+      prismaMock.appointment.findUnique.mockResolvedValue({
+        id: 'appointment-1',
+        diagnosisSummary: 'Flu',
+      });
+      prismaMock.hospital.findUnique.mockResolvedValue({
+        id: 'hospital-1',
+        latitude: -1.94,
+        longitude: 30.06,
+      });
       prismaMock.prescription.findUnique.mockResolvedValue(null); // ID unique check
-      prismaMock.prescription.create.mockResolvedValue({ id: 'EVUZE-PRESC-2026-100001' });
+      prismaMock.prescription.create.mockResolvedValue({
+        id: 'EVUZE-PRESC-2026-100001',
+      });
       prismaMock.hospitalInvoice.findUnique.mockResolvedValue({ id: 'inv-1' });
+      triangulationServiceMock.getNearbyPharmacies.mockResolvedValue([]);
     });
 
     it('should dispense internally when hospital stock is sufficient', async () => {
@@ -193,7 +231,10 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
         dispenseStatus: 'HOSPITAL_DISPENSED',
       });
 
-      const response = await service.emitHospitalDigitalPrescription(doctorUserId, dto as any);
+      const response = await service.emitHospitalDigitalPrescription(
+        doctorUserId,
+        dto as any,
+      );
 
       expect(prismaMock.hospitalDrugStock.update).toHaveBeenCalledWith({
         where: {
@@ -211,10 +252,24 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
       prismaMock.hospitalDrugStock.findMany.mockResolvedValue([]);
 
       // Mock 10km triangulation fallback
-      jest.spyOn(service, 'findNearestPharmacyWithStockWithinRadius').mockResolvedValue({
-        pharmacyId: 'ext-pharmacy-99',
-        matchedMedicationId: 'ext-med-99',
-      });
+      jest
+        .spyOn(service, 'findNearestPharmacyWithStockWithinRadius')
+        .mockResolvedValue({
+          pharmacyId: 'ext-pharmacy-99',
+          branchId: 'ext-branch-99',
+          matchedMedicationId: 'ext-med-99',
+        });
+      const nearbyLocations = [
+        {
+          id: 'ext-branch-99',
+          locationType: 'BRANCH',
+          pharmacyId: 'ext-pharmacy-99',
+          branchId: 'ext-branch-99',
+        },
+      ];
+      triangulationServiceMock.getNearbyPharmacies.mockResolvedValue(
+        nearbyLocations,
+      );
 
       prismaMock.prescriptionMedication.create.mockResolvedValue({
         id: 'pm-2',
@@ -223,14 +278,20 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
         dispenseStatus: 'PENDING',
       });
 
-      const response = await service.emitHospitalDigitalPrescription(doctorUserId, dto as any);
+      const response = await service.emitHospitalDigitalPrescription(
+        doctorUserId,
+        dto as any,
+      );
 
-      expect(service.findNearestPharmacyWithStockWithinRadius).toHaveBeenCalledWith(
+      expect(
+        service.findNearestPharmacyWithStockWithinRadius,
+      ).toHaveBeenCalledWith(
         -1.94,
         30.06,
         'Amoxicillin',
         2,
         10,
+        nearbyLocations,
       );
       expect(prismaMock.prescriptionMedication.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -261,6 +322,14 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
             isHospitalMed: false,
             dispenseStatus: 'PENDING',
             pharmacyId: 'pharmacy-ext-1',
+            quantity: 2,
+            matchedMedication: {
+              id: 'med-10',
+              pharmacyId: 'pharmacy-ext-1',
+              branchId: 'branch-ext-1',
+              price: 750,
+              quantity: 10,
+            },
           },
         ],
       });
@@ -273,20 +342,35 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
         data: expect.objectContaining({
           patientId: 'patient-1',
           pharmacyId: 'pharmacy-ext-1',
+          branchId: 'branch-ext-1',
           type: 'PICKUP',
+          subtotal: 1500,
+          total: 1500,
+          orderItems: {
+            create: [{ medicationId: 'med-10', quantity: 2, price: 750 }],
+          },
         }),
+        select: { id: true },
       });
-      expect(prismaMock.prescriptionMedication.update).toHaveBeenCalledWith({
-        where: { id: 'pm-10' },
-        data: { dispenseStatus: 'DISPATCHED_TO_PHARMACY' },
-      });
-      expect(prismaMock.prescription.update).toHaveBeenCalledWith({
-        where: { id: 'presc-1' },
-        data: {
-          dispatchedAt: expect.any(Date),
-          status: 'PENDING',
+      expect(prismaMock.medication.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'med-10',
+          pharmacyId: 'pharmacy-ext-1',
+          branchId: 'branch-ext-1',
+          quantity: { gte: 2 },
         },
+        data: { quantity: { decrement: 2 } },
       });
+      expect(prismaMock.prescriptionMedication.updateMany).toHaveBeenCalledWith(
+        {
+          where: {
+            prescriptionId: 'presc-1',
+            id: { in: ['pm-10'] },
+            dispenseStatus: 'PENDING',
+          },
+          data: { dispenseStatus: 'DISPATCHED_TO_PHARMACY' },
+        },
+      );
       expect(result.orders).toHaveLength(1);
     });
 
@@ -296,7 +380,9 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
         dispatchedAt: new Date(),
       });
 
-      await expect(service.dispatchExternal('presc-1')).rejects.toThrow(ConflictException);
+      await expect(service.dispatchExternal('presc-1')).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -315,7 +401,7 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
     it('should mark items as FULFILLED and complete prescription when all items are ready', async () => {
       const mockPrescription = {
         id: 'presc-1',
-        status: 'DISPATCHED',
+        status: 'PENDING',
         refillsRemaining: 1,
         patient: { userId: 'user-patient-1' },
         prescriptionMedications: [
@@ -323,6 +409,7 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
             id: 'pm-10',
             pharmacyId: 'pharmacy-ext-1',
             dispenseStatus: 'DISPATCHED_TO_PHARMACY',
+            isHospitalMed: false,
           },
         ],
       };
@@ -331,18 +418,28 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
       prismaMock.prescriptionMedication.findMany.mockResolvedValue([
         { id: 'pm-10', dispenseStatus: 'FULFILLED' },
       ]);
-      prismaMock.prescription.update.mockResolvedValue({ ...mockPrescription, status: 'FILLED' });
+      prismaMock.prescription.update.mockResolvedValue({
+        ...mockPrescription,
+        status: 'APPROVED',
+      });
 
       const result = await service.processExternalFulfillment(webhookDto);
 
-      expect(prismaMock.prescriptionMedication.updateMany).toHaveBeenCalledWith({
-        where: { id: { in: ['pm-10'] } },
-        data: {
-          dispenseStatus: 'FULFILLED',
-          fulfilledAt: expect.any(Date),
-          available: true,
+      expect(prismaMock.prescriptionMedication.updateMany).toHaveBeenCalledWith(
+        {
+          where: {
+            id: { in: ['pm-10'] },
+            prescriptionId: 'presc-1',
+            pharmacyId: 'pharmacy-ext-1',
+            isHospitalMed: false,
+          },
+          data: {
+            dispenseStatus: 'FULFILLED',
+            fulfilledAt: expect.any(Date),
+            available: true,
+          },
         },
-      });
+      );
 
       expect(prismaMock.prescription.update).toHaveBeenCalledWith({
         where: { id: 'presc-1' },
@@ -350,7 +447,10 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
           status: 'APPROVED',
           refillsRemaining: { decrement: 1 },
         },
-        include: { prescriptionMedications: true, patient: { select: { userId: true } } },
+        include: {
+          prescriptionMedications: true,
+          patient: { select: { userId: true } },
+        },
       });
 
       expect(result.isFullyFulfilled).toBe(true);
@@ -364,13 +464,116 @@ describe('PrescriptionsService - Out-of-Stock Fallback & Fulfillment', () => {
           {
             id: 'pm-10',
             pharmacyId: 'pharmacy-UNAUTHORIZED',
+            isHospitalMed: false,
           },
         ],
       });
 
-      await expect(service.processExternalFulfillment(webhookDto)).rejects.toThrow(
-        ForbiddenException,
-      );
+      await expect(
+        service.processExternalFulfillment(webhookDto),
+      ).rejects.toThrow(ForbiddenException);
+    });
+
+    it('rejects a request containing an item from another prescription', async () => {
+      prismaMock.prescription.findUnique.mockResolvedValue({
+        id: 'presc-1',
+        status: 'PENDING',
+        refillsRemaining: 1,
+        patient: { userId: 'u-1' },
+        prescriptionMedications: [
+          {
+            id: 'pm-10',
+            pharmacyId: 'pharmacy-ext-1',
+            isHospitalMed: false,
+            dispenseStatus: 'DISPATCHED_TO_PHARMACY',
+          },
+        ],
+      });
+
+      await expect(
+        service.processExternalFulfillment({
+          ...webhookDto,
+          prescriptionMedicationIds: ['pm-10', 'pm-other-prescription'],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      expect(
+        prismaMock.prescriptionMedication.updateMany,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('rejects fulfillment before the medication has been dispatched', async () => {
+      prismaMock.prescription.findUnique.mockResolvedValue({
+        id: 'presc-1',
+        status: 'APPROVED',
+        refillsRemaining: 1,
+        patient: { userId: 'u-1' },
+        prescriptionMedications: [
+          {
+            id: 'pm-10',
+            pharmacyId: 'pharmacy-ext-1',
+            isHospitalMed: false,
+            dispenseStatus: 'PENDING',
+          },
+        ],
+      });
+
+      await expect(
+        service.processExternalFulfillment(webhookDto),
+      ).rejects.toThrow(ConflictException);
+      expect(
+        prismaMock.prescriptionMedication.updateMany,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('does not mutate an already fulfilled item on a repeated callback', async () => {
+      prismaMock.prescription.findUnique.mockResolvedValue({
+        id: 'presc-1',
+        status: 'APPROVED',
+        refillsRemaining: 0,
+        patient: { userId: 'u-1' },
+        prescriptionMedications: [
+          {
+            id: 'pm-10',
+            pharmacyId: 'pharmacy-ext-1',
+            isHospitalMed: false,
+            dispenseStatus: 'FULFILLED',
+          },
+        ],
+      });
+
+      const result = await service.processExternalFulfillment(webhookDto);
+
+      expect(result.itemsUpdated).toBe(0);
+      expect(
+        prismaMock.prescriptionMedication.updateMany,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('rejects a callback that would regress a fulfilled item', async () => {
+      prismaMock.prescription.findUnique.mockResolvedValue({
+        id: 'presc-1',
+        status: 'APPROVED',
+        refillsRemaining: 0,
+        patient: { userId: 'u-1' },
+        prescriptionMedications: [
+          {
+            id: 'pm-10',
+            pharmacyId: 'pharmacy-ext-1',
+            isHospitalMed: false,
+            dispenseStatus: 'FULFILLED',
+          },
+        ],
+      });
+
+      await expect(
+        service.processExternalFulfillment({
+          ...webhookDto,
+          status: FulfillmentStatus.PARTIALLY_FULFILLED,
+        }),
+      ).rejects.toThrow(ConflictException);
+      expect(
+        prismaMock.prescriptionMedication.updateMany,
+      ).not.toHaveBeenCalled();
     });
   });
 });

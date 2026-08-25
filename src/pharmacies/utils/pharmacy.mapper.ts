@@ -7,6 +7,9 @@ export function toPharmacyLocationDto(
 ): PharmacyLocationDto {
   return {
     id: pharmacy.id,
+    locationType: pharmacy.locationType,
+    pharmacyId: pharmacy.pharmacyId,
+    branchId: pharmacy.branchId,
     name: pharmacy.name,
     address: pharmacy.address,
     phone: pharmacy.phone,

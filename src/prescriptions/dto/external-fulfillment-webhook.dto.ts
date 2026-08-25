@@ -5,13 +5,13 @@ import {
   IsEnum,
   IsOptional,
   ArrayNotEmpty,
+  ArrayUnique,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export enum FulfillmentStatus {
   FULFILLED = 'FULFILLED',
   PARTIALLY_FULFILLED = 'PARTIALLY_FULFILLED',
-  REJECTED = 'REJECTED',
 }
 
 export class ExternalFulfillmentWebhookDto {
@@ -31,14 +31,20 @@ export class ExternalFulfillmentWebhookDto {
   })
   @IsArray()
   @ArrayNotEmpty()
+  @ArrayUnique()
   @IsString({ each: true })
   prescriptionMedicationIds: string[];
 
-  @ApiProperty({ enum: FulfillmentStatus, example: FulfillmentStatus.FULFILLED })
+  @ApiProperty({
+    enum: FulfillmentStatus,
+    example: FulfillmentStatus.FULFILLED,
+  })
   @IsEnum(FulfillmentStatus)
   status: FulfillmentStatus;
 
-  @ApiPropertyOptional({ example: 'Dispensed full 7-day course at branch counter' })
+  @ApiPropertyOptional({
+    example: 'Dispensed full 7-day course at branch counter',
+  })
   @IsString()
   @IsOptional()
   notes?: string;
