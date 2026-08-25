@@ -7,6 +7,7 @@ import { PatientsModule } from '../patients/patients.module';
 import { NotificationsModule } from '../notifications/notifications.module';
 import { MedicationsModule } from '../medications/medications.module';
 import { StaffModule } from '../staff/staff.module';
+import { OrdersModule } from '../orders/orders.module';
 import { HospitalsModule } from '../hospitals/hospitals.module';
 
 @Module({
@@ -15,6 +16,7 @@ import { HospitalsModule } from '../hospitals/hospitals.module';
     NotificationsModule,
     MedicationsModule,
     StaffModule,
+    forwardRef(() => OrdersModule),
     forwardRef(() => HospitalsModule),
   ],
   controllers: [PrescriptionsController],

@@ -80,4 +80,10 @@ export class BranchesController {
   ) {
     return this.branchesService.deleteBranch(id, userId);
   }
+
+  @Get(':id/qr')
+  @Roles(Role.PHARMACY, Role.BRANCH_MANAGER, Role.PHARMACIST, Role.CASHIER)
+  getBranchQr(@Param('id', ParseUUIDPipe) id: string) {
+    return this.branchesService.generateBranchQr(id);
+  }
 }

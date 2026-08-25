@@ -8,6 +8,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { EmailService } from '../notifications/email.service';
 import { NotificationsService } from '../notifications/notifications.service';
+import { ConfigService } from '@nestjs/config';
+import * as QRCode from 'qrcode';
 import { CreateBranchDto } from './dto';
 import { BranchStatus, UserRole } from '@prisma/client';
 import * as bcrypt from 'bcrypt';
@@ -19,6 +21,7 @@ export class BranchesService {
     private readonly prisma: PrismaService,
     private readonly emailService: EmailService,
     private readonly notificationsService: NotificationsService,
+    private readonly configService: ConfigService,
   ) {}
 
   async createBranch(hqUserId: string, dto: CreateBranchDto) {
@@ -35,9 +38,14 @@ export class BranchesService {
     const owner = await this.prisma.user.findUnique({
       where: { id: hqUserId },
       select: { email: true },
-    }); 
-    if (owner && owner.email.toLowerCase() === dto.branchManagerEmail.toLowerCase())
-      throw new ConflictException('Branch manager email cannot be the same as the pharmacy owner email');
+    });
+    if (
+      owner &&
+      owner.email.toLowerCase() === dto.branchManagerEmail.toLowerCase()
+    )
+      throw new ConflictException(
+        'Branch manager email cannot be the same as the pharmacy owner email',
+      );
 
     const existingEmail = await this.prisma.branch.findFirst({
       where: { branchManagerEmail: dto.branchManagerEmail },
@@ -331,6 +339,29 @@ export class BranchesService {
       throw new ForbiddenException('Access denied');
 
     return branch;
+  }
+
+  // ──────────────────────────────────────────
+  // Branch QR — patient scans to quickly open the branch catalog
+  // ──────────────────────────────────────────
+  async generateBranchQr(branchId: string) {
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { id: true, name: true, address: true, phone: true },
+    });
+    if (!branch) throw new NotFoundException('Branch not found');
+
+    const frontendUrl =
+      this.configService.get('FRONTEND_URL') || 'http://localhost:3000';
+    const deepLink = `${frontendUrl}/patient/branch/${branch.id}`;
+    const qrDataUrl = await QRCode.toDataURL(deepLink);
+
+    return {
+      branchId: branch.id,
+      name: branch.name,
+      deepLink,
+      qrCode: qrDataUrl,
+    };
   }
 
   private generateSecurePassword(): string {

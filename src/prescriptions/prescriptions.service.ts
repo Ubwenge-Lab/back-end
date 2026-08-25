@@ -16,6 +16,10 @@ import { HospitalsService } from '../hospitals/hospitals.service';
 import { CreatePrescriptionDto, UpdatePrescriptionStatusDto } from './dto';
 import { HospitalIssuePrescriptionDto } from './dto/hospital-issue-prescription.dto';
 import { StaffService } from '../staff/staff.service';
+import { OrdersService } from '../orders/orders.service';
+import { ConfirmTranscriptionDto } from './dto/confirm-transcription.dto';
+import { StaffDirectUploadPrescriptionDto } from './dto/staff-direct-upload.dto';
+import * as bcrypt from 'bcrypt';
 import { GoogleGenerativeAI } from '@google/generative-ai';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
@@ -46,6 +50,7 @@ export class PrescriptionsService {
     private configService: ConfigService,
     private staffService: StaffService,
     private hospitalsService: HospitalsService,
+    private ordersService: OrdersService,
   ) {
     // Initialize Google Gemini AI
     const apiKey = this.configService.get<string>('GEMINI_API_KEY');
@@ -456,19 +461,34 @@ Do not include any explanation, only the JSON array.`,
       const staff = await this.staffService.findByUserId(userId);
       branchId = staff.branch.id;
     } catch (e) {
-      throw new ForbiddenException(
-        'Only pharmacy staff can view branch prescriptions',
-      );
+      // Fall back to branch-manager resolution
+      const branchManager = await this.prisma.branch.findFirst({
+        where: { managerId: userId },
+        select: { id: true },
+      });
+      if (!branchManager) {
+        throw new ForbiddenException(
+          'Only pharmacy staff can view branch prescriptions',
+        );
+      }
+      branchId = branchManager.id;
     }
 
     const where: any = {
-      prescriptionMedications: {
-        some: {
-          matchedMedication: {
-            branchId: branchId,
+      OR: [
+        // Staff/counter uploads are tagged with branchId directly (walk-ins)
+        { branchId },
+        // Patient uploads are linked through AI-matched inventory
+        {
+          prescriptionMedications: {
+            some: {
+              matchedMedication: {
+                branchId: branchId,
+              },
+            },
           },
         },
-      },
+      ],
     };
 
     if (statusStr) {
@@ -1105,5 +1125,250 @@ Do not include any explanation, only the JSON array.`,
     });
 
     return prescriptions;
+  }
+
+  // ════════════════════════════════════════════════════════════════
+  // UGANDA-PORTED (verified in back-end_uganda): counter workflows
+  // ════════════════════════════════════════════════════════════════
+
+  async staffDirectUpload(
+    staffUserId: string,
+    dto: StaffDirectUploadPrescriptionDto,
+  ) {
+    // Resolve staff branch
+    const staff = await this.staffService
+      .findByUserId(staffUserId)
+      .catch(() => null);
+    const branchManager = await this.prisma.branch.findFirst({
+      where: { managerId: staffUserId },
+    });
+
+    const branchId = staff?.branchId ?? branchManager?.id;
+    if (!branchId) {
+      throw new ForbiddenException('Staff member is not assigned to a branch');
+    }
+
+    // Get pharmacy from branch
+    const branch = await this.prisma.branch.findUnique({
+      where: { id: branchId },
+      select: { pharmacyId: true },
+    });
+    if (!branch) throw new NotFoundException('Branch not found');
+
+    // If patientId provided, verify patient exists
+    if (dto.patientId) {
+      const patient = await this.prisma.patient.findUnique({
+        where: { id: dto.patientId },
+      });
+      if (!patient) throw new NotFoundException('Patient not found');
+    }
+
+    // Walk-in: create (or reuse) a guest patient record
+    const patientId =
+      dto.patientId ??
+      (await this.getOrCreateWalkInPatientId(branchId, {
+        name: dto.patientName,
+        phone: dto.patientPhone,
+      }));
+
+    // Create prescription record directly, tagged with the branch so the
+    // pharmacist review queue can find it BEFORE the AI finishes matching.
+    const prescription = await this.prisma.prescription.create({
+      data: {
+        patientId,
+        branchId,
+        fileUrl: dto.fileUrl,
+        fileName: dto.fileName,
+        fileType: dto.fileType,
+        notes: dto.notes,
+        status: 'PENDING',
+        aiProcessingStatus: 'PENDING',
+      },
+    });
+
+    // Trigger AI processing if enabled (same path as patient upload)
+    if (this.genAI) {
+      this.processPrescriptionWithAI(prescription.id, dto.fileUrl).catch(
+        (err) => {
+          console.error(
+            'AI processing failed for staff-uploaded prescription:',
+            err,
+          );
+        },
+      );
+    }
+
+    return {
+      prescription,
+      message: this.genAI
+        ? 'Prescription uploaded by staff. AI is processing medications...'
+        : 'Prescription uploaded by staff. Please verify manually.',
+    };
+  }
+
+  // Helper: get or create a minimal guest "Walk-In Patient"
+  private async getOrCreateWalkInPatientId(
+    branchId: string,
+    opts: { name?: string; phone?: string } = {},
+  ): Promise<string> {
+    const phone = opts.phone?.trim() || '0000000000';
+
+    // Reuse an existing patient with the same phone (same person at the counter)
+    const existing = await this.prisma.patient.findFirst({
+      where: { phone },
+      select: { id: true },
+    });
+    if (existing) return existing.id;
+
+    // Create a minimal user + patient pair
+    const randomPassword = crypto.randomBytes(12).toString('hex');
+    const hashedPassword = await bcrypt.hash(randomPassword, 10);
+    const email = `walkin-${crypto.randomBytes(6).toString('hex')}@evuze.local`;
+
+    const name = opts.name?.trim() || 'Walk-in';
+    const [first, ...rest] = name.split(/\s+/);
+
+    const user = await this.prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        role: 'PATIENT',
+        isVerified: false,
+        firstName: first || 'Walk-in',
+        lastName: rest.join(' ') || 'Patient',
+      },
+    });
+
+    const patient = await this.prisma.patient.create({
+      data: {
+        userId: user.id,
+        firstName: first || 'Walk-in',
+        lastName: rest.join(' ') || 'Patient',
+        phone,
+      },
+    });
+
+    return patient.id;
+  }
+
+  // Pharmacist confirms/corrects the transcription and can convert the
+  // prescription into a structured order (or hand items to the POS cart).
+  async confirmTranscription(
+    staffUserId: string,
+    prescriptionId: string,
+    dto: ConfirmTranscriptionDto,
+  ) {
+    // Resolve staff branch (staff record or branch manager)
+    const staff = await this.staffService
+      .findByUserId(staffUserId)
+      .catch(() => null);
+    const branchManager = await this.prisma.branch.findFirst({
+      where: { managerId: staffUserId },
+    });
+    const branchId = staff?.branchId ?? branchManager?.id;
+    if (!branchId) {
+      throw new ForbiddenException('Staff member is not assigned to a branch');
+    }
+
+    const prescription = await this.prisma.prescription.findUnique({
+      where: { id: prescriptionId },
+      include: { patient: { select: { id: true, userId: true } } },
+    });
+    if (!prescription) throw new NotFoundException('Prescription not found');
+
+    // The prescription must belong to this branch's queue
+    const inBranch =
+      prescription.branchId === branchId ||
+      (await this.prisma.prescriptionMedication.findFirst({
+        where: {
+          prescriptionId,
+          matchedMedication: { branchId },
+        },
+      }));
+    if (!inBranch) {
+      throw new ForbiddenException(
+        'Prescription does not belong to this branch',
+      );
+    }
+
+    // Persist the confirmed (corrected) transcription
+    await this.prisma.$transaction([
+      this.prisma.prescriptionMedication.deleteMany({
+        where: { prescriptionId },
+      }),
+      this.prisma.prescriptionMedication.createMany({
+        data: dto.items.map((item) => ({
+          prescriptionId,
+          medicationName: item.name,
+          dosage: item.dosage,
+          frequency: item.frequency,
+          duration: item.duration,
+          quantity: item.quantity,
+          matchedMedicationId: item.medicationId,
+          available: Boolean(item.medicationId),
+        })),
+      }),
+    ]);
+
+    const updated = await this.prisma.prescription.update({
+      where: { id: prescriptionId },
+      data: {
+        status: 'APPROVED',
+        reviewedAt: new Date(),
+        aiProcessingStatus: 'COMPLETED',
+      },
+    });
+
+    // Resolve item prices/stock from branch inventory for the POS cart
+    const itemsWithPrice = await Promise.all(
+      dto.items.map(async (item) => {
+        let price = 0;
+        let available = false;
+        if (item.medicationId) {
+          const med = await this.prisma.medication.findFirst({
+            where: { id: item.medicationId, branchId },
+            select: { id: true, name: true, price: true, quantity: true },
+          });
+          if (med) {
+            price = Number(med.price);
+            available = med.quantity >= item.quantity;
+          }
+        }
+        return { ...item, price, available };
+      }),
+    );
+
+    // Optional: create a structured order on behalf of the patient
+    let order: unknown = null;
+    if (dto.createOrder) {
+      const branch = await this.prisma.branch.findUnique({
+        where: { id: branchId },
+        select: { pharmacyId: true },
+      });
+      if (!branch) throw new NotFoundException('Branch not found');
+      if (!prescription.patient)
+        throw new BadRequestException('Prescription has no patient');
+
+      order = await this.ordersService.create(staffUserId, {
+        pharmacyId: branch.pharmacyId,
+        branchId,
+        type: dto.type ?? 'PICKUP',
+        items: dto.items
+          .filter((i) => i.medicationId)
+          .map((i) => ({
+            medicationId: i.medicationId,
+            quantity: i.quantity,
+          })),
+        paymentMethod: dto.paymentMethod ?? 'CASH',
+        patientId: prescription.patient.id,
+        prescriptionId,
+      });
+    }
+
+    return {
+      prescription: updated,
+      items: itemsWithPrice,
+      order,
+    };
   }
 }
