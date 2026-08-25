@@ -1233,6 +1233,7 @@ model InpatientAdmission {
 
   @@index([patientId])
   @@index([hospitalId])
+  @@index([bedId])
   @@index([status])
   @@map("inpatient_admissions")
 }
@@ -1486,6 +1487,7 @@ model Bed {
   number              String
   status              BedStatus            @default(AVAILABLE)
   isOccupied          Boolean              @default(false)
+  statusNotes         String?
   roomId              String?
   room                Room?                @relation(fields: [roomId], references: [id], onDelete: SetNull)
   transfersFrom       BedTransfer[]        @relation("TransferFromBed")
@@ -1592,6 +1594,10 @@ model Room {
   beds      Bed[]
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  @@unique([wardId, name])
+  @@index([wardId])
+  @@map("rooms")
 }
 
 model BedTransfer {
@@ -1605,6 +1611,12 @@ model BedTransfer {
   transferredByUserId String
   reason              String?
   transferredAt       DateTime           @default(now())
+
+  @@index([admissionId])
+  @@index([fromBedId])
+  @@index([toBedId])
+  @@index([transferredAt])
+  @@map("bed_transfers")
 }
 
 model DisposalLog {
