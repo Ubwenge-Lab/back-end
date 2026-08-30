@@ -1522,6 +1522,16 @@ model SupplyConsumption {
   @@map("supply_consumptions")
 }
 
+model PlatformSettings {
+  id           String   @id @default("singleton")
+  supportEmail String?
+  supportPhone String?
+  supportName  String?  // e.g. "Customer Care"
+  updatedAt    DateTime @updatedAt
+
+  @@map("platform_settings")
+}
+
 model AuditLog {
   id         String  @id @default(uuid())
   actorId    String?

@@ -552,4 +552,23 @@ export class SuperAdminService {
 
     return updated;
   }
+
+  async updatePlatformSettings(
+    dto: { supportEmail?: string; supportPhone?: string; supportName?: string },
+  ) {
+    return this.prisma.platformSettings.upsert({
+      where: { id: 'singleton' },
+      update: {
+        ...(dto.supportEmail !== undefined && { supportEmail: dto.supportEmail }),
+        ...(dto.supportPhone !== undefined && { supportPhone: dto.supportPhone }),
+        ...(dto.supportName !== undefined && { supportName: dto.supportName }),
+      },
+      create: {
+        id: 'singleton',
+        supportEmail: dto.supportEmail,
+        supportPhone: dto.supportPhone,
+        supportName: dto.supportName,
+      },
+    });
+  }
 }
