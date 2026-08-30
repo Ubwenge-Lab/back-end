@@ -14,6 +14,8 @@ import { PharmaciesModule } from './pharmacies/pharmacies.module';
 import { MedicationsModule } from './medications/medications.module';
 import { OrdersModule } from './orders/orders.module';
 import { PrescriptionsModule } from './prescriptions/prescriptions.module';
+import { PosModule } from './pos/pos.module';
+import { StaffLeaveModule } from './staff-leave/staff-leave.module';
 import { PaymentsModule } from './payments/payments.module';
 import { InsuranceModule } from './insurance/insurance.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -82,6 +84,8 @@ import { ChatModule } from './chat/chat.module';
     MedicationsModule,
     OrdersModule,
     PrescriptionsModule,
+    PosModule,
+    StaffLeaveModule,
     PaymentsModule,
     InsuranceModule,
     NotificationsModule,

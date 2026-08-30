@@ -10,6 +10,7 @@ import { Response, Request } from 'express';
 import { v4 as uuidv4 } from 'uuid';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from '../../notifications/email.service';
+import { AuditService } from '../../audit/audit.service';
 import * as Sentry from '@sentry/nestjs';
 
 @Catch()
@@ -19,6 +20,7 @@ export class GlobalExceptionFilter extends BaseExceptionFilter {
   constructor(
     private readonly configService: ConfigService,
     private readonly emailService: EmailService,
+    private readonly auditService: AuditService,
   ) {
     super();
   }
@@ -75,6 +77,20 @@ export class GlobalExceptionFilter extends BaseExceptionFilter {
         Sentry.captureException(exception)
       })
 
+      // Local audit trail (System Admin "God's eye" tab)
+      this.auditService
+        .log({
+          action: 'HTTP_500',
+          targetType: 'Request',
+          targetId: correlationId,
+          outcome: 'FAILURE',
+          metadata: {
+            path: `${request.method} ${request.url}`,
+            message: errorMessage,
+            stack: errorStack ? String(errorStack).slice(0, 2000) : undefined,
+          },
+        })
+        .catch(() => undefined);
 
       this.sendEmailAlert({
         correlationId,

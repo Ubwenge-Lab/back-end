@@ -7,6 +7,8 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateStockTransferDto, UpdateStockTransferStatusDto } from './dto';
 
+type TransferStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SHIPPED' | 'COMPLETED' | 'CANCELLED';
+
 @Injectable()
 export class StockTransfersService {
   constructor(private readonly prisma: PrismaService) {}
@@ -67,10 +69,10 @@ export class StockTransfersService {
       throw new BadRequestException('Invalid destination branch');
     }
 
-    // Wrap stock validation + transfer creation in a transaction so that the
-    // quantity check and the record creation are atomic. Without this, two
-    // concurrent transfer requests could both pass the stock check and both
-    // be created even when only one had enough stock.
+    // Validate stock availability atomically with creation. NOTE: no stock is
+    // moved here — the sender's quantity is only deducted at SHIPPED (see
+    // updateTransferStatus). This is the fix for "stock vanishes while a
+    // transfer is still pending".
     return this.prisma.$transaction(async (tx) => {
       for (const item of dto.items) {
         const medication = await tx.medication.findUnique({
@@ -88,14 +90,6 @@ export class StockTransfersService {
             `Insufficient stock for medication: ${medication.name}. Available: ${medication.quantity}, Requested: ${item.quantity}`,
           );
         }
-      }
-
-
-      for (const item of dto.items) {
-        await tx.medication.update({
-          where: { id: item.medicationId },
-          data: { quantity: { decrement: item.quantity } },
-        });
       }
 
       return tx.stockTransfer.create({
@@ -151,29 +145,95 @@ export class StockTransfersService {
       );
     }
 
-    if (transfer.status === 'COMPLETED' || transfer.status === 'REJECTED') {
+    const from = transfer.status as TransferStatus;
+    const next = dto.status as TransferStatus;
+
+    // Valid transitions per side:
+    //   PENDING:  receiver -> APPROVED | REJECTED ; sender -> CANCELLED
+    //   APPROVED: sender   -> SHIPPED | CANCELLED ; receiver -> REJECTED
+    //   SHIPPED:  receiver -> COMPLETED
+    const allowed: Record<TransferStatus, TransferStatus[]> = {
+      PENDING: isReceiver ? ['APPROVED', 'REJECTED'] : isSender ? ['CANCELLED'] : [],
+      APPROVED: isSender ? ['SHIPPED', 'CANCELLED'] : isReceiver ? ['REJECTED'] : [],
+      SHIPPED: isReceiver ? ['COMPLETED'] : [],
+      COMPLETED: [],
+      REJECTED: [],
+      CANCELLED: [],
+    };
+
+    const terminalStates: TransferStatus[] = ['COMPLETED', 'REJECTED', 'CANCELLED'];
+    if (terminalStates.includes(from)) {
       throw new BadRequestException(
-        `Cannot update a transfer that is already ${transfer.status}`,
+        `Cannot update a transfer that is already ${from}`,
       );
     }
 
-    if (dto.status === 'REJECTED') {
+    if (!allowed[from].includes(next)) {
+      throw new BadRequestException(
+        `Invalid transition ${from} → ${next} for this branch`,
+      );
+    }
+
+    // REJECT / CANCEL: restore the sender's stock only if it was actually
+    // deducted (SHIPPED happened, or the row predates the stock-timing fix).
+    if (next === 'REJECTED' || next === 'CANCELLED') {
       await this.prisma.$transaction(async (tx) => {
+        if (transfer.stockDeducted) {
+          for (const item of transfer.items) {
+            await tx.medication.update({
+              where: { id: item.medicationId },
+              data: { quantity: { increment: item.quantity } },
+            });
+          }
+        }
+        await tx.stockTransfer.update({
+          where: { id: transferId },
+          data: { status: next },
+        });
+      });
+      return {
+        message:
+          next === 'REJECTED'
+            ? 'Transfer rejected and stock restored'
+            : 'Transfer cancelled',
+      };
+    }
+
+    // SHIPPED: deduct the sender's stock now (atomic re-check + decrement).
+    if (next === 'SHIPPED') {
+      await this.prisma.$transaction(async (tx) => {
+        for (const item of transfer.items) {
+          const med = await tx.medication.findUnique({
+            where: { id: item.medicationId },
+          });
+          if (!med || med.branchId !== transfer.fromBranchId) {
+            throw new BadRequestException(
+              `Medication ${item.medicationId} no longer exists in the sending branch`,
+            );
+          }
+          if (med.quantity < item.quantity) {
+            throw new BadRequestException(
+              `Insufficient stock to ship: ${med.name}. Available: ${med.quantity}, Requested: ${item.quantity}`,
+            );
+          }
+        }
         for (const item of transfer.items) {
           await tx.medication.update({
             where: { id: item.medicationId },
-            data: { quantity: { increment: item.quantity } },
+            data: { quantity: { decrement: item.quantity } },
           });
         }
         await tx.stockTransfer.update({
           where: { id: transferId },
-          data: { status: 'REJECTED' },
+          data: { status: 'SHIPPED', stockDeducted: true },
         });
       });
-      return { message: 'Transfer rejected and stock restored' };
+      return { message: 'Transfer shipped and sender stock deducted' };
     }
 
-    if (dto.status === 'COMPLETED') {
+    // COMPLETED: add the stock to the receiving branch (create a local
+    // medication row if the branch doesn't carry this item yet).
+    if (next === 'COMPLETED') {
       await this.prisma.$transaction(async (tx) => {
         for (const item of transfer.items) {
           const sendingMed = await tx.medication.findUnique({
@@ -228,9 +288,10 @@ export class StockTransfersService {
       return { message: 'Transfer completed and inventory updated' };
     }
 
+    // APPROVED (and any other valid transition) — no stock movement here.
     return this.prisma.stockTransfer.update({
       where: { id: transferId },
-      data: { status: dto.status },
+      data: { status: next },
     });
   }
 }

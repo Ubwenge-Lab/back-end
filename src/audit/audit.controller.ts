@@ -10,7 +10,7 @@ import { Role } from "../common/constants/role.enum"
 @ApiBearerAuth()
 @Controller('audit')
 @UseGuards(JwtAuthGuard, RolesGuard)
-@Roles(Role.SUPER_ADMIN)
+@Roles(Role.SUPER_ADMIN, Role.SYSTEM_ADMIN)
 export class AuditController {
     constructor(private readonly auditService: AuditService) { }
 

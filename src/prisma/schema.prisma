@@ -145,26 +145,26 @@ model DoctorLeave {
 }
 
 model HospitalStaff {
-  id                 String                   @id @default(uuid())
-  userId             String                   @unique
-  hospitalId         String
-  firstName          String
-  lastName           String
-  phone              String?
-  department         String?
+  id                       String                    @id @default(uuid())
+  userId                   String                    @unique
+  hospitalId               String
+  firstName                String
+  lastName                 String
+  phone                    String?
+  department               String?
   technicianSpecialization TechnicianSpecialization?
-  status             StaffStatus              @default(ACTIVE)
-  tempPasswordHash   String?
-  tempPasswordExpiry DateTime?
-  createdAt          DateTime                 @default(now())
-  updatedAt          DateTime                 @updatedAt
-  hospital           Hospital                 @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  user               User                     @relation(fields: [userId], references: [id])
-  vitalsRecorded     InpatientVitals[]        @relation("VitalsNurse")
-  marAdministered    MARLog[]                 @relation("MARNurse")
-  handoversGiven     NursingHandover[]        @relation("HandoverOutgoing")
-  handoversReceived  NursingHandover[]        @relation("HandoverIncoming")
-  surgeryAssignments SurgicalTeamAssignment[]
+  status                   StaffStatus               @default(ACTIVE)
+  tempPasswordHash         String?
+  tempPasswordExpiry       DateTime?
+  createdAt                DateTime                  @default(now())
+  updatedAt                DateTime                  @updatedAt
+  hospital                 Hospital                  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  user                     User                      @relation(fields: [userId], references: [id])
+  vitalsRecorded           InpatientVitals[]         @relation("VitalsNurse")
+  marAdministered          MARLog[]                  @relation("MARNurse")
+  handoversGiven           NursingHandover[]         @relation("HandoverOutgoing")
+  handoversReceived        NursingHandover[]         @relation("HandoverIncoming")
+  surgeryAssignments       SurgicalTeamAssignment[]
 
   @@index([hospitalId])
   @@index([userId])
@@ -207,6 +207,7 @@ model Patient {
   diagnosticOrders       DiagnosticOrder[]
   surgeryBookings        SurgeryBooking[]
   mohSurveillanceLogs    MohSurveillanceLog[]
+  posSales               PosSale[]
 
   @@index([userId])
   @@map("patients")
@@ -293,6 +294,8 @@ model Branch {
   staff              Staff[]
   transfersFrom      StockTransfer[] @relation("FromBranch")
   transfersTo        StockTransfer[] @relation("ToBranch")
+  posSales           PosSale[]
+  staffLeaves        StaffLeave[]
 
   @@index([pharmacyId])
   @@map("branches")
@@ -318,6 +321,7 @@ model Staff {
   clockInApprover    Attendance[]      @relation("ClockInApprover")
   clockOutApprover   Attendance[]      @relation("ClockOutApprover")
   attendances        Attendance[]
+  leaves             StaffLeave[]
   branch             Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
   user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   permissions        StaffPermissions?
@@ -394,6 +398,7 @@ model Medication {
   @@index([branchId])
   @@index([pharmacyId, quantity])
   @@index([branchId, quantity])
+  posSaleItems            PosSaleItem[]
   @@map("medications")
 }
 
@@ -511,6 +516,7 @@ model Prescription {
   diagnosis               String?
   notes                   String?
   hospitalId              String?
+  branchId                String?            // Counter/staff uploads — tagged so the branch queue finds them before AI matching
   dispatchedAt            DateTime?
   qrCodeUrl               String?
   refillsAllowed          Int                      @default(1)
@@ -523,10 +529,12 @@ model Prescription {
   doctor                  Doctor?                  @relation("DoctorToPrescription", fields: [doctorId], references: [id])
   hospital                Hospital?                @relation(fields: [hospitalId], references: [id])
   patient                 Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  posSales                PosSale[]
 
   @@index([patientId])
   @@index([status])
   @@index([hospitalId])
+  @@index([branchId])
   @@map("prescriptions")
 }
 
@@ -753,6 +761,7 @@ model StockTransfer {
   fromBranchId    String
   toBranchId      String
   status          TransferStatus      @default(PENDING)
+  stockDeducted   Boolean             @default(false) // Sender stock moved at SHIPPED (fix: no deduction at create)
   notes           String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
@@ -924,6 +933,7 @@ model MedicalRecordLog {
 
 enum UserRole {
   SUPER_ADMIN
+  SYSTEM_ADMIN
   PHARMACY
   PATIENT
   BRANCH_MANAGER
@@ -1022,6 +1032,7 @@ enum TransferStatus {
   REJECTED
   SHIPPED
   COMPLETED
+  CANCELLED
 }
 
 enum StaffStatus {
@@ -1143,11 +1154,11 @@ model SurgeryBooking {
   outcome           String?
   reportLoggedAt    DateTime?
 
-  hospital        Hospital                 @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  theater         OperatingTheater         @relation(fields: [theaterId], references: [id], onDelete: Cascade)
-  patient         Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  teamAssignments SurgicalTeamAssignment[]
-  inventoryDeducted Boolean @default(false)
+  hospital          Hospital                 @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  theater           OperatingTheater         @relation(fields: [theaterId], references: [id], onDelete: Cascade)
+  patient           Patient                  @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  teamAssignments   SurgicalTeamAssignment[]
+  inventoryDeducted Boolean                  @default(false)
 
   @@index([theaterId])
   @@index([startTime, endTime])
@@ -1211,7 +1222,7 @@ model InpatientAdmission {
 
   patient            Patient             @relation(fields: [patientId], references: [id])
   hospital           Hospital            @relation(fields: [hospitalId], references: [id])
-  bed                Bed?                @relation(fields: [bedId], references: [id])
+  bed                Bed?                @relation(fields: [bedId], references: [id], onDelete: SetNull)
   doctor             Doctor?             @relation(fields: [doctorId], references: [id])
   vitals             InpatientVitals[]
   marLogs            MARLog[]
@@ -1219,8 +1230,15 @@ model InpatientAdmission {
   supplyConsumptions SupplyConsumption[]
   hospitalInvoice    HospitalInvoice?
 
+  transfers          BedTransfer[]
+  billingCleared     Boolean       @default(false)
+  clinicalCleared    Boolean       @default(false)
+  dischargeNotes     String?
+  dischargedByUserId String?
+
   @@index([patientId])
   @@index([hospitalId])
+  @@index([bedId])
   @@index([status])
   @@map("inpatient_admissions")
 }
@@ -1374,12 +1392,12 @@ model DiagnosticOrder {
   createdAt        DateTime         @default(now())
   updatedAt        DateTime         @updatedAt
 
-  patient     Patient      @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  doctor      Doctor       @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  patient     Patient             @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  doctor      Doctor              @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  appointment Appointment?        @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
   revisions   LabResultRevision[]
 
-  inventoryDeducted Boolean @default(false)
+  inventoryDeducted  Boolean             @default(false)
   mohSurveillanceLog MohSurveillanceLog?
 
   @@map("diagnostic_orders")
@@ -1412,8 +1430,8 @@ model HospitalConsumableStock {
   criticalThreshold Int      @default(10)
   lastUpdated       DateTime @default(now()) @updatedAt
 
-  hospital Hospital                  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
-  boms     DiagnosticConsumableBOM[]
+  hospital    Hospital                  @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  boms        DiagnosticConsumableBOM[]
   surgeryBoms SurgeryConsumableBOM[]
 
   @@unique([hospitalId, itemName])
@@ -1433,8 +1451,8 @@ model DiagnosticConsumableBOM {
 }
 
 model SurgeryConsumableBOM {
-  id            String   @id @default(uuid())
-  procedureName String   // Matches SurgeryBooking.procedureName
+  id            String @id @default(uuid())
+  procedureName String // Matches SurgeryBooking.procedureName
   consumableId  String
   quantityUsed  Int
 
@@ -1462,6 +1480,7 @@ model Ward {
   updatedAt     DateTime @updatedAt
   beds          Bed[]
   hospital      Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  rooms         Room[]
 
   @@index([hospitalId])
   @@map("wards")
@@ -1471,7 +1490,13 @@ model Bed {
   id                  String               @id @default(uuid())
   wardId              String
   number              String
+  status              BedStatus            @default(AVAILABLE)
   isOccupied          Boolean              @default(false)
+  statusNotes         String?
+  roomId              String?
+  room                Room?                @relation(fields: [roomId], references: [id], onDelete: SetNull)
+  transfersFrom       BedTransfer[]        @relation("TransferFromBed")
+  transfersTo         BedTransfer[]        @relation("TransferToBed")
   createdAt           DateTime             @default(now())
   updatedAt           DateTime             @updatedAt
   inpatientAdmissions InpatientAdmission[]
@@ -1521,17 +1546,17 @@ model AuditLog {
 }
 
 model MohSurveillanceLog {
-  id                String          @id @default(uuid())
+  id                String   @id @default(uuid())
   patientId         String
-  diagnosticOrderId String          @unique
+  diagnosticOrderId String   @unique
   icd10Code         String
   diseaseCategory   String
-  reportedAt        DateTime        @default(now())
-  createdAt         DateTime        @default(now())
-  updatedAt         DateTime        @updatedAt
+  reportedAt        DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
 
-  patient           Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
-  diagnosticOrder   DiagnosticOrder @relation(fields: [diagnosticOrderId], references: [id], onDelete: Cascade)
+  patient         Patient         @relation(fields: [patientId], references: [id], onDelete: Cascade)
+  diagnosticOrder DiagnosticOrder @relation(fields: [diagnosticOrderId], references: [id], onDelete: Cascade)
 
   @@index([patientId])
   @@index([diseaseCategory])
@@ -1540,23 +1565,63 @@ model MohSurveillanceLog {
 }
 
 model ChatMessage {
-  id            String      @id @default(uuid())
+  id            String   @id @default(uuid())
   appointmentId String
   senderId      String
   receiverId    String
-  content       String      @db.Text
-  isRead        Boolean     @default(false)
-  createdAt     DateTime    @default(now())
+  content       String   @db.Text
+  isRead        Boolean  @default(false)
+  createdAt     DateTime @default(now())
 
-  appointment   Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
-  sender        User        @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
-  receiver      User        @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
+  appointment Appointment @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  sender      User        @relation("SentMessages", fields: [senderId], references: [id], onDelete: Cascade)
+  receiver    User        @relation("ReceivedMessages", fields: [receiverId], references: [id], onDelete: Cascade)
 
   @@index([appointmentId])
   @@index([senderId])
   @@index([receiverId])
   @@index([createdAt])
   @@map("chat_messages")
+}
+
+enum BedStatus {
+  AVAILABLE
+  OCCUPIED
+  MAINTENANCE
+  CLEANING
+}
+
+model Room {
+  id        String   @id @default(uuid())
+  name      String
+  wardId    String
+  ward      Ward     @relation(fields: [wardId], references: [id], onDelete: Cascade)
+  beds      Bed[]
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([wardId, name])
+  @@index([wardId])
+  @@map("rooms")
+}
+
+model BedTransfer {
+  id                  String             @id @default(uuid())
+  admissionId         String
+  admission           InpatientAdmission @relation(fields: [admissionId], references: [id], onDelete: Cascade)
+  fromBedId           String?
+  fromBed             Bed?               @relation("TransferFromBed", fields: [fromBedId], references: [id], onDelete: SetNull)
+  toBedId             String
+  toBed               Bed                @relation("TransferToBed", fields: [toBedId], references: [id], onDelete: Restrict)
+  transferredByUserId String
+  reason              String?
+  transferredAt       DateTime           @default(now())
+
+  @@index([admissionId])
+  @@index([fromBedId])
+  @@index([toBedId])
+  @@index([transferredAt])
+  @@map("bed_transfers")
 }
 
 model DisposalLog {
@@ -1573,4 +1638,81 @@ model DisposalLog {
   @@index([itemId])
   @@index([itemType])
   @@map("disposal_logs")
+}
+
+model StaffLeave {
+  id         String     @id @default(uuid())
+  staffId    String
+  branchId   String
+  type       LeaveType  @default(ANNUAL)
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  status     LeaveStatus @default(PENDING)
+  reviewedBy String?    // staff id of the manager who reviewed
+  reviewNote String?
+  reviewedAt DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  staff  Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+  @@index([staffId])
+  @@index([status])
+  @@map("staff_leaves")
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  UNPAID
+}
+
+model PosSale {
+  id              String        @id @default(uuid())
+  saleNumber      String        @unique
+  branchId        String
+  staffId         String        // Staff member who processed the sale
+  patientName     String?       // Optional — walk-in may not be registered
+  patientPhone    String?
+  patientId       String?       // Linked if patient is registered
+  subtotal        Decimal       @db.Decimal(12, 2)
+  discount        Decimal       @db.Decimal(12, 2) @default(0)
+  total           Decimal       @db.Decimal(12, 2)
+  paymentMethod   PaymentMethod
+  amountReceived  Decimal       @db.Decimal(12, 2)
+  change          Decimal       @db.Decimal(12, 2) @default(0)
+  prescriptionId  String?       // Optional — if a prescription was presented
+  notes           String?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  branch       Branch        @relation(fields: [branchId], references: [id])
+  patient      Patient?      @relation(fields: [patientId], references: [id])
+  prescription Prescription? @relation(fields: [prescriptionId], references: [id])
+  items        PosSaleItem[]
+
+  @@index([branchId])
+  @@index([staffId])
+  @@index([createdAt])
+  @@map("pos_sales")
+}
+
+model PosSaleItem {
+  id           String   @id @default(uuid())
+  saleId       String
+  medicationId String
+  name         String   // Snapshot of name at time of sale
+  quantity     Int
+  unitPrice    Decimal  @db.Decimal(12, 2)
+  total        Decimal  @db.Decimal(12, 2)
+  createdAt    DateTime @default(now())
+
+  sale       PosSale    @relation(fields: [saleId], references: [id], onDelete: Cascade)
+  medication Medication @relation(fields: [medicationId], references: [id])
+
+  @@index([saleId])
+  @@map("pos_sale_items")
 }

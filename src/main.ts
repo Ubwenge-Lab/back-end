@@ -9,16 +9,17 @@ import { ValidationPipe, LoggerService } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import helmet from 'helmet';
 import compression from 'compression';
-import { json, urlencoded } from 'express';
+import { json, urlencoded, type Request } from 'express';
 import { WINSTON_MODULE_NEST_PROVIDER } from 'nest-winston';
 import { AppModule } from './app.module';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from './notifications/email.service';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { AuditService } from './audit/audit.service';
 import { QueryLoggerInterceptor } from './common/interceptors/query-logger.interceptor';
-import * as Sentry from '@sentry/nestjs'
-import { nodeProfilingIntegration } from '@sentry/profiling-node'
+import * as Sentry from '@sentry/nestjs';
+import { nodeProfilingIntegration } from '@sentry/profiling-node';
 
 Sentry.init({
   // dsn is read automatically from process.env.SENTRY_DSN by the SDK
@@ -27,10 +28,10 @@ Sentry.init({
   integrations: [
     nodeProfilingIntegration(),
     // Capture all console logs, warnings, and errors automatically
-    Sentry.captureConsoleIntegration({ levels: ['log', 'warn', 'error'] })
+    Sentry.captureConsoleIntegration({ levels: ['log', 'warn', 'error'] }),
   ],
   environment: process.env.NODE_ENV || 'development',
-})
+});
 async function bootstrap() {
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bodyParser: false,
@@ -43,7 +44,20 @@ async function bootstrap() {
   app.set('trust proxy', 1);
 
   // Increase payload size limit to 50MB for file uploads (RDB certificates, licenses)
-  app.use(json({ limit: '50mb' }));
+  app.use(
+    json({
+      limit: '50mb',
+      verify: (request: Request & { rawBody?: Buffer }, _response, buffer) => {
+        if (
+          request.originalUrl?.includes(
+            '/prescriptions/webhook/external-fulfillment',
+          )
+        ) {
+          request.rawBody = Buffer.from(buffer);
+        }
+      },
+    }),
+  );
   app.use(urlencoded({ extended: true, limit: '50mb' }));
 
   // Security (Upgrade HTTP header Hardening)
@@ -106,7 +120,8 @@ async function bootstrap() {
   // Global Exception Handling
   const configService = app.get(ConfigService);
   const emailService = app.get(EmailService);
-  app.useGlobalFilters(new GlobalExceptionFilter(configService, emailService));
+  const auditService = app.get(AuditService);
+  app.useGlobalFilters(new GlobalExceptionFilter(configService, emailService, auditService));
 
   // Request timing & slow-query monitoring (DB Optimization — Sprint 2 Task 3)
   app.useGlobalInterceptors(new QueryLoggerInterceptor());

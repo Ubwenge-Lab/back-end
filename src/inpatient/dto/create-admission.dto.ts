@@ -26,4 +26,19 @@ export class CreateAdmissionDto {
   @IsString()
   @IsOptional()
   bedNumber?: string;
+
+  @ApiPropertyOptional({ example: 'ward-uuid' })
+  @IsString()
+  @IsOptional()
+  wardId?: string;
+
+  @ApiPropertyOptional({ example: 'room-uuid' })
+  @IsString()
+  @IsOptional()
+  roomId?: string;
+
+  @ApiPropertyOptional({ example: 'bed-uuid' })
+  @IsString()
+  @IsOptional()
+  bedId?: string;
 }

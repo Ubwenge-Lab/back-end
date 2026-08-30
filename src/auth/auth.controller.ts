@@ -12,6 +12,7 @@ import {
   Put,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiBearerAuth } from '@nestjs/swagger';
+import { Request } from 'express';
 import { AuthService } from './auth.service';
 import {
   LoginDto,
@@ -30,6 +31,7 @@ import {
 } from './dto';
 import { JwtAuthGuard } from './guards/jwt-auth.guard';
 import { JwtRefreshGuard } from './guards/jwt-refresh.guard';
+import { AuditService } from '../audit/audit.service';
 
 // IMPORTS FOR SECURITY THROTTLING
 import { Throttle, SkipThrottle } from '@nestjs/throttler';
@@ -38,7 +40,10 @@ import { Throttle, SkipThrottle } from '@nestjs/throttler';
 @Controller('auth')
 @Throttle({ default: { limit: 5, ttl: 60000 } }) // Limit to 5 requests per 1 minute for all routes in this controller
 export class AuthController {
-  constructor(private authService: AuthService) { }
+  constructor(
+    private authService: AuthService,
+    private auditService: AuditService,
+  ) { }
 
   @Get('crash')
   testCrash() {
@@ -48,8 +53,35 @@ export class AuthController {
   @Post('login')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Login (Patient/Pharmacy/Super Admin)' })
-  login(@Body() dto: LoginDto) {
-    return this.authService.login(dto);
+  async login(@Body() dto: LoginDto, @Req() req: Request) {
+    // Audit every login attempt — the System Admin "God's eye" audit trail.
+    try {
+      const result = await this.authService.login(dto);
+      this.auditService
+        .log({
+          actorEmail: dto.email,
+          action: 'LOGIN_SUCCESS',
+          targetType: 'Auth',
+          outcome: 'SUCCESS',
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+        })
+        .catch(() => undefined);
+      return result;
+    } catch (e) {
+      this.auditService
+        .log({
+          actorEmail: dto.email,
+          action: 'LOGIN_FAILURE',
+          targetType: 'Auth',
+          outcome: 'FAILURE',
+          ip: req.ip,
+          userAgent: req.headers['user-agent'],
+          metadata: { message: e instanceof Error ? e.message : String(e) },
+        })
+        .catch(() => undefined);
+      throw e;
+    }
   }
 
   @Post('register/patient')

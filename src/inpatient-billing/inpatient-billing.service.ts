@@ -1,6 +1,13 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
-import { PrismaService } from '../prisma/prisma.service';
+import {
+  ConflictException,
+  ForbiddenException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { Cron, CronExpression } from '@nestjs/schedule';
+import { AdmissionStatus, HospitalBillingStatus } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service';
 import { LogSupplyDto } from './dto/log-supply.dto';
 
 @Injectable()
@@ -9,149 +16,261 @@ export class InpatientBillingService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  // 1. Daily Cron Job to run at midnight
+  private async resolveHospitalId(userId: string, role: string) {
+    if (role === 'DOCTOR') {
+      const doctor = await this.prisma.doctor.findFirst({
+        where: { userId },
+        select: { hospitalId: true },
+      });
+      if (!doctor) throw new ForbiddenException('Doctor profile not found');
+      return doctor.hospitalId;
+    }
+
+    if (role === 'HOSPITAL_ADMIN') {
+      const hospital = await this.prisma.hospital.findFirst({
+        where: { userId },
+        select: { id: true },
+      });
+      if (!hospital) throw new ForbiddenException('Hospital profile not found');
+      return hospital.id;
+    }
+
+    const staff = await this.prisma.hospitalStaff.findFirst({
+      where: { userId },
+      select: { hospitalId: true },
+    });
+    if (!staff) {
+      throw new ForbiddenException('You are not registered as hospital staff');
+    }
+    return staff.hospitalId;
+  }
+
+  private assertSameHospital(
+    actorHospitalId: string,
+    admissionHospitalId: string,
+  ) {
+    if (actorHospitalId !== admissionHospitalId) {
+      throw new ForbiddenException('Access denied to this admission');
+    }
+  }
+
+  private getWardChargeServiceDate() {
+    return new Intl.DateTimeFormat('en-CA', {
+      timeZone: 'Africa/Kigali',
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit',
+    }).format(new Date());
+  }
+
   @Cron(CronExpression.EVERY_DAY_AT_MIDNIGHT)
   async handleDailyWardCharges() {
     this.logger.log('Running daily ward charge aggregation...');
 
-    // Find all active admissions
     const activeAdmissions = await this.prisma.inpatientAdmission.findMany({
-      where: { status: 'ACTIVE' },
-      include: {
-        bed: { include: { ward: true } },
-        hospitalInvoice: true,
-      },
+      where: { status: AdmissionStatus.ACTIVE },
+      select: { id: true },
     });
 
-    for (const admission of activeAdmissions) {
+    for (const candidate of activeAdmissions) {
       try {
-        if (!admission.bed) {
-          this.logger.warn(`Admission ${admission.id} has no associated bed. Skipping bed charge.`);
-          continue;
-        }
-        const bedCharge = admission.bed.ward.baseBedCharge;
-        
-        let invoice = admission.hospitalInvoice;
+        const charged = await this.prisma.$transaction(async (tx) => {
+          await tx.$queryRaw`
+            SELECT id
+            FROM inpatient_admissions
+            WHERE id = ${candidate.id}
+            FOR UPDATE
+          `;
 
-        // If no invoice exists, create one
-        if (!invoice) {
-          invoice = await this.prisma.hospitalInvoice.create({
-            data: {
-              admissionId: admission.id,
-              patientId: admission.patientId,
-              hospitalId: admission.hospitalId,
-              totalAmount: 0,
+          const admission = await tx.inpatientAdmission.findUnique({
+            where: { id: candidate.id },
+            include: {
+              bed: { include: { ward: true } },
+              hospitalInvoice: true,
             },
           });
+          if (!admission || admission.status !== AdmissionStatus.ACTIVE) {
+            return false;
+          }
+          if (!admission.bed) {
+            this.logger.warn(
+              `Admission ${admission.id} has no associated bed. Skipping bed charge.`,
+            );
+            return false;
+          }
+          if (
+            admission.hospitalInvoice?.paymentStatus ===
+            HospitalBillingStatus.PAID
+          ) {
+            this.logger.warn(
+              `Admission ${admission.id} has a paid invoice. Skipping bed charge.`,
+            );
+            return false;
+          }
+
+          const bedCharge = admission.bed.ward.baseBedCharge;
+          const invoice =
+            admission.hospitalInvoice ??
+            (await tx.hospitalInvoice.create({
+              data: {
+                admissionId: admission.id,
+                patientId: admission.patientId,
+                hospitalId: admission.hospitalId,
+                totalAmount: 0,
+              },
+            }));
+
+          const description = `Daily Bed Charge ${this.getWardChargeServiceDate()} - ${admission.bed.ward.name} (${admission.bed.number})`;
+          const existingCharge = await tx.hospitalInvoiceItem.findFirst({
+            where: {
+              invoiceId: invoice.id,
+              category: 'BED_FEE',
+              description,
+            },
+            select: { id: true },
+          });
+          if (existingCharge) {
+            return false;
+          }
+
+          await tx.hospitalInvoiceItem.create({
+            data: {
+              invoiceId: invoice.id,
+              description,
+              quantity: 1,
+              unitCost: bedCharge,
+              subtotal: bedCharge,
+              category: 'BED_FEE',
+            },
+          });
+          await tx.hospitalInvoice.update({
+            where: { id: invoice.id },
+            data: { totalAmount: { increment: bedCharge } },
+          });
+          return true;
+        });
+
+        if (charged) {
+          this.logger.log(`Charged bed fee for admission: ${candidate.id}`);
         }
-
-        // Create the invoice item for today's bed charge
-        await this.prisma.hospitalInvoiceItem.create({
-          data: {
-            invoiceId: invoice.id,
-            description: `Daily Bed Charge - ${admission.bed.ward.name} (${admission.bed.number})`,
-            quantity: 1,
-            unitCost: bedCharge,
-            subtotal: bedCharge,
-            category: 'BED_FEE',
-          },
-        });
-
-        // Update the total invoice amount
-        await this.prisma.hospitalInvoice.update({
-          where: { id: invoice.id },
-          data: {
-            totalAmount: { increment: bedCharge },
-          },
-        });
-
-        this.logger.log(`Charged bed fee for admission: ${admission.id}`);
-      } catch (error: any) {
-        this.logger.error(`Failed to charge bed fee for admission ${admission.id}: ${error.message}`);
+      } catch (error: unknown) {
+        const message =
+          error instanceof Error ? error.message : 'Unknown billing error';
+        this.logger.error(
+          `Failed to charge bed fee for admission ${candidate.id}: ${message}`,
+        );
       }
     }
+
     this.logger.log('Finished daily ward charge aggregation.');
   }
 
-  // 2. Log bedside supply consumption
-  async logSupplyConsumption(admissionId: string, data: LogSupplyDto, staffId: string) {
-    const admission = await this.prisma.inpatientAdmission.findUnique({
-      where: { id: admissionId },
-      include: { hospitalInvoice: true },
-    });
-
-    if (!admission) throw new NotFoundException('Admission not found');
-
+  async logSupplyConsumption(
+    admissionId: string,
+    data: LogSupplyDto,
+    userId: string,
+    role: string,
+  ) {
+    const actorHospitalId = await this.resolveHospitalId(userId, role);
     const totalCost = Number(data.quantity) * Number(data.unitCost);
+    const category = data.category ?? 'SUPPLIES';
 
-    // Record the consumption
-    await this.prisma.supplyConsumption.create({
-      data: {
-        admissionId,
-        itemName: data.itemName,
-        category: data.category ?? 'GENERAL',
-        quantity: data.quantity,
-        unitCost: data.unitCost,
-        totalCost: totalCost,
-        administeredBy: staffId,
-      },
-    });
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT id
+        FROM inpatient_admissions
+        WHERE id = ${admissionId}
+        FOR UPDATE
+      `;
+      const admission = await tx.inpatientAdmission.findUnique({
+        where: { id: admissionId },
+        include: { hospitalInvoice: true },
+      });
+      if (!admission) throw new NotFoundException('Admission not found');
+      this.assertSameHospital(actorHospitalId, admission.hospitalId);
+      if (admission.status !== AdmissionStatus.ACTIVE) {
+        throw new ConflictException(
+          'Cannot add inpatient charges after discharge',
+        );
+      }
+      if (
+        admission.hospitalInvoice?.paymentStatus === HospitalBillingStatus.PAID
+      ) {
+        throw new ConflictException('Cannot add charges to a paid invoice');
+      }
 
-    let invoice = admission.hospitalInvoice;
-    if (!invoice) {
-      invoice = await this.prisma.hospitalInvoice.create({
+      await tx.supplyConsumption.create({
         data: {
-          admissionId: admission.id,
-          patientId: admission.patientId,
-          hospitalId: admission.hospitalId,
-          totalAmount: 0,
+          admissionId,
+          itemName: data.itemName,
+          category,
+          quantity: data.quantity,
+          unitCost: data.unitCost,
+          totalCost,
+          administeredBy: userId,
         },
       });
-    }
 
-    // Immediately append it to the checkout invoice
-    await this.prisma.hospitalInvoiceItem.create({
-      data: {
-        invoiceId: invoice.id,
-        description: `Supply: ${data.itemName}`,
-        quantity: data.quantity,
-        unitCost: data.unitCost,
-        subtotal: totalCost,
-        category: data.category || 'SUPPLIES',
-      },
+      const invoice =
+        admission.hospitalInvoice ??
+        (await tx.hospitalInvoice.create({
+          data: {
+            admissionId: admission.id,
+            patientId: admission.patientId,
+            hospitalId: admission.hospitalId,
+            totalAmount: 0,
+          },
+        }));
+
+      await tx.hospitalInvoiceItem.create({
+        data: {
+          invoiceId: invoice.id,
+          description: `Supply: ${data.itemName}`,
+          quantity: data.quantity,
+          unitCost: data.unitCost,
+          subtotal: totalCost,
+          category,
+        },
+      });
+      await tx.hospitalInvoice.update({
+        where: { id: invoice.id },
+        data: { totalAmount: { increment: totalCost } },
+      });
+
+      return { message: 'Supply consumption logged and invoice updated' };
     });
-
-    // Update total amount
-    await this.prisma.hospitalInvoice.update({
-      where: { id: invoice.id },
-      data: { totalAmount: { increment: totalCost } },
-    });
-
-    return { message: 'Supply consumption logged and invoice updated' };
   }
 
-  // 3. Compile checkout invoice by department
-  async getCheckoutInvoice(admissionId: string) {
+  async getCheckoutInvoice(admissionId: string, userId: string, role: string) {
+    const actorHospitalId = await this.resolveHospitalId(userId, role);
+    const admission = await this.prisma.inpatientAdmission.findUnique({
+      where: { id: admissionId },
+      select: { hospitalId: true },
+    });
+    if (!admission) throw new NotFoundException('Admission not found');
+    this.assertSameHospital(actorHospitalId, admission.hospitalId);
+
     const invoice = await this.prisma.hospitalInvoice.findUnique({
       where: { admissionId },
       include: { items: true },
     });
+    if (!invoice) {
+      throw new NotFoundException('Invoice not found for this admission');
+    }
 
-    if (!invoice) throw new NotFoundException('Invoice not found for this admission');
-
-    // Group items by category (department)
-    const groupedItems = invoice.items.reduce((acc: any, item: any) => {
-      const category = item.category || 'OTHER';
-      if (!acc[category]) acc[category] = [];
-      acc[category].push(item);
-      return acc;
+    const departments = invoice.items.reduce<
+      Record<string, typeof invoice.items>
+    >((grouped, item) => {
+      const category = item.category ?? 'OTHER';
+      (grouped[category] ??= []).push(item);
+      return grouped;
     }, {});
 
     return {
       invoiceId: invoice.id,
       totalAmount: invoice.totalAmount,
       paymentStatus: invoice.paymentStatus,
-      departments: groupedItems,
+      departments,
     };
   }
 }
