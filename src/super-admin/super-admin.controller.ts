@@ -23,6 +23,7 @@ import {
   RejectBranchDto,
   VerifyLocationDto,
 } from './dto';
+import { UpdatePlatformSettingsDto } from './dto/update-platform-settings.dto';
 
 @ApiTags('Super Admin')
 @Controller('super-admin')
@@ -31,6 +32,14 @@ import {
 @ApiBearerAuth()
 export class SuperAdminController {
   constructor(private superAdminService: SuperAdminService) {}
+
+  @Put('settings')
+  @ApiOperation({ summary: 'Update global platform settings' })
+  @Roles(Role.SUPER_ADMIN, Role.SYSTEM_ADMIN)
+  updatePlatformSettings(@Body() dto: UpdatePlatformSettingsDto) {
+    return this.superAdminService.updatePlatformSettings(dto);
+  }
+
 
   @Get('analytics')
   @ApiOperation({ summary: 'Get platform analytics' })

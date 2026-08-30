@@ -30,4 +30,23 @@ export class SupportService {
       throw new InternalServerErrorException('Failed to create support ticket');
     }
   }
+
+  async getSettings() {
+    let settings = await this.prisma.platformSettings.findUnique({
+      where: { id: 'singleton' },
+    });
+
+    // Fallback if DB is not seeded
+    if (!settings) {
+      settings = {
+        id: 'singleton',
+        supportEmail: process.env.SUPER_ADMIN_EMAIL || 'info@ubwengelab.rw',
+        supportPhone: '+250 800 000 000',
+        supportName: 'Customer Care',
+        updatedAt: new Date(),
+      };
+    }
+
+    return settings;
+  }
 }

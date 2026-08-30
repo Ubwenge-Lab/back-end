@@ -1,4 +1,4 @@
-import { Controller, Post, Body, Req } from '@nestjs/common';
+import { Controller, Post, Get, Body, Req } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SupportService } from './support.service';
 import { CreateSupportTicketDto } from './dto/create-support-ticket.dto';
@@ -8,6 +8,12 @@ import { Public } from '../auth/decorators/public.decorator';
 @Controller('support/tickets')
 export class SupportController {
   constructor(private readonly supportService: SupportService) {}
+
+  @Get('settings')
+  @ApiOperation({ summary: 'Get public platform settings (e.g. support contact info)' })
+  getSettings() {
+    return this.supportService.getSettings();
+  }
 
   @Public() // Bypasses mandatory JWT check, making it auth-optional
   @Post()

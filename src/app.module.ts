@@ -16,6 +16,7 @@ import { OrdersModule } from './orders/orders.module';
 import { PrescriptionsModule } from './prescriptions/prescriptions.module';
 import { PosModule } from './pos/pos.module';
 import { StaffLeaveModule } from './staff-leave/staff-leave.module';
+import { SystemAdminModule } from './system-admin/system-admin.module';
 import { PaymentsModule } from './payments/payments.module';
 import { InsuranceModule } from './insurance/insurance.module';
 import { NotificationsModule } from './notifications/notifications.module';
@@ -86,6 +87,7 @@ import { ChatModule } from './chat/chat.module';
     PrescriptionsModule,
     PosModule,
     StaffLeaveModule,
+    SystemAdminModule,
     PaymentsModule,
     InsuranceModule,
     NotificationsModule,
