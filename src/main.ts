@@ -16,6 +16,7 @@ import { NestExpressApplication } from '@nestjs/platform-express';
 import { ConfigService } from '@nestjs/config';
 import { EmailService } from './notifications/email.service';
 import { GlobalExceptionFilter } from './common/filters/global-exception.filter';
+import { AuditService } from './audit/audit.service';
 import { QueryLoggerInterceptor } from './common/interceptors/query-logger.interceptor';
 import * as Sentry from '@sentry/nestjs';
 import { nodeProfilingIntegration } from '@sentry/profiling-node';
@@ -119,7 +120,8 @@ async function bootstrap() {
   // Global Exception Handling
   const configService = app.get(ConfigService);
   const emailService = app.get(EmailService);
-  app.useGlobalFilters(new GlobalExceptionFilter(configService, emailService));
+  const auditService = app.get(AuditService);
+  app.useGlobalFilters(new GlobalExceptionFilter(configService, emailService, auditService));
 
   // Request timing & slow-query monitoring (DB Optimization — Sprint 2 Task 3)
   app.useGlobalInterceptors(new QueryLoggerInterceptor());
