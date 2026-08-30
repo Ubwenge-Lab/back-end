@@ -759,6 +759,7 @@ model StockTransfer {
   fromBranchId    String
   toBranchId      String
   status          TransferStatus      @default(PENDING)
+  stockDeducted   Boolean             @default(false) // Sender stock moved at SHIPPED (fix: no deduction at create)
   notes           String?
   createdAt       DateTime            @default(now())
   updatedAt       DateTime            @updatedAt
@@ -1028,6 +1029,7 @@ enum TransferStatus {
   REJECTED
   SHIPPED
   COMPLETED
+  CANCELLED
 }
 
 enum StaffStatus {
