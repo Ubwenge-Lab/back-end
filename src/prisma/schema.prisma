@@ -295,6 +295,7 @@ model Branch {
   transfersFrom      StockTransfer[] @relation("FromBranch")
   transfersTo        StockTransfer[] @relation("ToBranch")
   posSales           PosSale[]
+  staffLeaves        StaffLeave[]
 
   @@index([pharmacyId])
   @@map("branches")
@@ -320,6 +321,7 @@ model Staff {
   clockInApprover    Attendance[]      @relation("ClockInApprover")
   clockOutApprover   Attendance[]      @relation("ClockOutApprover")
   attendances        Attendance[]
+  leaves             StaffLeave[]
   branch             Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
   user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   permissions        StaffPermissions?
@@ -1635,6 +1637,36 @@ model DisposalLog {
   @@index([itemId])
   @@index([itemType])
   @@map("disposal_logs")
+}
+
+model StaffLeave {
+  id         String     @id @default(uuid())
+  staffId    String
+  branchId   String
+  type       LeaveType  @default(ANNUAL)
+  startDate  DateTime
+  endDate    DateTime
+  reason     String?
+  status     LeaveStatus @default(PENDING)
+  reviewedBy String?    // staff id of the manager who reviewed
+  reviewNote String?
+  reviewedAt DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  staff  Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+  branch Branch @relation(fields: [branchId], references: [id])
+
+  @@index([branchId])
+  @@index([staffId])
+  @@index([status])
+  @@map("staff_leaves")
+}
+
+enum LeaveType {
+  ANNUAL
+  SICK
+  UNPAID
 }
 
 model PosSale {
