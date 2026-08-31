@@ -18,6 +18,7 @@ export enum StaffPermission {
   VIEW_PAYMENTS = 'VIEW_PAYMENTS',
   PROCESS_PAYMENTS = 'PROCESS_PAYMENTS',
   ISSUE_REFUNDS = 'ISSUE_REFUNDS',
+  ACCESS_POS = 'ACCESS_POS',
 
   // Prescription Management
   VIEW_PRESCRIPTIONS = 'VIEW_PRESCRIPTIONS',
@@ -61,6 +62,7 @@ export const DEFAULT_PERMISSIONS = {
     StaffPermission.VIEW_INVENTORY,
     StaffPermission.VIEW_PAYMENTS,
     StaffPermission.PROCESS_PAYMENTS,
+    StaffPermission.ACCESS_POS,
     StaffPermission.VIEW_CUSTOMERS,
   ],
   NURSE: [
