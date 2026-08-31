@@ -8,6 +8,7 @@ import { AppService } from './app.service';
 import { ConfigModule } from '@nestjs/config';
 import { PrismaModule } from './prisma/prisma.module';
 import { AuthModule } from './auth/auth.module';
+import { OtpModule } from './otp/otp.module';
 import { UsersModule } from './users/users.module';
 import { PatientsModule } from './patients/patients.module';
 import { PharmaciesModule } from './pharmacies/pharmacies.module';
@@ -77,6 +78,7 @@ import { ChatModule } from './chat/chat.module';
     LoggerModule,
     PrismaModule,
     AuthModule,
+    OtpModule,
     UsersModule,
     PatientsModule,
     PharmaciesModule,
