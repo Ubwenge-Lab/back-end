@@ -155,10 +155,47 @@ export class DoctorsService {
       totalAppointments:  totalCount,
       appointmentsByStatus: statusCounts,
       weeklyVisits,
-      doctorName:    `${doctor.firstName ?? ''} ${doctor.lastName ?? ''}`.trim() || null,
+      doctorName:     `${doctor.firstName ?? ''} ${doctor.lastName ?? ''}`.trim() || null,
       specialization: doctor.specialization,
       hospitalName:   doctor.hospital?.name ?? null,
+      licenseNumber:  doctor.licenseNumber,
+      workingHours:   null,
     };
+  }
+
+  // ========================================
+  // DOCTOR SELF-SERVICE PROFILE (Gap E-3)
+  // ========================================
+
+  async getDoctorMe(userId: string) {
+    const doctor = await this.prisma.doctor.findUnique({
+      where: { userId },
+      include: {
+        hospital: { select: { id: true, name: true } },
+        user: { select: { email: true } },
+      },
+    });
+    if (!doctor) throw new ForbiddenException('Doctor profile not found');
+    return {
+      ...doctor,
+      email: doctor.user?.email ?? null,
+      hospitalName: doctor.hospital?.name ?? null,
+    };
+  }
+
+  async updateDoctorMe(
+    userId: string,
+    dto: { phone?: string; bio?: string; specialization?: string },
+  ) {
+    const doctor = await this.prisma.doctor.findUnique({ where: { userId } });
+    if (!doctor) throw new ForbiddenException('Doctor profile not found');
+
+    const data: Record<string, unknown> = {};
+    if (dto.phone !== undefined)         data.phone         = dto.phone;
+    if (dto.bio !== undefined)           data.bio           = dto.bio;
+    if (dto.specialization !== undefined) data.specialization = dto.specialization;
+
+    return this.prisma.doctor.update({ where: { id: doctor.id }, data });
   }
 
   // ========================================

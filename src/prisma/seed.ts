@@ -13,6 +13,11 @@ import {
   StaffStatus,
   NotificationType,
   ClaimStatus,
+  WardTier,
+  BedStatus,
+  AdmissionStatus,
+  ShiftType,
+  LeaveStatus,
 } from '@prisma/client';
 import { generateMRN } from '../utils/hospital';
 import { faker } from '@faker-js/faker';
@@ -188,7 +193,6 @@ async function main() {
         password: u.pass,
       },
       create: {
-        id: u.id,
         email: u.email,
         role: u.role,
         isVerified: u.isVerified,
@@ -695,6 +699,10 @@ async function main() {
     });
   }
 
+  // Resolve actual hospital IDs (may differ from hardcoded if hospitals already existed)
+  const actualKfhId  = kfhAdminId  ? (await prisma.hospital.findFirst({ where: { userId: kfhAdminId  } }))?.id ?? kfhId  : kfhId;
+  const actualChukId = chukAdminId ? (await prisma.hospital.findFirst({ where: { userId: chukAdminId } }))?.id ?? chukId : chukId;
+
   // Create Doctor Users
   const doctorEmails = ['robert@chuk.com', 'eric@kingfaisal.com'];
   for (const email of doctorEmails) {
@@ -729,7 +737,7 @@ async function main() {
       create: {
         id: robertDocId,
         userId: robertUserId,
-        hospitalId: chukId,
+        hospitalId: actualChukId,
         specialization: 'Cardiology',
         licenseNumber: 'RW-MED-12345',
         firstName: 'Robert',
@@ -739,7 +747,13 @@ async function main() {
         bio: 'Senior Cardiologist specializing in heart rhythm disorders.',
       },
     });
+  }
 
+  // Resolve actual doctor IDs after upserts
+  const actualRobertDocId = robertUserId ? (await prisma.doctor.findFirst({ where: { userId: robertUserId } }))?.id ?? robertDocId : robertDocId;
+  const actualEricDocId   = ericUserId   ? (await prisma.doctor.findFirst({ where: { userId: ericUserId   } }))?.id ?? ericDocId   : ericDocId;
+
+  if (robertUserId) {
     // Seed Doctor Schedules
     for (let day = 1; day <= 5; day++) {
       const scheduleId = `robert-schedule-day-${day}`;
@@ -750,7 +764,7 @@ async function main() {
         await prisma.doctorSchedule.create({
           data: {
             id: scheduleId,
-            doctorId: robertDocId,
+            doctorId: actualRobertDocId,
             dayOfWeek: day,
             startTime: '08:00',
             endTime: '17:00',
@@ -767,7 +781,7 @@ async function main() {
       create: {
         id: ericDocId,
         userId: ericUserId,
-        hospitalId: kfhId,
+        hospitalId: actualKfhId,
         specialization: 'Pediatrics',
         licenseNumber: 'RW-MED-67890',
         firstName: 'Eric',
@@ -788,7 +802,7 @@ async function main() {
         await prisma.doctorSchedule.create({
           data: {
             id: scheduleId,
-            doctorId: ericDocId,
+            doctorId: actualEricDocId,
             dayOfWeek: day,
             startTime: '08:00',
             endTime: '17:00',
@@ -800,22 +814,22 @@ async function main() {
 
   // Create Hospital Configs
   await prisma.hospitalConfig.upsert({
-    where: { hospitalId: chukId },
+    where: { hospitalId: actualChukId },
     update: { consultationFee: 10000, triageFee: 3000 },
     create: {
       id: '879a7899-beac-4c20-a463-66e111740b61',
-      hospitalId: chukId,
+      hospitalId: actualChukId,
       consultationFee: 10000,
       triageFee: 3000,
     },
   });
 
   await prisma.hospitalConfig.upsert({
-    where: { hospitalId: kfhId },
+    where: { hospitalId: actualKfhId },
     update: { consultationFee: 25000, triageFee: 5000 },
     create: {
       id: '736789d0-f12e-4476-ba23-e38c4e5c98d1',
-      hospitalId: kfhId,
+      hospitalId: actualKfhId,
       consultationFee: 25000,
       triageFee: 5000,
     },
@@ -839,7 +853,7 @@ async function main() {
         data: {
           id: regId,
           patientId: alicePatient.id,
-          hospitalId: chukId,
+          hospitalId: actualChukId,
           mrn: alicePatient.mrn,
         },
       });
@@ -856,7 +870,7 @@ async function main() {
         data: {
           id: regId,
           patientId: bobPatient.id,
-          hospitalId: kfhId,
+          hospitalId: actualKfhId,
           mrn: bobPatient.mrn,
         },
       });
@@ -864,7 +878,7 @@ async function main() {
   }
 
   // Seed Predictable Appointments and Invoices
-  if (alicePatient && robertDocId) {
+  if (alicePatient && actualRobertDocId) {
     // 1. Unpaid Hospital Invoice for testing
     const apptId1 = '70000000-0000-0000-0000-000000000001';
     const apptExisting1 = await prisma.appointment.findUnique({
@@ -875,8 +889,8 @@ async function main() {
         data: {
           id: apptId1,
           patientId: alicePatient.id,
-          doctorId: robertDocId,
-          hospitalId: chukId,
+          doctorId: actualRobertDocId,
+          hospitalId: actualChukId,
           date: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // 2 days ago
           status: AppointmentStatus.COMPLETED,
           reason: 'Routine Cardiac Followup',
@@ -894,7 +908,7 @@ async function main() {
           id: hInvoiceId1,
           appointmentId: apptId1,
           patientId: alicePatient.id,
-          hospitalId: chukId,
+          hospitalId: actualChukId,
           totalAmount: 13000,
           paymentStatus: HospitalBillingStatus.UNPAID,
           issuedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
@@ -930,7 +944,7 @@ async function main() {
           id: invoiceId1,
           appointmentId: apptId1,
           patientId: alicePatient.id,
-          hospitalId: chukId,
+          hospitalId: actualChukId,
           totalAmount: 13000,
           status: InvoiceStatus.UNPAID,
           dueDate: new Date(Date.now() + 5 * 24 * 60 * 60 * 1000),
@@ -964,8 +978,8 @@ async function main() {
         data: {
           id: apptId2,
           patientId: alicePatient.id,
-          doctorId: robertDocId,
-          hospitalId: chukId,
+          doctorId: actualRobertDocId,
+          hospitalId: actualChukId,
           date: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000), // 5 days ago
           status: AppointmentStatus.COMPLETED,
           reason: 'Chest pain examination',
@@ -983,7 +997,7 @@ async function main() {
           id: hInvoiceId2,
           appointmentId: apptId2,
           patientId: alicePatient.id,
-          hospitalId: chukId,
+          hospitalId: actualChukId,
           totalAmount: 13000,
           paymentStatus: HospitalBillingStatus.PAID,
           issuedAt: new Date(Date.now() - 5 * 24 * 60 * 60 * 1000),
@@ -1019,7 +1033,7 @@ async function main() {
           id: invoiceId2,
           appointmentId: apptId2,
           patientId: alicePatient.id,
-          hospitalId: chukId,
+          hospitalId: actualChukId,
           totalAmount: 13000,
           status: InvoiceStatus.PAID,
           dueDate: new Date(Date.now() + 2 * 24 * 60 * 60 * 1000),
@@ -1073,8 +1087,8 @@ async function main() {
         data: {
           id: apptId3,
           patientId: alicePatient.id,
-          doctorId: robertDocId,
-          hospitalId: chukId,
+          doctorId: actualRobertDocId,
+          hospitalId: actualChukId,
           date: new Date(Date.now() - 1 * 24 * 60 * 60 * 1000), // 1 day ago
           status: AppointmentStatus.COMPLETED,
           reason: 'Emergency consult',
@@ -1092,7 +1106,7 @@ async function main() {
           id: hInvoiceId3,
           appointmentId: apptId3,
           patientId: alicePatient.id,
-          hospitalId: chukId,
+          hospitalId: actualChukId,
           totalAmount: 13000,
           paymentStatus: HospitalBillingStatus.INSURANCE_PENDING,
           insuranceCovered: true,
@@ -1165,7 +1179,7 @@ async function main() {
     const entry = STOCK_ENTRIES[i % STOCK_ENTRIES.length];
     const expiryDate = new Date(Date.now() + entry.daysUntilExpiry * 24 * 60 * 60 * 1000);
 
-    for (const hospitalId of [kfhId, chukId]) {
+    for (const hospitalId of [actualKfhId, actualChukId]) {
       await prisma.hospitalDrugStock.upsert({
         where: { drugId_hospitalId: { drugId: drug.id, hospitalId } },
         update: {},
@@ -1221,7 +1235,6 @@ async function main() {
         password: password,
       },
       create: {
-        id: ownerUserId,
         email: ownerEmail,
         role: UserRole.PHARMACY,
         isVerified: true,
@@ -1271,7 +1284,6 @@ async function main() {
           password: password,
         },
         create: {
-          id: managerUserId,
           email: branchManagerEmail,
           role: UserRole.BRANCH_MANAGER,
           isVerified: true,
@@ -1448,7 +1460,6 @@ async function main() {
         password: password,
       },
       create: {
-        id: adminUserId,
         email: adminEmail,
         role: UserRole.HOSPITAL_ADMIN,
         isVerified: true,
@@ -1503,7 +1514,6 @@ async function main() {
           password: password,
         },
         create: {
-          id: nurseUserId,
           email: hStaffEmail,
           role: UserRole.NURSE,
           isVerified: true,
@@ -1549,7 +1559,6 @@ async function main() {
           password: password,
         },
         create: {
-          id: recUserId,
           email: recEmail,
           role: UserRole.RECEPTIONIST,
           isVerified: true,
@@ -1604,7 +1613,6 @@ async function main() {
           password: password,
         },
         create: {
-          id: doctorUserId,
           email: docEmail,
           role: UserRole.DOCTOR,
           isVerified: true,
@@ -1678,7 +1686,6 @@ async function main() {
         password: password,
       },
       create: {
-        id: patientUserId,
         email: patientEmail,
         role: UserRole.PATIENT,
         isVerified: true,
@@ -2134,7 +2141,436 @@ async function main() {
     }
   }
 
+  // ==========================================
+  // 9. HOSPITAL STAFF — NURSE & RECEPTIONIST AT CHUK
+  //    Full integration seed: ward, beds, admission, vitals,
+  //    MAR, handover, triage, leave, appointments
+  // ==========================================
+  console.log('\n🏥 Seeding CHUK hospital staff (nurse, receptionist) and clinical data...');
+
+  // --- 9a. Users ---
+  const nurseEmail        = 'nurse@chuk.com';
+  const receptionistEmail = 'receptionist@chuk.com';
+
+  await prisma.user.upsert({
+    where: { email: nurseEmail },
+    update: { role: UserRole.NURSE, isVerified: true, isActive: true, password },
+    create: {
+      email: nurseEmail,
+      role: UserRole.NURSE,
+      isVerified: true,
+      isActive: true,
+      password,
+      firstName: 'Grace',
+      lastName: 'Uwimana',
+    },
+  });
+
+  await prisma.user.upsert({
+    where: { email: receptionistEmail },
+    update: { role: UserRole.RECEPTIONIST, isVerified: true, isActive: true, password },
+    create: {
+      email: receptionistEmail,
+      role: UserRole.RECEPTIONIST,
+      isVerified: true,
+      isActive: true,
+      password,
+      firstName: 'Jean',
+      lastName: 'Habimana',
+    },
+  });
+
+  const nurseUserId        = await getUserId(nurseEmail);
+  const receptionistUserId = await getUserId(receptionistEmail);
+
+  // --- 9b. HospitalStaff ---
+  const nurseStaffId        = 'bb000000-0000-0000-0000-000000000001';
+  const receptionistStaffId = 'bb000000-0000-0000-0000-000000000002';
+
+  if (nurseUserId) {
+    await prisma.hospitalStaff.upsert({
+      where: { userId: nurseUserId },
+      update: { department: 'Cardiology', status: StaffStatus.ACTIVE },
+      create: {
+        id: nurseStaffId,
+        userId: nurseUserId,
+        hospitalId: actualChukId,
+        firstName: 'Grace',
+        lastName: 'Uwimana',
+        phone: '+250788300001',
+        department: 'Cardiology',
+        status: StaffStatus.ACTIVE,
+      },
+    });
+  }
+
+  if (receptionistUserId) {
+    await prisma.hospitalStaff.upsert({
+      where: { userId: receptionistUserId },
+      update: { department: 'Reception', status: StaffStatus.ACTIVE },
+      create: {
+        id: receptionistStaffId,
+        userId: receptionistUserId,
+        hospitalId: actualChukId,
+        firstName: 'Jean',
+        lastName: 'Habimana',
+        phone: '+250788300002',
+        department: 'Reception',
+        status: StaffStatus.ACTIVE,
+      },
+    });
+  }
+
+  // Resolve actual staff IDs (may differ from hardcoded if staff was already created)
+  const actualNurseStaffId        = nurseUserId        ? (await prisma.hospitalStaff.findFirst({ where: { userId: nurseUserId        } }))?.id ?? nurseStaffId        : nurseStaffId;
+  const actualReceptionistStaffId = receptionistUserId ? (await prisma.hospitalStaff.findFirst({ where: { userId: receptionistUserId } }))?.id ?? receptionistStaffId : receptionistStaffId;
+
+  // --- 9c. Ward & Beds at CHUK ---
+  const chukWardId = 'cc000000-0000-0000-0000-000000000001';
+  await prisma.ward.upsert({
+    where: { id: chukWardId },
+    update: { name: 'General Cardiology Ward' },
+    create: {
+      id: chukWardId,
+      hospitalId: actualChukId,
+      name: 'General Cardiology Ward',
+      tier: WardTier.GENERAL,
+      baseBedCharge: 15000,
+    },
+  });
+
+  const bedIds = [
+    'dd000000-0000-0000-0000-000000000001',
+    'dd000000-0000-0000-0000-000000000002',
+    'dd000000-0000-0000-0000-000000000003',
+    'dd000000-0000-0000-0000-000000000004',
+    'dd000000-0000-0000-0000-000000000005',
+  ];
+  const bedStatuses: BedStatus[] = [BedStatus.OCCUPIED, BedStatus.AVAILABLE, BedStatus.AVAILABLE, BedStatus.CLEANING, BedStatus.MAINTENANCE];
+
+  for (let bi = 0; bi < bedIds.length; bi++) {
+    await prisma.bed.upsert({
+      where: { id: bedIds[bi] },
+      update: { status: bedStatuses[bi], isOccupied: bi === 0 },
+      create: {
+        id: bedIds[bi],
+        wardId: chukWardId,
+        number: `GC-${bi + 1}`,
+        status: bedStatuses[bi],
+        isOccupied: bi === 0,
+      },
+    });
+  }
+
+  // --- 9d. Active Inpatient Admission for Alice at CHUK ---
+  const admissionId = 'ee000000-0000-0000-0000-000000000001';
+  const aliceForAdmission = await prisma.patient.findFirst({ where: { firstName: 'Alice' } });
+
+  if (aliceForAdmission && nurseUserId) {
+    const admissionExists = await prisma.inpatientAdmission.findUnique({ where: { id: admissionId } });
+    if (!admissionExists) {
+      await prisma.inpatientAdmission.create({
+        data: {
+          id: admissionId,
+          patientId: aliceForAdmission.id,
+          hospitalId: actualChukId,
+          bedId: bedIds[0],
+          doctorId: actualRobertDocId,
+          admittedByUserId: nurseUserId,
+          admittedByName: 'Grace Uwimana',
+          admittedByRole: 'NURSE',
+          wardName: 'General Cardiology Ward',
+          bedNumber: 'GC-1',
+          reason: 'Chest pain and shortness of breath, admitted for cardiac monitoring',
+          status: AdmissionStatus.ACTIVE,
+          admittedAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000),
+          notes: 'Patient stable. Continuous cardiac monitoring in progress.',
+        },
+      });
+    }
+
+    // --- 9e. InpatientVitals (2 rounds) ---
+    const vitals1Id = 'ff000000-0000-0000-0000-000000000001';
+    const vitals2Id = 'ff000000-0000-0000-0000-000000000002';
+
+    if (!(await prisma.inpatientVitals.findUnique({ where: { id: vitals1Id } }))) {
+      await prisma.inpatientVitals.create({
+        data: {
+          id: vitals1Id,
+          admissionId,
+          recordedById: actualNurseStaffId,
+          readings: {
+            bloodPressure: '130/85',
+            temperature: 37.2,
+            heartRate: 88,
+            oxygenSaturation: 97,
+            respiratoryRate: 18,
+            weight: 68,
+          },
+          checklist: {
+            ivLineChecked: true,
+            medicationAdministered: true,
+            patientComfortable: true,
+            alarmsChecked: true,
+          },
+          nurseNotes: 'Patient reports mild chest discomfort. BP slightly elevated. Notified Dr. Niyonkuru.',
+          recordedAt: new Date(Date.now() - 36 * 60 * 60 * 1000),
+        },
+      });
+    }
+
+    if (!(await prisma.inpatientVitals.findUnique({ where: { id: vitals2Id } }))) {
+      await prisma.inpatientVitals.create({
+        data: {
+          id: vitals2Id,
+          admissionId,
+          recordedById: actualNurseStaffId,
+          readings: {
+            bloodPressure: '120/80',
+            temperature: 36.8,
+            heartRate: 75,
+            oxygenSaturation: 98,
+            respiratoryRate: 16,
+            weight: 68,
+          },
+          checklist: {
+            ivLineChecked: true,
+            medicationAdministered: true,
+            patientComfortable: true,
+            alarmsChecked: true,
+          },
+          nurseNotes: 'Patient improving. BP normalised. Good sleep reported.',
+          recordedAt: new Date(Date.now() - 12 * 60 * 60 * 1000),
+        },
+      });
+    }
+
+    // --- 9f. MAR Logs (2 entries) ---
+    const mar1Id = 'gg000000-0000-0000-0000-000000000001';
+    const mar2Id = 'gg000000-0000-0000-0000-000000000002';
+
+    if (!(await prisma.mARLog.findUnique({ where: { id: mar1Id } }))) {
+      await prisma.mARLog.create({
+        data: {
+          id: mar1Id,
+          admissionId,
+          administeredById: actualNurseStaffId,
+          medicationName: 'Metoprolol',
+          dose: '25mg',
+          route: 'Oral',
+          scheduledAt: new Date(Date.now() - 37 * 60 * 60 * 1000),
+          administeredAt: new Date(Date.now() - 36 * 60 * 60 * 1000),
+          notes: 'Administered with water. Patient tolerated well.',
+        },
+      });
+    }
+
+    if (!(await prisma.mARLog.findUnique({ where: { id: mar2Id } }))) {
+      await prisma.mARLog.create({
+        data: {
+          id: mar2Id,
+          admissionId,
+          administeredById: actualNurseStaffId,
+          medicationName: 'Aspirin',
+          dose: '100mg',
+          route: 'Oral',
+          scheduledAt: new Date(Date.now() - 13 * 60 * 60 * 1000),
+          administeredAt: new Date(Date.now() - 12 * 60 * 60 * 1000),
+          notes: 'Morning dose administered. No adverse reactions.',
+        },
+      });
+    }
+
+    // --- 9g. Nursing Handover ---
+    const handoverId = 'hh000000-0000-0000-0000-000000000001';
+    if (!(await prisma.nursingHandover.findUnique({ where: { id: handoverId } }))) {
+      await prisma.nursingHandover.create({
+        data: {
+          id: handoverId,
+          admissionId,
+          handedOverById: actualNurseStaffId,
+          shiftType: ShiftType.MORNING,
+          checklist: {
+            vitalsRecorded: true,
+            medicationsAdministered: true,
+            ivLinesChecked: true,
+            patientOrientated: true,
+            familyUpdated: false,
+            pendingOrders: 'ECG ordered by Dr. Niyonkuru — to be done this shift',
+          },
+          notes: 'Alice stable, BP improving on Metoprolol. Awaiting cardiology review at 14:00.',
+          handedOverAt: new Date(Date.now() - 8 * 60 * 60 * 1000),
+        },
+      });
+    }
+  }
+
+  // --- 9h. Triage Vitals for Alice's completed appointment ---
+  const triageId = 'ii000000-0000-0000-0000-000000000001';
+  if (!(await prisma.triageVitals.findUnique({ where: { id: triageId } }))) {
+    const apptExists = await prisma.appointment.findUnique({ where: { id: '70000000-0000-0000-0000-000000000001' } });
+    const triageApptExists = await prisma.triageVitals.findUnique({ where: { appointmentId: '70000000-0000-0000-0000-000000000001' } });
+    if (apptExists && !triageApptExists) {
+      await prisma.triageVitals.create({
+        data: {
+          id: triageId,
+          appointmentId: '70000000-0000-0000-0000-000000000001',
+          bloodPressure: '130/85',
+          temperature: 37.1,
+          weight: 68,
+          heartRate: 88,
+          oxygenSaturation: 97,
+          nurseNotes: 'Patient anxious. BP mildly elevated. Settled after rest.',
+        },
+      });
+    }
+  }
+
+  // --- 9i. Today's Appointments for Receptionist Queue ---
+  const todayBase = new Date();
+  todayBase.setHours(0, 0, 0, 0);
+
+  const todayAppointments = [
+    {
+      id: 'jj000000-0000-0000-0000-000000000001',
+      hour: 9, minute: 0,
+      status: AppointmentStatus.ARRIVED,
+      reason: 'Follow-up cardiac check',
+    },
+    {
+      id: 'jj000000-0000-0000-0000-000000000002',
+      hour: 10, minute: 30,
+      status: AppointmentStatus.SCHEDULED,
+      reason: 'Chest pain evaluation',
+    },
+    {
+      id: 'jj000000-0000-0000-0000-000000000003',
+      hour: 11, minute: 0,
+      status: AppointmentStatus.IN_TRIAGE,
+      reason: 'Pre-operative assessment',
+    },
+    {
+      id: 'jj000000-0000-0000-0000-000000000004',
+      hour: 14, minute: 0,
+      status: AppointmentStatus.SCHEDULED,
+      reason: 'ECG review',
+    },
+    {
+      id: 'jj000000-0000-0000-0000-000000000005',
+      hour: 15, minute: 30,
+      status: AppointmentStatus.READY_FOR_DOCTOR,
+      reason: 'Post-admission follow-up',
+    },
+  ];
+
+  const bobForAppt = await prisma.patient.findFirst({ where: { firstName: 'Bob' } });
+  const aliceForAppt = await prisma.patient.findFirst({ where: { firstName: 'Alice' } });
+  const appointmentPatients = [aliceForAppt, bobForAppt, aliceForAppt, bobForAppt, aliceForAppt];
+
+  for (let ai = 0; ai < todayAppointments.length; ai++) {
+    const ta = todayAppointments[ai];
+    const pat = appointmentPatients[ai];
+    if (!pat) continue;
+
+    const exists = await prisma.appointment.findUnique({ where: { id: ta.id } });
+    if (!exists) {
+      const apptTime = new Date(todayBase);
+      apptTime.setHours(ta.hour, ta.minute, 0, 0);
+      await prisma.appointment.create({
+        data: {
+          id: ta.id,
+          patientId: pat.id,
+          doctorId: actualRobertDocId,
+          hospitalId: actualChukId,
+          date: apptTime,
+          status: ta.status,
+          reason: ta.reason,
+        },
+      });
+    }
+  }
+
+  // --- 9j. Staff Leave for nurse ---
+  const nurseSL = 'kk000000-0000-0000-0000-000000000001';
+  const nurseStaff = await prisma.hospitalStaff.findFirst({ where: { id: actualNurseStaffId } });
+  if (nurseStaff) {
+    const slExists = await prisma.staffLeave.findUnique({ where: { id: nurseSL } });
+    if (!slExists) {
+      const leaveStart = new Date(Date.now() + 7 * 24 * 60 * 60 * 1000);
+      const leaveEnd   = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000);
+      await prisma.staffLeave.create({
+        data: {
+          id: nurseSL,
+          staffId: actualNurseStaffId,
+          leaveType: 'Annual Leave',
+          startDate: leaveStart,
+          endDate: leaveEnd,
+          reason: 'Planned family vacation',
+          status: LeaveStatus.PENDING,
+        },
+      });
+    }
+  }
+
+  // --- 9k. Staff Leave for receptionist ---
+  const recSL = 'kk000000-0000-0000-0000-000000000002';
+  const recStaff = await prisma.hospitalStaff.findFirst({ where: { id: actualReceptionistStaffId } });
+  if (recStaff) {
+    const slExists2 = await prisma.staffLeave.findUnique({ where: { id: recSL } });
+    if (!slExists2) {
+      const leaveStart2 = new Date(Date.now() + 3 * 24 * 60 * 60 * 1000);
+      const leaveEnd2   = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000);
+      await prisma.staffLeave.create({
+        data: {
+          id: recSL,
+          staffId: actualReceptionistStaffId,
+          leaveType: 'Sick Leave',
+          startDate: leaveStart2,
+          endDate: leaveEnd2,
+          reason: 'Medical appointment',
+          status: LeaveStatus.APPROVED,
+        },
+      });
+    }
+  }
+
+  // --- 9l. Register additional faker patients at CHUK ---
+  const chukExtraPatients = fakerPatients.slice(0, 10);
+  for (const fp of chukExtraPatients) {
+    await prisma.hospitalPatientRegistration.upsert({
+      where: { patientId_hospitalId: { patientId: fp.id, hospitalId: actualChukId } },
+      update: { mrn: fp.mrn || `MRN-CHUK-${fp.id.slice(0, 6)}` },
+      create: { patientId: fp.id, hospitalId: actualChukId, mrn: fp.mrn || `MRN-CHUK-${fp.id.slice(0, 6)}` },
+    });
+  }
+
+  // --- 9m. Upcoming appointments (next 7 days) for full schedule view ---
+  const upcomingPatients = fakerPatients.slice(0, 7);
+  for (let ui = 0; ui < upcomingPatients.length; ui++) {
+    const apptId = `ll000000-0000-0000-0000-0000000000${ui.toString().padStart(2, '0')}`;
+    const exists = await prisma.appointment.findUnique({ where: { id: apptId } });
+    if (!exists) {
+      const futureDate = new Date(Date.now() + (ui + 1) * 24 * 60 * 60 * 1000);
+      futureDate.setHours(9 + ui, 0, 0, 0);
+      await prisma.appointment.create({
+        data: {
+          id: apptId,
+          patientId: upcomingPatients[ui].id,
+          doctorId: actualRobertDocId,
+          hospitalId: actualChukId,
+          date: futureDate,
+          status: AppointmentStatus.SCHEDULED,
+          reason: ['Cardiology consultation', 'ECG review', 'Blood pressure monitoring', 'Chest X-ray follow-up', 'Medication review', 'Post-procedure check', 'Arrhythmia evaluation'][ui],
+        },
+      });
+    }
+  }
+
   console.log('\n✅ Seeding complete! Database is successfully synchronized.');
+  console.log(`\n📋 Actual hospital IDs in DB:`);
+  console.log(`   KFH:  ${actualKfhId}`);
+  console.log(`   CHUK: ${actualChukId}`);
+  console.log(`   → Update NEXT_PUBLIC_DEV_HOSPITAL_ID in pharmacy_front/.env.local if needed`);
 }
 
 main()

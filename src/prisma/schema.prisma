@@ -75,6 +75,10 @@ model Hospital {
   wards                       Ward[]
   operatingTheaters           OperatingTheater[]
   surgeryBookings             SurgeryBooking[]
+  nursingNotes                NursingNote[]
+  fees                        HospitalFee[]
+  announcements               HospitalAnnouncement[]
+  staffMessages               HospitalStaffMessage[]
 
   @@index([userId])
   @@map("hospitals")
@@ -165,10 +169,30 @@ model HospitalStaff {
   handoversGiven           NursingHandover[]         @relation("HandoverOutgoing")
   handoversReceived        NursingHandover[]         @relation("HandoverIncoming")
   surgeryAssignments       SurgicalTeamAssignment[]
+  leaves                   HospitalStaffLeave[]
+  nursingNotes             NursingNote[]
+  sentStaffMessages        HospitalStaffMessage[]
 
   @@index([hospitalId])
   @@index([userId])
   @@map("hospital_staff")
+}
+
+model HospitalStaffLeave {
+  id          String      @id @default(uuid())
+  staffId     String
+  leaveType   String
+  startDate   DateTime
+  endDate     DateTime
+  reason      String?
+  fileName    String?
+  status      LeaveStatus @default(PENDING)
+  createdAt   DateTime    @default(now())
+  updatedAt   DateTime    @updatedAt
+  staff       HospitalStaff @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([staffId])
+  @@map("hospital_staff_leaves")
 }
 
 model Patient {
@@ -208,6 +232,7 @@ model Patient {
   surgeryBookings        SurgeryBooking[]
   mohSurveillanceLogs    MohSurveillanceLog[]
   posSales               PosSale[]
+  nursingNotes           NursingNote[]
 
   @@index([userId])
   @@map("patients")
@@ -1725,4 +1750,89 @@ model PosSaleItem {
 
   @@index([saleId])
   @@map("pos_sale_items")
+}
+
+// =============================================
+// NURSING NOTES
+// =============================================
+
+model NursingNote {
+  id                 String    @id @default(uuid())
+  hospitalId         String
+  patientId          String?
+  staffId            String
+  observationNotes   String
+  careActivities     String?
+  additionalComments String?
+  noteDate           DateTime  @default(now())
+  createdAt          DateTime  @default(now())
+  updatedAt          DateTime  @updatedAt
+
+  hospital Hospital       @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  patient  Patient?       @relation(fields: [patientId], references: [id], onDelete: SetNull)
+  staff    HospitalStaff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
+
+  @@index([hospitalId])
+  @@index([staffId])
+  @@index([noteDate])
+  @@map("nursing_notes")
+}
+
+// =============================================
+// HOSPITAL FEES
+// =============================================
+
+model HospitalFee {
+  id         String   @id @default(uuid())
+  hospitalId String
+  service    String
+  price      Decimal  @db.Decimal(12, 2)
+  status     String   @default("Active")
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  @@index([hospitalId])
+  @@map("hospital_fees")
+}
+
+// =============================================
+// HOSPITAL ANNOUNCEMENTS
+// =============================================
+
+model HospitalAnnouncement {
+  id         String   @id @default(uuid())
+  hospitalId String
+  title      String
+  type       String   @default("General")
+  message    String?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  hospital Hospital @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+
+  @@index([hospitalId])
+  @@map("hospital_announcements")
+}
+
+// =============================================
+// HOSPITAL STAFF MESSAGES (internal broadcast)
+// =============================================
+
+model HospitalStaffMessage {
+  id         String   @id @default(uuid())
+  hospitalId String
+  senderId   String
+  content    String   @db.Text
+  isRead     Boolean  @default(false)
+  createdAt  DateTime @default(now())
+
+  hospital Hospital      @relation(fields: [hospitalId], references: [id], onDelete: Cascade)
+  sender   HospitalStaff @relation(fields: [senderId], references: [id], onDelete: Cascade)
+
+  @@index([hospitalId])
+  @@index([senderId])
+  @@index([createdAt])
+  @@map("hospital_staff_messages")
 }
