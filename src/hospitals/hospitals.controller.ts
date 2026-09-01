@@ -3,11 +3,14 @@ import {
   Get,
   Post,
   Patch,
+  Delete,
   Body,
   Param,
   Query,
   Req,
   UseGuards,
+  HttpCode,
+  HttpStatus,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -276,6 +279,34 @@ export class HospitalsController {
   }
 
   // ========================================
+  // RECEPTIONIST PORTAL
+  // ========================================
+
+  @Get(':id/receptionist/queue')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN, Role.NURSE, Role.DOCTOR)
+  @ApiOperation({ summary: 'Get today\'s patient queue for the receptionist portal' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getReceptionistQueue(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getReceptionistQueue(id, req.user.sub);
+  }
+
+  @Get(':id/receptionist/dashboard-stats')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN, Role.NURSE, Role.DOCTOR)
+  @ApiOperation({ summary: 'Get appointment status counts for the receptionist queue page' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getReceptionistDashboardStats(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getReceptionistDashboardStats(id, req.user.sub);
+  }
+
+  @Get(':id/receptionist/dashboard')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN, Role.NURSE, Role.DOCTOR)
+  @ApiOperation({ summary: 'Get receptionist dashboard data (charts, queue, today\'s appointments)' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getReceptionistDashboard(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getReceptionistDashboard(id, req.user.sub);
+  }
+
+  // ========================================
   // DRUG STOCK MANAGEMENT
   // ========================================
 
@@ -292,9 +323,7 @@ export class HospitalsController {
 
   @Patch(':id/drug-stock/:drugId')
   @Roles(Role.HOSPITAL_ADMIN, Role.PHARMACIST)
-  @ApiOperation({
-    summary: 'Update drug stock quantity or reorder level',
-  })
+  @ApiOperation({ summary: 'Update drug stock quantity or reorder level' })
   @ApiParam({ name: 'id', description: 'Hospital UUID' })
   @ApiParam({ name: 'drugId', description: 'MedicationRegistry drug UUID' })
   updateDrugStock(
@@ -303,5 +332,374 @@ export class HospitalsController {
     @Body() dto: UpdateDrugStockDto,
   ) {
     return this.hospitalsService.updateDrugStock(id, drugId, dto);
+  }
+
+  // ========================================
+  // HOSPITAL STAFF LISTING
+  // ========================================
+
+  @Get(':id/staff')
+  @Roles(Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List all nurses and receptionists for this hospital' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getHospitalStaff(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getHospitalStaff(id, req.user.sub);
+  }
+
+  // ========================================
+  // NURSE PORTAL
+  // ========================================
+
+  @Get(':id/nurse/dashboard')
+  @Roles(Role.NURSE, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Get nurse dashboard stats for this hospital' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getNurseDashboard(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getNurseDashboard(id, req.user.sub);
+  }
+
+  @Get(':id/nurse/vitals')
+  @Roles(Role.NURSE, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Get all vitals recorded today (or a given date) across all admissions' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiQuery({ name: 'date', required: false, description: 'ISO date (defaults to today)' })
+  getNurseVitals(@Param('id') id: string, @Req() req: any, @Query('date') date?: string) {
+    return this.hospitalsService.getNurseVitals(id, req.user.sub, date);
+  }
+
+  @Get(':id/nurse/mar')
+  @Roles(Role.NURSE, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Get all MAR records for a given date across all admissions' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiQuery({ name: 'date', required: false, description: 'ISO date (defaults to today)' })
+  getNurseMar(@Param('id') id: string, @Req() req: any, @Query('date') date?: string) {
+    return this.hospitalsService.getNurseMar(id, req.user.sub, date);
+  }
+
+  // ========================================
+  // RECEPTIONIST — APPOINTMENTS
+  // ========================================
+
+  @Get(':id/receptionist/appointments')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: "Get today's appointments for the receptionist portal" })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getReceptionistAppointments(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getReceptionistAppointments(id, req.user.sub);
+  }
+
+  @Patch(':id/receptionist/appointments/:appointmentId')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Check-in, cancel, or reschedule a patient appointment' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiParam({ name: 'appointmentId', description: 'Appointment UUID' })
+  updateReceptionistAppointment(
+    @Param('id') id: string,
+    @Param('appointmentId') appointmentId: string,
+    @Req() req: any,
+    @Body() dto: { status?: string; scheduledAt?: string },
+  ) {
+    return this.hospitalsService.updateReceptionistAppointment(id, req.user.sub, appointmentId, dto);
+  }
+
+  // ========================================
+  // RECEPTIONIST — PROFILE
+  // ========================================
+
+  @Get(':id/receptionist/profile')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: "Get the calling receptionist's staff profile" })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getReceptionistProfile(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getReceptionistProfile(id, req.user.sub);
+  }
+
+  @Patch(':id/receptionist/profile')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: "Update the calling receptionist's staff profile" })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  updateReceptionistProfile(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() dto: { firstName?: string; lastName?: string; phone?: string; department?: string },
+  ) {
+    return this.hospitalsService.updateReceptionistProfile(id, req.user.sub, dto);
+  }
+
+  // ========================================
+  // RECEPTIONIST — LEAVE REQUESTS
+  // ========================================
+
+  @Get(':id/receptionist/leaves')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: "Get the receptionist's leave request history" })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getReceptionistLeaves(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getReceptionistLeaves(id, req.user.sub);
+  }
+
+  @Post(':id/receptionist/leaves')
+  @Roles(Role.RECEPTIONIST)
+  @ApiOperation({ summary: 'Submit a new leave request' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  createReceptionistLeave(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() dto: { leaveType: string; startDate: string; endDate: string; reason?: string; fileName?: string },
+  ) {
+    return this.hospitalsService.createReceptionistLeave(id, req.user.sub, dto);
+  }
+
+  @Patch(':id/receptionist/leaves/:leaveId')
+  @Roles(Role.RECEPTIONIST)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Cancel a pending leave request' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiParam({ name: 'leaveId', description: 'StaffLeave UUID' })
+  cancelReceptionistLeave(
+    @Param('id') id: string,
+    @Param('leaveId') leaveId: string,
+    @Req() req: any,
+  ) {
+    return this.hospitalsService.cancelReceptionistLeave(id, req.user.sub, leaveId);
+  }
+
+  // ========================================
+  // RECEPTIONIST — NOTIFICATIONS
+  // ========================================
+
+  @Get(':id/receptionist/notifications')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: "Get the receptionist's notification feed" })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getReceptionistNotifications(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getReceptionistNotifications(id, req.user.sub);
+  }
+
+  @Patch(':id/receptionist/notifications/read-all')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Mark all notifications as read' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  markAllNotificationsRead(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.markAllNotificationsRead(id, req.user.sub);
+  }
+
+  @Patch(':id/receptionist/notifications/:notifId/read')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Mark a single notification as read' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiParam({ name: 'notifId', description: 'Notification UUID' })
+  markNotificationRead(
+    @Param('id') id: string,
+    @Param('notifId') notifId: string,
+    @Req() req: any,
+  ) {
+    return this.hospitalsService.markNotificationRead(id, req.user.sub, notifId);
+  }
+
+  // ========================================
+  // WALK-IN (Receptionist)
+  // ========================================
+
+  @Post(':id/receptionist/walkin')
+  @Roles(Role.RECEPTIONIST, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Create a walk-in appointment and return a queue number' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  createWalkIn(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() dto: { patientId: string; department?: string; visitReason?: string; insuranceProvider?: string; doctorId?: string },
+  ) {
+    return this.hospitalsService.createWalkIn(id, req.user.sub, dto);
+  }
+
+  // ========================================
+  // NURSE SCHEDULE
+  // ========================================
+
+  @Get(':id/nurse/schedule')
+  @Roles(Role.NURSE, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Get nurse shift schedule (daily/weekly/monthly)' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiQuery({ name: 'view', required: false, enum: ['daily', 'weekly', 'monthly'] })
+  @ApiQuery({ name: 'date', required: false, description: 'ISO date string' })
+  getNurseSchedule(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Query('view') view?: string,
+    @Query('date') date?: string,
+  ) {
+    return this.hospitalsService.getNurseSchedule(id, req.user.sub, view ?? 'daily', date);
+  }
+
+  // ========================================
+  // NURSE NOTES
+  // ========================================
+
+  @Get(':id/nurse/notes')
+  @Roles(Role.NURSE, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Get nursing notes for this hospital' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiQuery({ name: 'date', required: false })
+  @ApiQuery({ name: 'patientId', required: false })
+  getNurseNotes(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Query('date') date?: string,
+    @Query('patientId') patientId?: string,
+  ) {
+    return this.hospitalsService.getNurseNotes(id, req.user.sub, date, patientId);
+  }
+
+  @Post(':id/nurse/notes')
+  @Roles(Role.NURSE, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Create a new nursing note' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  createNurseNote(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() dto: { patientId?: string; observationNotes: string; careActivities?: string; additionalComments?: string; noteDate?: string },
+  ) {
+    return this.hospitalsService.createNurseNote(id, req.user.sub, dto);
+  }
+
+  // ========================================
+  // NURSE PROFILE
+  // ========================================
+
+  @Get(':id/nurse/profile')
+  @Roles(Role.NURSE, Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: "Get the calling nurse's staff profile" })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getNurseProfile(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getNurseProfile(id, req.user.sub);
+  }
+
+  // ========================================
+  // INVOICE SUMMARY
+  // ========================================
+
+  @Get(':id/invoices/summary')
+  @Roles(Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'Get invoice financial summary (KPIs) for admin finance page' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getInvoiceSummary(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getInvoiceSummary(id, req.user.sub);
+  }
+
+  // ========================================
+  // HOSPITAL FEES
+  // ========================================
+
+  @Get(':id/fees')
+  @Roles(Role.HOSPITAL_ADMIN, Role.SUPER_ADMIN, Role.NURSE, Role.RECEPTIONIST, Role.DOCTOR)
+  @ApiOperation({ summary: 'List hospital service fees' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getHospitalFees(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getHospitalFees(id, req.user.sub);
+  }
+
+  @Post(':id/fees')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Create a new hospital service fee' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  createHospitalFee(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() dto: { service: string; price: number; status?: string },
+  ) {
+    return this.hospitalsService.createHospitalFee(id, req.user.sub, dto);
+  }
+
+  @Patch(':id/fees/:feeId')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Update a hospital service fee' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiParam({ name: 'feeId', description: 'HospitalFee UUID' })
+  updateHospitalFee(
+    @Param('id') id: string,
+    @Param('feeId') feeId: string,
+    @Req() req: any,
+    @Body() dto: { service?: string; price?: number; status?: string },
+  ) {
+    return this.hospitalsService.updateHospitalFee(id, req.user.sub, feeId, dto);
+  }
+
+  @Delete(':id/fees/:feeId')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a hospital service fee' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiParam({ name: 'feeId', description: 'HospitalFee UUID' })
+  deleteHospitalFee(
+    @Param('id') id: string,
+    @Param('feeId') feeId: string,
+    @Req() req: any,
+  ) {
+    return this.hospitalsService.deleteHospitalFee(id, req.user.sub, feeId);
+  }
+
+  // ========================================
+  // HOSPITAL ANNOUNCEMENTS
+  // ========================================
+
+  @Get(':id/announcements')
+  @Roles(Role.HOSPITAL_ADMIN, Role.NURSE, Role.RECEPTIONIST, Role.DOCTOR, Role.SUPER_ADMIN)
+  @ApiOperation({ summary: 'List hospital announcements' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getHospitalAnnouncements(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getHospitalAnnouncements(id, req.user.sub);
+  }
+
+  @Post(':id/announcements')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @ApiOperation({ summary: 'Create a new hospital announcement' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  createHospitalAnnouncement(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body() dto: { title: string; type?: string; message?: string },
+  ) {
+    return this.hospitalsService.createHospitalAnnouncement(id, req.user.sub, dto);
+  }
+
+  @Delete(':id/announcements/:annId')
+  @Roles(Role.HOSPITAL_ADMIN)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Delete a hospital announcement' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  @ApiParam({ name: 'annId', description: 'HospitalAnnouncement UUID' })
+  deleteHospitalAnnouncement(
+    @Param('id') id: string,
+    @Param('annId') annId: string,
+    @Req() req: any,
+  ) {
+    return this.hospitalsService.deleteHospitalAnnouncement(id, req.user.sub, annId);
+  }
+
+  // ========================================
+  // HOSPITAL STAFF MESSAGES
+  // ========================================
+
+  @Get(':id/messages')
+  @Roles(Role.NURSE, Role.RECEPTIONIST, Role.HOSPITAL_ADMIN, Role.DOCTOR)
+  @ApiOperation({ summary: 'Get all internal hospital staff messages' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  getHospitalMessages(@Param('id') id: string, @Req() req: any) {
+    return this.hospitalsService.getHospitalMessages(id, req.user.sub);
+  }
+
+  @Post(':id/messages')
+  @Roles(Role.NURSE, Role.RECEPTIONIST, Role.HOSPITAL_ADMIN, Role.DOCTOR)
+  @ApiOperation({ summary: 'Send an internal hospital staff message' })
+  @ApiParam({ name: 'id', description: 'Hospital UUID' })
+  sendHospitalMessage(
+    @Param('id') id: string,
+    @Req() req: any,
+    @Body('content') content: string,
+  ) {
+    return this.hospitalsService.sendHospitalMessage(id, req.user.sub, content);
   }
 }
