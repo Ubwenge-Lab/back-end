@@ -1452,6 +1452,37 @@ Do not include any explanation, only the JSON array.`,
     return prescriptions;
   }
 
+  // ========================================
+  // PATIENT PRESCRIPTIONS BY PATIENT UUID (E-2)
+  // ========================================
+
+  async findByPatientId(patientId: string) {
+    const patient = await this.prisma.patient.findUnique({ where: { id: patientId } });
+    if (!patient) throw new NotFoundException(`Patient ${patientId} not found`);
+
+    return this.prisma.prescription.findMany({
+      where: { patientId },
+      orderBy: { createdAt: 'desc' },
+      include: {
+        prescriptionMedications: {
+          select: {
+            id: true,
+            medicationName: true,
+            dosage: true,
+            frequency: true,
+            duration: true,
+            quantity: true,
+            isHospitalMed: true,
+            pharmacyId: true,
+            fulfilledAt: true,
+            dispenseStatus: true,
+          },
+        },
+        doctor: { select: { firstName: true, lastName: true, specialization: true } },
+      },
+    });
+  }
+
   /**
    * Helper: Searches external pharmacies within 10 km radius that have the medication in stock
    */

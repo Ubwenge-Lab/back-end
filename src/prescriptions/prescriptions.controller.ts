@@ -73,6 +73,15 @@ export class PrescriptionsController {
     return this.prescriptionsService.findByPatientMrn(mrn, hospitalId);
   }
 
+  @Get('for-patient/:patientId')
+  @Roles(Role.DOCTOR, Role.HOSPITAL_ADMIN, Role.NURSE)
+  @ApiOperation({
+    summary: 'Get all prescriptions for a patient by their UUID (E-2 — Doctor / Admin / Nurse)',
+  })
+  findByPatientId(@Param('patientId') patientId: string) {
+    return this.prescriptionsService.findByPatientId(patientId);
+  }
+
   @Get(':id')
   @ApiOperation({ summary: 'Get prescription by ID' })
   getPrescriptionById(@Param('id') id: string) {
