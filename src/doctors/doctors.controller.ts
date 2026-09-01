@@ -50,6 +50,25 @@ export class DoctorsController {
   }
 
   // ========================================
+  // DOCTOR SELF-SERVICE PROFILE (Gap E-3)
+  // Must be declared BEFORE :id to avoid route conflict
+  // ========================================
+
+  @Get('me')
+  @Roles(Role.DOCTOR)
+  @ApiOperation({ summary: "Get the calling doctor's own profile" })
+  getDoctorMe(@Req() req: any) {
+    return this.doctorsService.getDoctorMe(req.user.sub);
+  }
+
+  @Patch('me')
+  @Roles(Role.DOCTOR)
+  @ApiOperation({ summary: "Update the calling doctor's own profile (phone, bio, specialization)" })
+  updateDoctorMe(@Req() req: any, @Body() dto: { phone?: string; bio?: string; specialization?: string }) {
+    return this.doctorsService.updateDoctorMe(req.user.sub, dto);
+  }
+
+  // ========================================
   // LIST ALL DOCTORS
   // ========================================
 
