@@ -1356,7 +1356,7 @@ export class HospitalsService {
   async getReceptionistLeaves(hospitalId: string, userId: string) {
     const staff = await this.prisma.hospitalStaff.findFirst({ where: { userId, hospitalId } });
     if (!staff) throw new NotFoundException('Staff profile not found');
-    return this.prisma.staffLeave.findMany({
+    return this.prisma.hospitalStaffLeave.findMany({
       where: { staffId: staff.id },
       orderBy: { createdAt: 'desc' },
     });
@@ -1369,7 +1369,7 @@ export class HospitalsService {
   ) {
     const staff = await this.prisma.hospitalStaff.findFirst({ where: { userId, hospitalId } });
     if (!staff) throw new NotFoundException('Staff profile not found');
-    return this.prisma.staffLeave.create({
+    return this.prisma.hospitalStaffLeave.create({
       data: {
         staffId:   staff.id,
         leaveType: dto.leaveType,
@@ -1385,12 +1385,12 @@ export class HospitalsService {
     const staff = await this.prisma.hospitalStaff.findFirst({ where: { userId, hospitalId } });
     if (!staff) throw new NotFoundException('Staff profile not found');
 
-    const leave = await this.prisma.staffLeave.findUnique({ where: { id: leaveId } });
+    const leave = await this.prisma.hospitalStaffLeave.findUnique({ where: { id: leaveId } });
     if (!leave) throw new NotFoundException('Leave request not found');
     if (leave.staffId !== staff.id) throw new ForbiddenException('Not your leave request');
     if (leave.status !== 'PENDING') throw new BadRequestException('Only PENDING leaves can be cancelled');
 
-    return this.prisma.staffLeave.update({ where: { id: leaveId }, data: { status: 'REJECTED' } });
+    return this.prisma.hospitalStaffLeave.update({ where: { id: leaveId }, data: { status: 'REJECTED' } });
   }
 
   // ========================================

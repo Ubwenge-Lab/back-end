@@ -169,7 +169,7 @@ model HospitalStaff {
   handoversGiven           NursingHandover[]         @relation("HandoverOutgoing")
   handoversReceived        NursingHandover[]         @relation("HandoverIncoming")
   surgeryAssignments       SurgicalTeamAssignment[]
-  leaves                   StaffLeave[]
+  leaves                   HospitalStaffLeave[]
   nursingNotes             NursingNote[]
   sentStaffMessages        HospitalStaffMessage[]
 
@@ -178,7 +178,7 @@ model HospitalStaff {
   @@map("hospital_staff")
 }
 
-model StaffLeave {
+model HospitalStaffLeave {
   id          String      @id @default(uuid())
   staffId     String
   leaveType   String
@@ -192,7 +192,7 @@ model StaffLeave {
   staff       HospitalStaff @relation(fields: [staffId], references: [id], onDelete: Cascade)
 
   @@index([staffId])
-  @@map("staff_leaves")
+  @@map("hospital_staff_leaves")
 }
 
 model Patient {
