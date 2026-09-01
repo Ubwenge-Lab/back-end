@@ -817,7 +817,7 @@ export class AppointmentsService {
 }
 
 const appointmentInclude = {
-  patient: { select: { firstName: true, lastName: true, phone: true } },
+  patient: { select: { firstName: true, lastName: true, phone: true, gender: true, dateOfBirth: true } },
   doctor: {
     include: {
       user: {
@@ -828,4 +828,5 @@ const appointmentInclude = {
     },
   },
   hospital: { select: { id: true, name: true, address: true } },
+  triageVitals: true,
 };
