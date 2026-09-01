@@ -32,6 +32,10 @@ model User {
   SupportTickets         SupportTicket[]
   sentMessages           ChatMessage[]   @relation("SentMessages")
   receivedMessages       ChatMessage[]   @relation("ReceivedMessages")
+  leaveRequests          LeaveRequest[]  @relation("LeaveRequester")
+  leaveReviews           LeaveRequest[]  @relation("LeaveReviewer")
+  leaveBalances          LeaveBalance[]  @relation("LeaveBalanceOwner")
+  leaveBalancesSet       LeaveBalance[]  @relation("LeaveBalanceSetter")
 
   @@index([email])
   @@map("users")
@@ -295,7 +299,7 @@ model Branch {
   transfersFrom      StockTransfer[] @relation("FromBranch")
   transfersTo        StockTransfer[] @relation("ToBranch")
   posSales           PosSale[]
-  staffLeaves        StaffLeave[]
+  leaveRequests      LeaveRequest[]
 
   @@index([pharmacyId])
   @@map("branches")
@@ -321,7 +325,6 @@ model Staff {
   clockInApprover    Attendance[]      @relation("ClockInApprover")
   clockOutApprover   Attendance[]      @relation("ClockOutApprover")
   attendances        Attendance[]
-  leaves             StaffLeave[]
   branch             Branch            @relation(fields: [branchId], references: [id], onDelete: Cascade)
   user               User              @relation(fields: [userId], references: [id], onDelete: Cascade)
   permissions        StaffPermissions?
@@ -1117,6 +1120,7 @@ enum LeaveStatus {
   PENDING
   APPROVED
   REJECTED
+  CANCELLED
 }
 
 model OperatingTheater {
@@ -1650,34 +1654,69 @@ model DisposalLog {
   @@map("disposal_logs")
 }
 
-model StaffLeave {
-  id         String     @id @default(uuid())
-  staffId    String
-  branchId   String
-  type       LeaveType  @default(ANNUAL)
-  startDate  DateTime
-  endDate    DateTime
-  reason     String?
-  status     LeaveStatus @default(PENDING)
-  reviewedBy String?    // staff id of the manager who reviewed
-  reviewNote String?
-  reviewedAt DateTime?
-  createdAt  DateTime   @default(now())
-  updatedAt  DateTime   @updatedAt
+// Leave request submitted by a pharmacist, nurse, cashier (Staff, reviewed by
+// their branch's manager) or by a branch manager (reviewed by the pharmacy owner).
+model LeaveRequest {
+  id              String       @id @default(uuid())
+  requesterId     String
+  requesterRole   UserRole
+  branchId        String?
+  pharmacyId      String
+  leaveType       LeaveType
+  startDate       DateTime
+  endDate         DateTime
+  totalDays       Float
+  reason          String
+  attachmentUrl   String?
+  status          LeaveStatus  @default(PENDING)
+  reviewerId      String?
+  reviewedAt      DateTime?
+  rejectionReason String?
+  createdAt       DateTime     @default(now())
+  updatedAt       DateTime     @updatedAt
+  requester       User         @relation("LeaveRequester", fields: [requesterId], references: [id], onDelete: Cascade)
+  reviewer        User?        @relation("LeaveReviewer", fields: [reviewerId], references: [id])
+  branch          Branch?      @relation(fields: [branchId], references: [id], onDelete: Cascade)
 
-  staff  Staff  @relation(fields: [staffId], references: [id], onDelete: Cascade)
-  branch Branch @relation(fields: [branchId], references: [id])
-
+  @@index([requesterId])
   @@index([branchId])
-  @@index([staffId])
+  @@index([pharmacyId])
   @@index([status])
-  @@map("staff_leaves")
+  @@map("leave_requests")
 }
 
+// Annual (and other) leave-day allocation per employee per year, configurable
+// by the branch manager (for their own branch staff) or the pharmacy owner
+// (for anyone, including branch managers).
+model LeaveBalance {
+  id            String    @id @default(uuid())
+  userId        String
+  year          Int
+  leaveType     LeaveType @default(ANNUAL)
+  allocatedDays Float
+  usedDays      Float     @default(0)
+  setById       String
+  notes         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  user          User      @relation("LeaveBalanceOwner", fields: [userId], references: [id], onDelete: Cascade)
+  setBy         User      @relation("LeaveBalanceSetter", fields: [setById], references: [id])
+
+  @@unique([userId, year, leaveType])
+  @@index([userId])
+  @@map("leave_balances")
+}
+
+// Leave categories recognised under Rwanda's labour law (Law N° 66/2018 of
+// 30/08/2018 regulating labour in Rwanda, articles 41-52).
 enum LeaveType {
-  ANNUAL
-  SICK
-  UNPAID
+  ANNUAL         // Congé annuel: 1.5 working days per month worked (18 days/year)
+  SICK           // Congé de maladie
+  MATERNITY      // Congé de maternité: 12 weeks
+  PATERNITY      // Congé de paternité: 4 working days
+  CIRCUMSTANTIAL // Congé de circonstance: bereavement / family emergencies
+  MARRIAGE       // Congé de mariage: employee's own marriage
+  UNPAID         // Congé sans solde
 }
 
 model PosSale {
