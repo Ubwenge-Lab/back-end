@@ -32,6 +32,15 @@ model User {
   SupportTickets         SupportTicket[]
   sentMessages           ChatMessage[]   @relation("SentMessages")
   receivedMessages       ChatMessage[]   @relation("ReceivedMessages")
+  phoneOtps              PhoneOtp[]
+
+  /// The E.164 number this user has proven control of via SMS OTP, and when.
+  /// Deliberately separate from the profile `phone` fields on Patient /
+  /// Pharmacy / Doctor / Staff: those are editable contact details, this is
+  /// evidence. If a user edits their profile phone, the proof does not follow
+  /// it -- compare the two to know whether the current number is verified.
+  verifiedPhone          String?
+  phoneVerifiedAt        DateTime?
 
   @@index([email])
   @@map("users")
@@ -929,6 +938,49 @@ model MedicalRecordLog {
   @@index([doctorId])
   @@index([patientId])
   @@map("medical_record_logs")
+}
+
+/// What a phone OTP is being issued for.
+///
+/// Only phone verification today. The column exists so a second purpose
+/// (password reset over SMS, step-up confirmation) can be added without a
+/// second table, and so an unrelated purpose's code can never satisfy this one.
+enum OtpPurpose {
+  PHONE_VERIFICATION
+}
+
+/// A one-time code issued to prove control of a phone number.
+///
+/// Always scoped to a `userId`. Phone numbers are NOT unique in this schema --
+/// shared handsets are common in RW/UG -- so a phone alone cannot identify an
+/// account and this is never a login credential. The caller identifies the
+/// account (by email, which is unique) and the OTP only proves they hold the
+/// number.
+///
+/// `codeHash` is a bcrypt hash: a database dump must not hand over live codes.
+model PhoneOtp {
+  id         String     @id @default(uuid())
+  userId     String
+  /// Normalized E.164, e.g. +250788123456. Validated at the API boundary.
+  phone      String
+  purpose    OtpPurpose
+  codeHash   String
+  expiresAt  DateTime
+  /// Failed verify attempts against this code. Capped, then the code is dead.
+  attempts   Int        @default(0)
+  /// Set when the code is successfully used. A consumed code is never reusable.
+  consumedAt DateTime?
+  /// Drives the resend cooldown.
+  lastSentAt DateTime   @default(now())
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, purpose])
+  @@index([phone])
+  @@index([expiresAt])
+  @@map("phone_otps")
 }
 
 enum UserRole {
