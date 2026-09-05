@@ -22,6 +22,9 @@ model User {
   isActive               Boolean         @default(true)
   firstName              String?
   lastName               String?
+  phone                  String?
+  country                String?
+  locale                 String?
   managedBranch          Branch?         @relation("BranchManager")
   doctor                 Doctor?
   hospitalStaff          HospitalStaff?

@@ -29,7 +29,9 @@ const auditService = {
   log: jest.fn(async () => undefined),
 };
 
-const dto = { type: 'ANNUAL' as const, startDate: '2026-09-01', endDate: '2026-09-05', reason: 'Family trip' };
+const tomorrow = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const inFiveDays = new Date(Date.now() + 5 * 24 * 60 * 60 * 1000).toISOString().slice(0, 10);
+const dto = { type: 'ANNUAL' as const, startDate: tomorrow, endDate: inFiveDays, reason: 'Family trip' };
 
 describe('StaffLeaveService', () => {
   const build = (store: any = {}) => {
