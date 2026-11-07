@@ -28,8 +28,19 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Run Gitleaks
-        uses: gitleaks/gitleaks-action@v2
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Install Gitleaks Binary (Open Source OSS)
+        run: |
+          VERSION="8.21.2"
+          curl -sSL -o /tmp/gitleaks.tar.gz "https://github.com/gitleaks/gitleaks/releases/download/v${VERSION}/gitleaks_${VERSION}_linux_x64.tar.gz"
+          tar -xzf /tmp/gitleaks.tar.gz -C /tmp
+          sudo mv /tmp/gitleaks /usr/local/bin/gitleaks
+          gitleaks version
 
+      - name: Run Gitleaks Secret Audit
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            git fetch origin ${{ github.base_ref }}
+            gitleaks detect --log-opts="origin/${{ github.base_ref }}..HEAD" --verbose --redact
+          else
+            gitleaks detect --log-opts="HEAD~1..HEAD" --verbose --redact
+          fi
