@@ -13,12 +13,29 @@ export class EmailService {
     const apiKey = this.configService.get<string>('RESEND_API_KEY');
 
     if (!apiKey) {
-      console.warn('⚠️  RESEND_API_KEY is not set - emails will not be sent');
+      console.warn('  RESEND_API_KEY is not set - emails will not be sent');
       return;
     }
 
     this.resend = new Resend(apiKey);
-    console.log('✅ Resend initialized');
+    console.log(' Resend initialized');
+  }
+
+  async sendCustomEmail(to: string, subject: string, message: string) {
+    if (!this.resend) {
+      console.log(`[DEV MODE] Email to ${to}: ${subject} - ${message}`);
+      return;
+    }
+    try {
+      await this.resend.emails.send({
+        from: this.getFrom(),
+        to,
+        subject,
+        html: this.baseTemplate(`<p>${message}</p>`),
+      });
+    } catch (error) {
+      console.error(`Failed to send email to ${to}`, error);
+    }
   }
 
   private getFrom(): string {
@@ -73,7 +90,7 @@ export class EmailService {
 
   async sendVerificationEmail(email: string, code: string) {
     if (!this.resend) {
-      console.warn('⚠️  Resend not configured - skipping email');
+      console.warn(' Resend not configured - skipping email');
       return;
     }
 
@@ -100,12 +117,12 @@ export class EmailService {
       await this.resend.emails.send({
         to: email,
         from: this.getFrom(),
-        subject: '🔐 Verify Your Evuze Account',
+        subject: ' Verify Your Evuze Account',
         html,
       });
-      console.log(`✅ Verification email sent to ${email}`);
+      console.log(` Verification email sent to ${email}`);
     } catch (error) {
-      console.error('❌ Resend error:', error.message);
+      console.error(' Resend error:', error.message);
       if (this.configService.get('NODE_ENV') === 'production') {
         throw new InternalServerErrorException(
           'Failed to send verification email',
@@ -260,15 +277,14 @@ export class EmailService {
          <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;text-align:center;">
            Your pharmacy application for <strong>${pharmacyName}</strong> could not be approved at this time.
          </p>
-         ${
-           reason
-             ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+         ${reason
+          ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
            <tr><td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
              <p style="margin:0 0 4px;color:#dc2626;font-size:12px;font-weight:700;text-transform:uppercase;">Reason</p>
              <p style="margin:0;color:#555;font-size:14px;">${reason}</p>
            </td></tr></table>`
-             : ''
-         }
+          : ''
+        }
          <a href="${this.configService.get('FRONTEND_URL')}/login"
             style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#0a1628 0%,#0d9488 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
            Update Application →
@@ -316,15 +332,14 @@ export class EmailService {
          <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
            Your profile update for <strong>${pharmacyName}</strong> requires changes before it can go live.
          </p>
-         ${
-           reason
-             ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+         ${reason
+          ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
            <tr><td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
              <p style="margin:0 0 4px;color:#dc2626;font-size:12px;font-weight:700;text-transform:uppercase;">Reason</p>
              <p style="margin:0;color:#555;font-size:14px;">${reason}</p>
            </td></tr></table>`
-             : ''
-         }
+          : ''
+        }
          <a href="${this.configService.get('FRONTEND_URL')}/pharmacy/profile"
             style="display:block;text-align:center;padding:14px 24px;background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);color:#fff;text-decoration:none;border-radius:8px;font-size:15px;font-weight:600;margin:0 0 24px;">
            Update Your Profile →
@@ -438,15 +453,14 @@ export class EmailService {
          <p style="margin:0 0 24px;color:#555;font-size:15px;line-height:1.6;">
            The branch application for <strong>${branchName}</strong> requires attention.
          </p>
-         ${
-           reason
-             ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
+         ${reason
+          ? `<table width="100%" cellpadding="0" cellspacing="0" style="margin:0 0 24px;">
            <tr><td style="background:#fff5f5;border-left:4px solid #ef4444;border-radius:0 8px 8px 0;padding:16px 20px;">
              <p style="margin:0 0 4px;color:#dc2626;font-size:12px;font-weight:700;text-transform:uppercase;">Reason</p>
              <p style="margin:0;color:#555;font-size:14px;">${reason}</p>
            </td></tr></table>`
-             : ''
-         }
+          : ''
+        }
          <p style="margin:0;color:#999;font-size:13px;">Please review and address the issues above.</p>`,
     );
 
@@ -756,16 +770,15 @@ export class EmailService {
         </tr>
       </table>
 
-      ${
-        isOnline
-          ? `
+      ${isOnline
+        ? `
         <div style="text-align:center;margin:30px 0;">
           <a href="${roomLink}" style="background-color:#0d9488;color:#ffffff;padding:12px 24px;text-decoration:none;border-radius:8px;font-weight:bold;display:inline-block;box-shadow:0 4px 6px rgba(13,148,136,0.2);">
             Join Telemedicine Consultation
           </a>
         </div>
         `
-          : ''
+        : ''
       }
 
       <p style="margin:0;color:#bbb;font-size:12px;text-align:center;line-height:1.6;">
@@ -973,6 +986,73 @@ export class EmailService {
         html,
       });
       console.log(`✅ Super Admin alert sent to ${superAdminEmail}: ${title}`);
+    } catch (error) {
+      console.error('❌ Resend error:', error.message);
+    }
+  }
+
+  async sendStockAlertEmail(
+    email: string,
+    itemName: string,
+    itemType: string,
+    currentQuantity: number,
+    threshold: number,
+    facilityName: string,
+  ) {
+    const html = this.baseTemplate(`
+      <div style="background:#fef2f2;border-radius:12px;padding:24px;text-align:center;margin:0 0 24px;border:1px solid #fecaca;">
+        <p style="margin:0 0 8px;color:#dc2626;font-size:14px;font-weight:700;">${itemName} (${itemType})</p>
+        <h1 style="margin:0;color:#dc2626;font-size:36px;font-weight:800;">${currentQuantity} Left</h1>
+        <p style="margin:8px 0 0;color:#ef4444;font-size:14px;">Critical Threshold: ${threshold}</p>
+      </div>
+      <p style="margin:0 0 24px;color:#475569;font-size:15px;line-height:1.6;">
+        Inventory levels for <strong>${itemName}</strong> have dropped below the safety threshold at <strong>${facilityName}</strong>. 
+        Please reorder immediately to avoid stockouts.
+      </p>
+    `);
+
+    try {
+      await this.resend.emails.send({
+        to: email,
+        from: this.getFrom(),
+        subject: `⚠️ Low Stock Alert: ${itemName}`,
+        html,
+      });
+      console.log(`✅ Stock alert email sent to ${email} for ${itemName}`);
+    } catch (error) {
+      console.error('❌ Resend error:', error.message);
+    }
+  }
+
+  async sendExpiryAlertEmail(
+    email: string,
+    itemName: string,
+    itemType: string,
+    batchNumber: string | null,
+    daysLeft: number,
+    expiryDate: string,
+    facilityName: string,
+  ) {
+    const html = this.baseTemplate(`
+      <p style="margin:0 0 16px;color:#64748b;font-size:13px;text-transform:uppercase;letter-spacing:0.05em;font-weight:600;">
+        ${facilityName} - Expiry Alert
+      </p>
+      <div style="background:#fffbeb;border-radius:12px;padding:24px;text-align:center;margin:0 0 24px;border:1px solid #fde68a;">
+        <p style="margin:0 0 8px;color:#d97706;font-size:14px;font-weight:700;">${itemName} (${itemType})</p>
+        ${batchNumber ? `<p style="margin:0 0 8px;color:#b45309;font-size:13px;">Batch: ${batchNumber}</p>` : ''}
+        <h1 style="margin:0;color:#d97706;font-size:36px;font-weight:800;">Expires in ${daysLeft} Days</h1>
+        <p style="margin:8px 0 0;color:#b45309;font-size:14px;">Exact Date: ${expiryDate}</p>
+      </div>
+    `);
+
+    try {
+      await this.resend.emails.send({
+        to: email,
+        from: this.getFrom(),
+        subject: `⏳ Expiry Warning (${daysLeft} days): ${itemName}`,
+        html,
+      });
+      console.log(`✅ Expiry alert email sent to ${email} for ${itemName}`);
     } catch (error) {
       console.error('❌ Resend error:', error.message);
     }
