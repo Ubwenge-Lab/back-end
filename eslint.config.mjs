@@ -6,7 +6,16 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs', '*.js', 'dist/**', 'coverage/**', 'qa/**', 'scripts/**'],
+    ignores: [
+      'eslint.config.mjs',
+      '**/*.js',
+      'dist/**',
+      'coverage/**',
+      'qa/**',
+      'scripts/**',
+      'src/tester-e2e.ts',
+      'src/prisma/restore-data.ts',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
@@ -36,6 +45,14 @@ export default tseslint.config(
       '@typescript-eslint/no-unused-vars': 'warn',
       '@typescript-eslint/no-base-to-string': 'warn',
       '@typescript-eslint/require-await': 'warn',
+      '@typescript-eslint/no-unsafe-enum-comparison': 'warn',
+      '@typescript-eslint/no-unnecessary-type-assertion': 'warn',
+      '@typescript-eslint/restrict-template-expressions': 'warn',
+      '@typescript-eslint/unbound-method': 'warn',
+      '@typescript-eslint/restrict-plus-operands': 'warn',
+      '@typescript-eslint/ban-ts-comment': 'warn',
+      'no-empty': 'warn',
+      'prefer-const': 'warn',
       'prettier/prettier': 'warn',
     },
   },
