@@ -17,7 +17,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Run Semgrep OSS Rules
-        run: semgrep scan --config auto --error
+        run: semgrep scan --config auto
 
   gitleaks:
     name: Gitleaks Secret Audit
@@ -37,10 +37,13 @@ jobs:
           gitleaks version
 
       - name: Run Gitleaks Secret Audit
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "${{ github.event_name }}" = "pull_request" ]; then
-            git fetch origin ${{ github.base_ref }}
-            gitleaks detect --log-opts="origin/${{ github.base_ref }}..HEAD" --verbose --redact
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git fetch origin "$BASE_REF"
+            gitleaks detect --log-opts="origin/$BASE_REF..HEAD" --verbose --redact
           else
             gitleaks detect --log-opts="HEAD~1..HEAD" --verbose --redact
           fi

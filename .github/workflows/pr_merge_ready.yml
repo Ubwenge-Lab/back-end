@@ -16,12 +16,13 @@ jobs:
           fetch-depth: 0
 
       - name: Check if branch is behind base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin ${{ github.base_ref }}:${{ github.base_ref }}
-          BEHIND_COUNT=$(git rev-list --count HEAD..${{ github.base_ref }})
+          git fetch origin "$BASE_REF":"$BASE_REF"
+          BEHIND_COUNT=$(git rev-list --count "HEAD..$BASE_REF")
           if [ "$BEHIND_COUNT" -gt 0 ]; then
-            echo "::error::Branch is $BEHIND_COUNT commit(s) behind ${{ github.base_ref }}. Rebase or merge ${{ github.base_ref }} before merging."
+            echo "::error::Branch is $BEHIND_COUNT commit(s) behind $BASE_REF. Rebase or merge $BASE_REF before merging."
             exit 1
           fi
-          echo "Branch is up to date with ${{ github.base_ref }}."
-
+          echo "Branch is up to date with $BASE_REF."
