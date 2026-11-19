@@ -12,6 +12,16 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 10
 
+    env:
+      NODE_ENV: test
+      DATABASE_URL: postgresql://mock:mock@localhost:5432/mock_test?schema=public
+      DIRECT_URL: postgresql://mock:mock@localhost:5432/mock_test?schema=public
+      JWT_SECRET: ci-unit-test-jwt-secret-placeholder
+      JWT_REFRESH_SECRET: ci-unit-test-refresh-secret-placeholder
+      JWT_EXPIRATION: 15m
+      JWT_REFRESH_EXPIRATION: 7d
+      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
+
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
