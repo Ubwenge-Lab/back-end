@@ -1,0 +1,28 @@
+name: PR Merge Ready
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+jobs:
+  up-to-date-check:
+    name: Verify PR branch is not behind base
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check if branch is behind base branch
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          git fetch origin "$BASE_REF":"$BASE_REF"
+          BEHIND_COUNT=$(git rev-list --count "HEAD..$BASE_REF")
+          if [ "$BEHIND_COUNT" -gt 0 ]; then
+            echo "::error::Branch is $BEHIND_COUNT commit(s) behind $BASE_REF. Rebase or merge $BASE_REF before merging."
+            exit 1
+          fi
+          echo "Branch is up to date with $BASE_REF."
