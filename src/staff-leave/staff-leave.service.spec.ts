@@ -29,7 +29,11 @@ const auditService = {
   log: jest.fn(async () => undefined),
 };
 
-const dto = { type: 'ANNUAL' as const, startDate: '2026-09-01', endDate: '2026-09-05', reason: 'Family trip' };
+const futureStartDate = new Date(Date.now() + 86400000 * 5).toISOString().split('T')[0];
+const futureEndDate = new Date(Date.now() + 86400000 * 10).toISOString().split('T')[0];
+const beforeStartDate = new Date(Date.now() + 86400000 * 2).toISOString().split('T')[0];
+
+const dto = { type: 'ANNUAL' as const, startDate: futureStartDate, endDate: futureEndDate, reason: 'Family trip' };
 
 describe('StaffLeaveService', () => {
   const build = (store: any = {}) => {
@@ -55,7 +59,7 @@ describe('StaffLeaveService', () => {
   it('rejects end date before start date', async () => {
     const { service } = build();
     await expect(
-      service.requestLeave('user-1', { ...dto, endDate: '2026-08-20' }),
+      service.requestLeave('user-1', { ...dto, endDate: beforeStartDate }),
     ).rejects.toThrow(BadRequestException);
   });
 

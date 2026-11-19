@@ -20,7 +20,6 @@ jobs:
       JWT_REFRESH_SECRET: ci-unit-test-refresh-secret-placeholder
       JWT_EXPIRATION: 15m
       JWT_REFRESH_EXPIRATION: 7d
-      ENCRYPTION_KEY: 0123456789abcdef0123456789abcdef
 
     steps:
       - name: Checkout Code

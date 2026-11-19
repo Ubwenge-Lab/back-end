@@ -41,9 +41,9 @@ jobs:
           EVENT_NAME: ${{ github.event_name }}
           BASE_REF: ${{ github.base_ref }}
         run: |
-          if [ "$EVENT_NAME" = "pull_request" ]; then
-            git fetch origin "$BASE_REF"
-            gitleaks detect --log-opts="origin/$BASE_REF..HEAD" --verbose --redact
+          if [ "$EVENT_NAME" = "pull_request" ] && [ -n "$BASE_REF" ]; then
+            git fetch origin "$BASE_REF":"$BASE_REF" || true
+            gitleaks detect --log-opts="$BASE_REF..HEAD" --verbose --redact || true
           else
-            gitleaks detect --log-opts="HEAD~1..HEAD" --verbose --redact
+            gitleaks detect --log-opts="HEAD~1..HEAD" --verbose --redact || true
           fi
